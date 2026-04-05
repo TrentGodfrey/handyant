@@ -1,0 +1,607 @@
+"use client";
+
+import { useState } from "react";
+import Link from "next/link";
+import Card from "@/components/Card";
+import Button from "@/components/Button";
+import {
+  ChevronLeft,
+  Check,
+  ChevronRight,
+  ChevronDown,
+  Search,
+  Lock,
+  Briefcase,
+  UserPlus,
+  Package,
+  StickyNote,
+  Clock,
+  CalendarDays,
+} from "lucide-react";
+
+type Mode = "job" | "block";
+
+const CLIENTS = [
+  { id: "1", name: "Sarah Mitchell", address: "4821 Oak Hollow Dr, Plano", initials: "SM" },
+  { id: "2", name: "Robert Chen", address: "1205 Elm Creek Ct, Frisco", initials: "RC" },
+  { id: "3", name: "Maria Garcia", address: "890 Sunset Ridge, Roanoke", initials: "MG" },
+  { id: "4", name: "James Wilson", address: "2200 Heritage Trail, McKinney", initials: "JW" },
+  { id: "5", name: "Angela Torres", address: "1100 Prairie Creek, Waxahachie", initials: "AT" },
+];
+
+const DURATIONS = ["1h", "1.5h", "2h", "2.5h", "3h", "4h+"];
+const BLOCK_REASONS = ["Personal", "Supplies Run", "Admin", "Lunch", "Travel", "Other"];
+const TIME_SLOTS = [
+  "7:00 AM", "7:30 AM", "8:00 AM", "8:30 AM", "9:00 AM", "9:30 AM",
+  "10:00 AM", "10:30 AM", "11:00 AM", "11:30 AM", "12:00 PM", "12:30 PM",
+  "1:00 PM", "1:30 PM", "2:00 PM", "2:30 PM", "3:00 PM", "3:30 PM",
+  "4:00 PM", "4:30 PM", "5:00 PM", "5:30 PM", "6:00 PM",
+];
+
+function buildCalendar() {
+  const today = new Date(2026, 2, 29); // March 29, 2026
+  const result: { date: Date; dayNum: number; month: string; dayName: string }[] = [];
+  for (let i = 0; i < 28; i++) {
+    const d = new Date(today);
+    d.setDate(today.getDate() + i);
+    result.push({
+      date: d,
+      dayNum: d.getDate(),
+      month: d.toLocaleString("default", { month: "short" }),
+      dayName: d.toLocaleString("default", { weekday: "short" }),
+    });
+  }
+  return result;
+}
+const CALENDAR_DAYS = buildCalendar();
+const WEEKS: (typeof CALENDAR_DAYS) = CALENDAR_DAYS;
+
+const inputCls =
+  "w-full rounded-xl border border-border bg-surface px-4 py-3 text-[15px] text-text-primary placeholder:text-text-tertiary focus:outline-none focus:border-primary focus:ring-2 focus:ring-primary/10 transition-all";
+const labelCls = "block text-[12px] font-semibold uppercase tracking-wider text-text-secondary mb-1.5";
+
+export default function ScheduleNewPage() {
+  const [mode, setMode] = useState<Mode>("job");
+  const [submitted, setSubmitted] = useState(false);
+
+  // Job mode
+  const [clientSearch, setClientSearch] = useState("");
+  const [selectedClient, setSelectedClient] = useState<(typeof CLIENTS)[0] | null>(null);
+  const [showClientDropdown, setShowClientDropdown] = useState(false);
+  const [selectedDate, setSelectedDate] = useState<Date | null>(null);
+  const [timeSlot, setTimeSlot] = useState("9:00 AM");
+  const [showTimeDropdown, setShowTimeDropdown] = useState(false);
+  const [duration, setDuration] = useState("2h");
+  const [description, setDescription] = useState("");
+  const [hasParts, setHasParts] = useState(false);
+  const [partsList, setPartsList] = useState("");
+  const [jobNotes, setJobNotes] = useState("");
+
+  // Block mode
+  const [blockDate, setBlockDate] = useState<Date | null>(null);
+  const [blockStart, setBlockStart] = useState("12:00 PM");
+  const [blockEnd, setBlockEnd] = useState("1:00 PM");
+  const [blockShowStartDropdown, setBlockShowStartDropdown] = useState(false);
+  const [blockShowEndDropdown, setBlockShowEndDropdown] = useState(false);
+  const [blockReason, setBlockReason] = useState<string | null>(null);
+  const [blockNotes, setBlockNotes] = useState("");
+
+  const filteredClients = clientSearch.trim()
+    ? CLIENTS.filter(
+        (c) =>
+          c.name.toLowerCase().includes(clientSearch.toLowerCase()) ||
+          c.address.toLowerCase().includes(clientSearch.toLowerCase())
+      )
+    : CLIENTS;
+
+  function formatDate(d: Date) {
+    return d.toLocaleDateString("en-US", { weekday: "short", month: "short", day: "numeric" });
+  }
+
+  if (submitted) {
+    return (
+      <div className="min-h-screen bg-background px-5 pt-14 pb-24 flex flex-col items-center justify-center">
+        <div className="w-full max-w-sm text-center animate-scale-in">
+          <div className="mx-auto mb-5 flex h-20 w-20 items-center justify-center rounded-full bg-success-light">
+            <Check size={38} className="text-success" strokeWidth={2.5} />
+          </div>
+          <h2 className="text-[26px] font-bold text-text-primary">
+            {mode === "job" ? "Job Added!" : "Time Blocked!"}
+          </h2>
+          <p className="mt-2 text-[15px] text-text-secondary">
+            {mode === "job"
+              ? `${selectedClient?.name ?? "Client"} · ${timeSlot} · ${selectedDate ? formatDate(selectedDate) : ""}`
+              : `${blockReason ?? "Block"} · ${blockStart}–${blockEnd} · ${blockDate ? formatDate(blockDate) : ""}`}
+          </p>
+          <div className="mt-8 space-y-3">
+            <Link href="/schedule">
+              <Button variant="primary" size="lg" fullWidth icon={<CalendarDays size={17} />}>
+                View Schedule
+              </Button>
+            </Link>
+            <Button variant="outline" size="lg" fullWidth onClick={() => { setSubmitted(false); setSelectedClient(null); setSelectedDate(null); setDescription(""); }}>
+              Add Another
+            </Button>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <div className="min-h-screen bg-background pb-28">
+      {/* Header */}
+      <div className="bg-surface border-b border-border px-5 pt-14 pb-5">
+        <Link
+          href="/schedule"
+          className="mb-4 inline-flex items-center gap-1.5 text-[13px] font-medium text-text-secondary hover:text-text-primary transition-colors"
+        >
+          <ChevronLeft size={16} />
+          Schedule
+        </Link>
+        <h1 className="text-[22px] font-bold text-text-primary mb-4">
+          {mode === "job" ? "Add Job" : "Block Time"}
+        </h1>
+
+        {/* Mode toggle */}
+        <div className="flex rounded-xl bg-surface-secondary p-1 gap-1">
+          <button
+            onClick={() => setMode("job")}
+            className={`flex flex-1 items-center justify-center gap-2 rounded-lg py-2.5 text-[13px] font-semibold transition-all duration-150 ${
+              mode === "job"
+                ? "bg-primary text-white shadow-[0_2px_8px_rgba(37,99,235,0.25)]"
+                : "text-text-secondary hover:text-text-primary"
+            }`}
+          >
+            <Briefcase size={14} />
+            New Job
+          </button>
+          <button
+            onClick={() => setMode("block")}
+            className={`flex flex-1 items-center justify-center gap-2 rounded-lg py-2.5 text-[13px] font-semibold transition-all duration-150 ${
+              mode === "block"
+                ? "bg-text-primary text-white shadow-sm"
+                : "text-text-secondary hover:text-text-primary"
+            }`}
+          >
+            <Lock size={14} />
+            Block Time
+          </button>
+        </div>
+      </div>
+
+      <div className="px-5 py-5 space-y-5">
+
+        {/* ─────────── NEW JOB MODE ─────────── */}
+        {mode === "job" && (
+          <>
+            {/* Client selector */}
+            <div>
+              <label className={labelCls}>
+                <span className="inline-flex items-center gap-1.5">
+                  <Search size={11} />
+                  Client
+                </span>
+              </label>
+              <div className="relative">
+                {selectedClient ? (
+                  <button
+                    onClick={() => { setSelectedClient(null); setClientSearch(""); }}
+                    className="w-full flex items-center gap-3 rounded-xl border border-primary bg-primary-50 px-4 py-3 text-left"
+                  >
+                    <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-primary">
+                      <span className="text-[12px] font-bold text-white">{selectedClient.initials}</span>
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <p className="text-[14px] font-semibold text-text-primary">{selectedClient.name}</p>
+                      <p className="text-[11px] text-text-tertiary truncate">{selectedClient.address}</p>
+                    </div>
+                    <Check size={16} className="text-primary shrink-0" />
+                  </button>
+                ) : (
+                  <div className="relative">
+                    <div className="absolute inset-y-0 left-4 flex items-center pointer-events-none">
+                      <Search size={15} className="text-text-tertiary" />
+                    </div>
+                    <input
+                      className="w-full rounded-xl border border-border bg-surface pl-10 pr-4 py-3 text-[15px] text-text-primary placeholder:text-text-tertiary focus:outline-none focus:border-primary focus:ring-2 focus:ring-primary/10 transition-all"
+                      placeholder="Search existing clients..."
+                      value={clientSearch}
+                      onChange={(e) => { setClientSearch(e.target.value); setShowClientDropdown(true); }}
+                      onFocus={() => setShowClientDropdown(true)}
+                      onBlur={() => setTimeout(() => setShowClientDropdown(false), 150)}
+                    />
+                  </div>
+                )}
+
+                {/* Dropdown */}
+                {showClientDropdown && !selectedClient && (
+                  <div className="absolute left-0 right-0 top-full mt-1.5 z-30 rounded-2xl border border-border bg-surface shadow-[0_4px_24px_rgba(0,0,0,0.12)] overflow-hidden">
+                    <div className="max-h-64 overflow-y-auto">
+                      {filteredClients.map((c) => (
+                        <button
+                          key={c.id}
+                          className="flex w-full items-center gap-3 px-4 py-3 text-left hover:bg-surface-secondary transition-colors border-b border-border last:border-0"
+                          onMouseDown={() => { setSelectedClient(c); setShowClientDropdown(false); setClientSearch(""); }}
+                        >
+                          <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-primary-50">
+                            <span className="text-[12px] font-bold text-primary">{c.initials}</span>
+                          </div>
+                          <div className="flex-1 min-w-0">
+                            <p className="text-[14px] font-semibold text-text-primary">{c.name}</p>
+                            <p className="text-[11px] text-text-tertiary truncate">{c.address}</p>
+                          </div>
+                          <ChevronRight size={14} className="text-text-tertiary shrink-0" />
+                        </button>
+                      ))}
+                    </div>
+                    <Link
+                      href="/homes/new"
+                      className="flex items-center gap-2 px-4 py-3 border-t border-border bg-primary-50 text-[13px] font-semibold text-primary hover:bg-primary-100 transition-colors"
+                    >
+                      <UserPlus size={15} />
+                      Add New Client
+                    </Link>
+                  </div>
+                )}
+              </div>
+            </div>
+
+            {/* Calendar */}
+            <div>
+              <label className={labelCls}>
+                <span className="inline-flex items-center gap-1.5">
+                  <CalendarDays size={11} />
+                  Date
+                </span>
+              </label>
+              <Card padding="sm">
+                <div className="grid grid-cols-7 gap-1 mb-2">
+                  {["Su", "Mo", "Tu", "We", "Th", "Fr", "Sa"].map((d) => (
+                    <div key={d} className="text-center text-[10px] font-bold text-text-tertiary py-1">
+                      {d}
+                    </div>
+                  ))}
+                </div>
+                <div className="grid grid-cols-7 gap-1">
+                  {/* Offset for first day (Sunday=0 offset for March 29 = 0) */}
+                  {Array.from({ length: new Date(2026, 2, 29).getDay() }, (_, i) => (
+                    <div key={`empty-${i}`} />
+                  ))}
+                  {WEEKS.map((day) => {
+                    const isSelected =
+                      selectedDate?.toDateString() === day.date.toDateString();
+                    const isToday = day.date.toDateString() === new Date(2026, 2, 29).toDateString();
+                    return (
+                      <button
+                        key={day.date.toDateString()}
+                        onClick={() => setSelectedDate(day.date)}
+                        className={`aspect-square rounded-xl text-[13px] font-semibold transition-all duration-150 flex flex-col items-center justify-center ${
+                          isSelected
+                            ? "bg-primary text-white shadow-[0_2px_8px_rgba(37,99,235,0.30)]"
+                            : isToday
+                            ? "border-2 border-primary text-primary bg-primary-50"
+                            : "text-text-primary hover:bg-surface-secondary active:bg-border"
+                        }`}
+                      >
+                        <span>{day.dayNum}</span>
+                        {isToday && !isSelected && (
+                          <span className="text-[7px] font-bold text-primary leading-none">today</span>
+                        )}
+                      </button>
+                    );
+                  })}
+                </div>
+                {selectedDate && (
+                  <p className="mt-3 text-center text-[12px] font-semibold text-primary border-t border-border pt-3">
+                    {formatDate(selectedDate)}
+                  </p>
+                )}
+              </Card>
+            </div>
+
+            {/* Time slot */}
+            <div>
+              <label className={labelCls}>
+                <span className="inline-flex items-center gap-1.5">
+                  <Clock size={11} />
+                  Start Time
+                </span>
+              </label>
+              <div className="relative">
+                <button
+                  onClick={() => setShowTimeDropdown((v) => !v)}
+                  className="w-full flex items-center justify-between rounded-xl border border-border bg-surface px-4 py-3 text-[15px] font-semibold text-text-primary focus:outline-none"
+                >
+                  <span>{timeSlot}</span>
+                  <ChevronDown size={16} className="text-text-tertiary" />
+                </button>
+                {showTimeDropdown && (
+                  <div className="absolute left-0 right-0 top-full mt-1.5 z-30 rounded-2xl border border-border bg-surface shadow-[0_4px_24px_rgba(0,0,0,0.12)] overflow-hidden">
+                    <div className="max-h-52 overflow-y-auto">
+                      {TIME_SLOTS.map((t) => (
+                        <button
+                          key={t}
+                          className={`flex w-full items-center justify-between px-4 py-2.5 text-[14px] transition-colors border-b border-border last:border-0 ${
+                            timeSlot === t
+                              ? "bg-primary-50 text-primary font-semibold"
+                              : "text-text-primary hover:bg-surface-secondary"
+                          }`}
+                          onClick={() => { setTimeSlot(t); setShowTimeDropdown(false); }}
+                        >
+                          {t}
+                          {timeSlot === t && <Check size={14} className="text-primary" />}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                )}
+              </div>
+            </div>
+
+            {/* Duration */}
+            <div>
+              <label className={labelCls}>Estimated Duration</label>
+              <div className="flex flex-wrap gap-2">
+                {DURATIONS.map((d) => (
+                  <button
+                    key={d}
+                    onClick={() => setDuration(d)}
+                    className={`rounded-xl border-2 px-4 py-2 text-[13px] font-semibold transition-all duration-150 ${
+                      duration === d
+                        ? "border-primary bg-primary text-white shadow-[0_2px_8px_rgba(37,99,235,0.20)]"
+                        : "border-border bg-surface text-text-secondary hover:border-primary/30"
+                    }`}
+                  >
+                    {d}
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            {/* Task description */}
+            <div>
+              <label className={labelCls}>Task Description</label>
+              <textarea
+                className={`${inputCls} resize-none`}
+                rows={3}
+                placeholder="Describe the work to be done..."
+                value={description}
+                onChange={(e) => setDescription(e.target.value)}
+              />
+            </div>
+
+            {/* Parts toggle */}
+            <div>
+              <div className="flex items-center justify-between mb-3">
+                <label className={`${labelCls} mb-0`}>
+                  <span className="inline-flex items-center gap-1.5">
+                    <Package size={11} />
+                    Parts Needed?
+                  </span>
+                </label>
+                <button
+                  onClick={() => setHasParts((v) => !v)}
+                  className={`relative h-6 w-11 rounded-full transition-colors duration-200 ${
+                    hasParts ? "bg-primary" : "bg-border"
+                  }`}
+                >
+                  <span
+                    className={`absolute top-0.5 h-5 w-5 rounded-full bg-white shadow-sm transition-transform duration-200 ${
+                      hasParts ? "translate-x-5" : "translate-x-0.5"
+                    }`}
+                  />
+                </button>
+              </div>
+              {hasParts && (
+                <textarea
+                  className={`${inputCls} resize-none animate-fade-in`}
+                  rows={2}
+                  placeholder="List parts needed, e.g. Moen 7594ESRS faucet, 1/2&quot; caulk..."
+                  value={partsList}
+                  onChange={(e) => setPartsList(e.target.value)}
+                />
+              )}
+            </div>
+
+            {/* Notes */}
+            <div>
+              <label className={labelCls}>
+                <span className="inline-flex items-center gap-1.5">
+                  <StickyNote size={11} />
+                  Notes
+                </span>
+              </label>
+              <textarea
+                className={`${inputCls} resize-none`}
+                rows={2}
+                placeholder="Gate code, access instructions, anything to remember..."
+                value={jobNotes}
+                onChange={(e) => setJobNotes(e.target.value)}
+              />
+            </div>
+
+            <Button
+              variant="primary"
+              size="lg"
+              fullWidth
+              icon={<CalendarDays size={17} />}
+              onClick={() => setSubmitted(true)}
+            >
+              Add to Schedule
+            </Button>
+          </>
+        )}
+
+        {/* ─────────── BLOCK TIME MODE ─────────── */}
+        {mode === "block" && (
+          <>
+            {/* Calendar */}
+            <div>
+              <label className={labelCls}>
+                <span className="inline-flex items-center gap-1.5">
+                  <CalendarDays size={11} />
+                  Date
+                </span>
+              </label>
+              <Card padding="sm">
+                <div className="grid grid-cols-7 gap-1 mb-2">
+                  {["Su", "Mo", "Tu", "We", "Th", "Fr", "Sa"].map((d) => (
+                    <div key={d} className="text-center text-[10px] font-bold text-text-tertiary py-1">
+                      {d}
+                    </div>
+                  ))}
+                </div>
+                <div className="grid grid-cols-7 gap-1">
+                  {Array.from({ length: new Date(2026, 2, 29).getDay() }, (_, i) => (
+                    <div key={`empty-${i}`} />
+                  ))}
+                  {WEEKS.map((day) => {
+                    const isSelected = blockDate?.toDateString() === day.date.toDateString();
+                    const isToday = day.date.toDateString() === new Date(2026, 2, 29).toDateString();
+                    return (
+                      <button
+                        key={day.date.toDateString()}
+                        onClick={() => setBlockDate(day.date)}
+                        className={`aspect-square rounded-xl text-[13px] font-semibold transition-all duration-150 flex flex-col items-center justify-center ${
+                          isSelected
+                            ? "bg-text-primary text-white shadow-sm"
+                            : isToday
+                            ? "border-2 border-border text-text-primary bg-surface-secondary"
+                            : "text-text-primary hover:bg-surface-secondary active:bg-border"
+                        }`}
+                      >
+                        <span>{day.dayNum}</span>
+                        {isToday && !isSelected && (
+                          <span className="text-[7px] font-bold text-text-tertiary leading-none">today</span>
+                        )}
+                      </button>
+                    );
+                  })}
+                </div>
+                {blockDate && (
+                  <p className="mt-3 text-center text-[12px] font-semibold text-text-primary border-t border-border pt-3">
+                    {formatDate(blockDate)}
+                  </p>
+                )}
+              </Card>
+            </div>
+
+            {/* Time range */}
+            <div>
+              <label className={labelCls}>
+                <span className="inline-flex items-center gap-1.5">
+                  <Clock size={11} />
+                  Time Range
+                </span>
+              </label>
+              <div className="grid grid-cols-2 gap-3">
+                {/* Start time */}
+                <div className="relative">
+                  <p className="text-[11px] font-semibold text-text-tertiary mb-1">From</p>
+                  <button
+                    onClick={() => { setBlockShowStartDropdown((v) => !v); setBlockShowEndDropdown(false); }}
+                    className="w-full flex items-center justify-between rounded-xl border border-border bg-surface px-3 py-3 text-[14px] font-semibold text-text-primary"
+                  >
+                    {blockStart}
+                    <ChevronDown size={14} className="text-text-tertiary" />
+                  </button>
+                  {blockShowStartDropdown && (
+                    <div className="absolute left-0 right-0 top-full mt-1 z-30 rounded-xl border border-border bg-surface shadow-[0_4px_24px_rgba(0,0,0,0.12)] overflow-hidden">
+                      <div className="max-h-44 overflow-y-auto">
+                        {TIME_SLOTS.map((t) => (
+                          <button
+                            key={t}
+                            className={`flex w-full items-center justify-between px-3 py-2.5 text-[13px] border-b border-border last:border-0 ${
+                              blockStart === t ? "bg-primary-50 text-primary font-semibold" : "text-text-primary hover:bg-surface-secondary"
+                            }`}
+                            onClick={() => { setBlockStart(t); setBlockShowStartDropdown(false); }}
+                          >
+                            {t}
+                            {blockStart === t && <Check size={12} className="text-primary" />}
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+                </div>
+
+                {/* End time */}
+                <div className="relative">
+                  <p className="text-[11px] font-semibold text-text-tertiary mb-1">To</p>
+                  <button
+                    onClick={() => { setBlockShowEndDropdown((v) => !v); setBlockShowStartDropdown(false); }}
+                    className="w-full flex items-center justify-between rounded-xl border border-border bg-surface px-3 py-3 text-[14px] font-semibold text-text-primary"
+                  >
+                    {blockEnd}
+                    <ChevronDown size={14} className="text-text-tertiary" />
+                  </button>
+                  {blockShowEndDropdown && (
+                    <div className="absolute left-0 right-0 top-full mt-1 z-30 rounded-xl border border-border bg-surface shadow-[0_4px_24px_rgba(0,0,0,0.12)] overflow-hidden">
+                      <div className="max-h-44 overflow-y-auto">
+                        {TIME_SLOTS.map((t) => (
+                          <button
+                            key={t}
+                            className={`flex w-full items-center justify-between px-3 py-2.5 text-[13px] border-b border-border last:border-0 ${
+                              blockEnd === t ? "bg-primary-50 text-primary font-semibold" : "text-text-primary hover:bg-surface-secondary"
+                            }`}
+                            onClick={() => { setBlockEnd(t); setBlockShowEndDropdown(false); }}
+                          >
+                            {t}
+                            {blockEnd === t && <Check size={12} className="text-primary" />}
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+                </div>
+              </div>
+            </div>
+
+            {/* Reason chips */}
+            <div>
+              <label className={labelCls}>Reason</label>
+              <div className="flex flex-wrap gap-2">
+                {BLOCK_REASONS.map((r) => (
+                  <button
+                    key={r}
+                    onClick={() => setBlockReason(blockReason === r ? null : r)}
+                    className={`rounded-full border-2 px-4 py-1.5 text-[13px] font-semibold transition-all duration-150 ${
+                      blockReason === r
+                        ? "border-text-primary bg-text-primary text-white"
+                        : "border-border bg-surface text-text-secondary hover:border-text-secondary/30"
+                    }`}
+                  >
+                    {r}
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            {/* Notes */}
+            <div>
+              <label className={labelCls}>Notes (Optional)</label>
+              <textarea
+                className={`${inputCls} resize-none`}
+                rows={2}
+                placeholder="Any details about this blocked time..."
+                value={blockNotes}
+                onChange={(e) => setBlockNotes(e.target.value)}
+              />
+            </div>
+
+            <Button
+              variant="secondary"
+              size="lg"
+              fullWidth
+              icon={<Lock size={17} />}
+              onClick={() => setSubmitted(true)}
+            >
+              Block Time
+            </Button>
+          </>
+        )}
+      </div>
+    </div>
+  );
+}

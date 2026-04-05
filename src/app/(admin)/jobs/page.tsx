@@ -1,0 +1,707 @@
+"use client";
+
+import { useState, useMemo, useEffect } from "react";
+import Card from "@/components/Card";
+import StatusBadge from "@/components/StatusBadge";
+import Button from "@/components/Button";
+import Link from "next/link";
+import {
+  Search,
+  Filter,
+  Clock,
+  MapPin,
+  Camera,
+  ShoppingCart,
+  ChevronRight,
+  Wrench,
+  Plus,
+  LayoutGrid,
+  List,
+  ChevronDown,
+  GripVertical,
+} from "lucide-react";
+
+// ── Types ────────────────────────────────────────────────────────────────────
+
+type PipelineStage = "pending" | "confirmed" | "in-progress" | "completed";
+type JobStatus = PipelineStage | "needs-parts" | "scheduled";
+
+interface Job {
+  id: string;
+  client: string;
+  address: string;
+  date: string;
+  dateGroup: "today" | "this-week" | "future" | "past";
+  tasks: string[];
+  status: JobStatus;
+  partsNeeded: boolean;
+  photos: number;
+  estimate: string;
+}
+
+// ── Stage config ─────────────────────────────────────────────────────────────
+
+const STAGES: { key: PipelineStage; label: string; color: string; dotClass: string; borderClass: string; bgClass: string }[] = [
+  { key: "pending", label: "Pending", color: "#F59E0B", dotClass: "bg-accent-amber", borderClass: "border-l-amber-400", bgClass: "bg-amber-50" },
+  { key: "confirmed", label: "Confirmed", color: "#2563EB", dotClass: "bg-primary", borderClass: "border-l-primary", bgClass: "bg-primary-50" },
+  { key: "in-progress", label: "In Progress", color: "#8B5CF6", dotClass: "bg-[#8B5CF6]", borderClass: "border-l-[#8B5CF6]", bgClass: "bg-[#F5F3FF]" },
+  { key: "completed", label: "Complete", color: "#16A34A", dotClass: "bg-success", borderClass: "border-l-success", bgClass: "bg-success-light" },
+];
+
+/** Map any job status to its pipeline stage */
+function toPipelineStage(status: JobStatus): PipelineStage {
+  if (status === "needs-parts" || status === "scheduled") return "pending";
+  return status;
+}
+
+/** Parse dollar string to number */
+function parseDollars(s: string): number {
+  return Number(s.replace(/[^0-9.]/g, "")) || 0;
+}
+
+// ── Job data ─────────────────────────────────────────────────────────────────
+
+const jobs: Job[] = [
+  {
+    id: "1",
+    client: "Sarah Mitchell",
+    address: "4821 Oak Hollow Dr, Plano",
+    date: "Today, 9:00 AM",
+    dateGroup: "today",
+    tasks: ["Replace kitchen faucet", "Fix garage door sensor"],
+    status: "confirmed",
+    partsNeeded: true,
+    photos: 3,
+    estimate: "$340",
+  },
+  {
+    id: "2",
+    client: "Robert Chen",
+    address: "1205 Elm Creek Ct, Frisco",
+    date: "Today, 11:30 AM",
+    dateGroup: "today",
+    tasks: ["Install smart thermostat", "Replace 3 outlets"],
+    status: "confirmed",
+    partsNeeded: false,
+    photos: 0,
+    estimate: "$280",
+  },
+  {
+    id: "3",
+    client: "Maria Garcia",
+    address: "890 Sunset Ridge, Roanoke",
+    date: "Today, 2:00 PM",
+    dateGroup: "today",
+    tasks: ["Drywall repair (2 holes)", "Touch-up paint"],
+    status: "pending",
+    partsNeeded: false,
+    photos: 2,
+    estimate: "$190",
+  },
+  {
+    id: "4",
+    client: "James Wilson",
+    address: "2200 Heritage Trail, McKinney",
+    date: "Apr 1, 10:00 AM",
+    dateGroup: "this-week",
+    tasks: ["Full bathroom wallpaper removal", "Tile grout repair"],
+    status: "pending",
+    partsNeeded: true,
+    photos: 5,
+    estimate: "$620",
+  },
+  {
+    id: "5",
+    client: "Angela Torres",
+    address: "1100 Prairie Creek, Waxahachie",
+    date: "Apr 2, 8:30 AM",
+    dateGroup: "this-week",
+    tasks: ["Ceiling fan install", "Caulk master bath"],
+    status: "needs-parts",
+    partsNeeded: true,
+    photos: 1,
+    estimate: "$175",
+  },
+  {
+    id: "6",
+    client: "Derek Nguyen",
+    address: "350 Creekside Blvd, Allen",
+    date: "Apr 5, 9:00 AM",
+    dateGroup: "future",
+    tasks: ["Fence gate repair", "Power wash driveway"],
+    status: "scheduled",
+    partsNeeded: false,
+    photos: 0,
+    estimate: "$230",
+  },
+  // In-progress job
+  {
+    id: "7",
+    client: "Patricia Holmes",
+    address: "710 Magnolia Ln, Denton",
+    date: "Today, 7:30 AM",
+    dateGroup: "today",
+    tasks: ["Deck railing replacement", "Stain & seal deck"],
+    status: "in-progress",
+    partsNeeded: false,
+    photos: 4,
+    estimate: "$480",
+  },
+  // Completed jobs
+  {
+    id: "8",
+    client: "Kevin Bradley",
+    address: "2905 Pecan Valley Dr, Plano",
+    date: "Mar 28, 9:00 AM",
+    dateGroup: "past",
+    tasks: ["Garbage disposal install", "Fix leaky P-trap"],
+    status: "completed",
+    partsNeeded: false,
+    photos: 2,
+    estimate: "$215",
+  },
+  {
+    id: "9",
+    client: "Linda Chow",
+    address: "445 Birchwood Ct, Frisco",
+    date: "Mar 28, 1:00 PM",
+    dateGroup: "past",
+    tasks: ["Closet shelf system install"],
+    status: "completed",
+    partsNeeded: false,
+    photos: 3,
+    estimate: "$310",
+  },
+];
+
+// ── Empty state ──────────────────────────────────────────────────────────────
+
+function JobsEmptyState({ hasSearch, searchQuery }: { hasSearch: boolean; searchQuery: string }) {
+  if (hasSearch) {
+    return (
+      <div className="flex flex-col items-center justify-center py-16 text-center">
+        <div className="mb-4 flex h-16 w-16 items-center justify-center rounded-2xl bg-surface-secondary">
+          <Search size={26} className="text-text-tertiary" />
+        </div>
+        <p className="text-[16px] font-bold text-text-primary">No jobs found</p>
+        <p className="mt-1.5 text-[13px] text-text-secondary">
+          Nothing matched &ldquo;<span className="font-semibold">{searchQuery}</span>&rdquo;
+        </p>
+        <p className="mt-0.5 text-[12px] text-text-tertiary">Try a different client name, address, or task.</p>
+      </div>
+    );
+  }
+
+  return (
+    <div className="flex flex-col items-center justify-center py-16 text-center">
+      <div className="relative mb-5">
+        <div className="flex h-24 w-24 items-center justify-center rounded-3xl bg-primary-50">
+          <svg width="56" height="56" viewBox="0 0 56 56" fill="none" aria-hidden="true">
+            <rect x="8" y="14" width="36" height="30" rx="4" fill="#DBEAFE" stroke="#93C5FD" strokeWidth="1.5" />
+            <rect x="8" y="14" width="36" height="9" rx="4" fill="#2563EB" />
+            <rect x="18" y="10" width="3" height="8" rx="1.5" fill="#2563EB" />
+            <rect x="31" y="10" width="3" height="8" rx="1.5" fill="#2563EB" />
+            <circle cx="19" cy="30" r="2" fill="#93C5FD" />
+            <circle cx="28" cy="30" r="2" fill="#93C5FD" />
+            <circle cx="37" cy="30" r="2" fill="#93C5FD" />
+            <circle cx="19" cy="37" r="2" fill="#BFDBFE" />
+            <circle cx="28" cy="37" r="2" fill="#2563EB" />
+            <circle cx="37" cy="37" r="2" fill="#BFDBFE" />
+          </svg>
+        </div>
+        <div className="absolute -bottom-2 -right-2 flex h-9 w-9 items-center justify-center rounded-full bg-white shadow-[0_2px_8px_rgba(0,0,0,0.12)]">
+          <Wrench size={16} className="text-primary" />
+        </div>
+        <div className="absolute -top-1.5 -left-1.5 h-3.5 w-3.5 rounded-full bg-primary opacity-30" />
+      </div>
+      <h3 className="text-[18px] font-bold text-text-primary">No jobs scheduled</h3>
+      <p className="mt-2 max-w-[220px] text-[13px] leading-relaxed text-text-secondary">
+        Create your first job to start tracking visits and tasks.
+      </p>
+      <Link href="/schedule/new" className="mt-5">
+        <button className="flex items-center gap-2 rounded-xl bg-primary px-6 py-3 text-[14px] font-bold text-white shadow-[0_2px_8px_rgba(37,99,235,0.25)] active:bg-primary-dark transition-colors">
+          <Plus size={16} />
+          Add New Job
+        </button>
+      </Link>
+      <p className="mt-4 text-[11px] text-text-tertiary">Jobs appear here once scheduled on the calendar.</p>
+    </div>
+  );
+}
+
+// ── Move-to dropdown ─────────────────────────────────────────────────────────
+
+function MoveToDropdown({
+  currentStage,
+  onMove,
+}: {
+  currentStage: PipelineStage;
+  onMove: (stage: PipelineStage) => void;
+}) {
+  const [open, setOpen] = useState(false);
+  const targets = STAGES.filter((s) => s.key !== currentStage);
+
+  return (
+    <div className="relative">
+      <button
+        onClick={(e) => {
+          e.preventDefault();
+          e.stopPropagation();
+          setOpen(!open);
+        }}
+        className="flex items-center gap-1 rounded-lg border border-border bg-surface px-2.5 py-1.5 text-[11px] font-semibold text-text-secondary hover:bg-surface-secondary transition-colors"
+      >
+        Move to
+        <ChevronDown size={12} />
+      </button>
+      {open && (
+        <div className="absolute right-0 top-full z-20 mt-1 min-w-[140px] rounded-xl border border-border bg-surface py-1 shadow-[0_4px_16px_rgba(0,0,0,0.12)]">
+          {targets.map((stage) => (
+            <button
+              key={stage.key}
+              onClick={(e) => {
+                e.preventDefault();
+                e.stopPropagation();
+                onMove(stage.key);
+                setOpen(false);
+              }}
+              className="flex w-full items-center gap-2 px-3 py-2 text-[12px] text-text-primary hover:bg-surface-secondary transition-colors"
+            >
+              <span className={`h-2 w-2 rounded-full ${stage.dotClass}`} />
+              {stage.label}
+            </button>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ── Pipeline summary bar (mobile) ────────────────────────────────────────────
+
+function PipelineSummary({
+  stageCounts,
+  stageRevenue,
+  activeStage,
+  onStageClick,
+  totalRevenue,
+}: {
+  stageCounts: Record<PipelineStage, number>;
+  stageRevenue: Record<PipelineStage, number>;
+  activeStage: PipelineStage | "all";
+  onStageClick: (stage: PipelineStage | "all") => void;
+  totalRevenue: number;
+}) {
+  const totalJobs = Object.values(stageCounts).reduce((a, b) => a + b, 0);
+
+  return (
+    <div className="mb-4 space-y-3">
+      {/* Stage pills */}
+      <div className="flex gap-2 overflow-x-auto pb-1 no-scrollbar">
+        {/* All pill */}
+        <button
+          onClick={() => onStageClick("all")}
+          className={`flex shrink-0 items-center gap-1.5 rounded-full px-3.5 py-1.5 text-[12px] font-semibold transition-all duration-150 ${
+            activeStage === "all"
+              ? "bg-text-primary text-white shadow-sm"
+              : "border border-border bg-surface text-text-secondary hover:border-gray-300"
+          }`}
+        >
+          All
+          <span className={`ml-0.5 text-[11px] ${activeStage === "all" ? "text-white/70" : "text-text-tertiary"}`}>
+            {totalJobs}
+          </span>
+        </button>
+
+        {STAGES.map((stage) => (
+          <button
+            key={stage.key}
+            onClick={() => onStageClick(stage.key)}
+            className={`flex shrink-0 items-center gap-1.5 rounded-full px-3.5 py-1.5 text-[12px] font-semibold transition-all duration-150 ${
+              activeStage === stage.key
+                ? "text-white shadow-sm"
+                : "border border-border bg-surface text-text-secondary hover:border-gray-300"
+            }`}
+            style={activeStage === stage.key ? { backgroundColor: stage.color } : undefined}
+          >
+            <span
+              className={`h-2 w-2 rounded-full ${activeStage === stage.key ? "bg-white/60" : ""}`}
+              style={activeStage !== stage.key ? { backgroundColor: stage.color } : undefined}
+            />
+            {stage.label}
+            <span className={`ml-0.5 text-[11px] ${activeStage === stage.key ? "text-white/70" : "text-text-tertiary"}`}>
+              {stageCounts[stage.key]}
+            </span>
+          </button>
+        ))}
+      </div>
+
+      {/* Revenue bar */}
+      <div className="rounded-xl border border-border bg-surface px-3.5 py-2.5">
+        <div className="flex items-center justify-between mb-2">
+          <span className="text-[12px] font-semibold text-text-secondary">
+            ${totalRevenue.toLocaleString()} in pipeline
+          </span>
+        </div>
+        <div className="flex h-2 w-full overflow-hidden rounded-full bg-surface-secondary">
+          {STAGES.map((stage) => {
+            const pct = totalRevenue > 0 ? (stageRevenue[stage.key] / totalRevenue) * 100 : 0;
+            if (pct === 0) return null;
+            return (
+              <div
+                key={stage.key}
+                className="h-full transition-all duration-300"
+                style={{ width: `${pct}%`, backgroundColor: stage.color }}
+              />
+            );
+          })}
+        </div>
+        <div className="mt-1.5 flex flex-wrap gap-x-4 gap-y-0.5">
+          {STAGES.map((stage) => (
+            <span key={stage.key} className="flex items-center gap-1 text-[10px] text-text-tertiary">
+              <span className="h-1.5 w-1.5 rounded-full" style={{ backgroundColor: stage.color }} />
+              ${stageRevenue[stage.key].toLocaleString()}
+            </span>
+          ))}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ── Job card (list view) ─────────────────────────────────────────────────────
+
+function JobCardList({
+  job,
+  onMove,
+}: {
+  job: Job;
+  onMove: (jobId: string, stage: PipelineStage) => void;
+}) {
+  const stage = toPipelineStage(job.status);
+  const stageConfig = STAGES.find((s) => s.key === stage)!;
+
+  return (
+    <Link href={`/jobs/${job.id}`} className="block">
+      <Card padding="md" className={`border-l-[3px] ${stageConfig.borderClass}`}>
+        <div className="flex items-start justify-between gap-2">
+          <div className="flex-1 min-w-0">
+            <div className="flex items-center gap-2 flex-wrap">
+              <h3 className="text-[15px] font-semibold text-text-primary">{job.client}</h3>
+              <StatusBadge status={job.status === "scheduled" || job.status === "needs-parts" ? job.status : stage} />
+            </div>
+            <div className="mt-1.5 flex items-center gap-1.5">
+              <MapPin size={12} className="shrink-0 text-text-tertiary" />
+              <span className="text-[12px] text-text-secondary truncate">{job.address}</span>
+            </div>
+            <div className="mt-0.5 flex items-center gap-1.5">
+              <Clock size={12} className="shrink-0 text-text-tertiary" />
+              <span className="text-[12px] text-text-secondary">{job.date}</span>
+            </div>
+          </div>
+          <div className="flex flex-col items-end gap-1 shrink-0">
+            <span className="text-[16px] font-bold text-text-primary">{job.estimate}</span>
+            <GripVertical size={14} className="text-text-tertiary/40" />
+          </div>
+        </div>
+
+        {/* Task chips */}
+        <div className="mt-3 flex flex-wrap gap-1.5">
+          {job.tasks.map((task) => (
+            <span key={task} className="rounded-md bg-surface-secondary px-2.5 py-1 text-[11px] font-medium text-text-secondary">
+              {task}
+            </span>
+          ))}
+        </div>
+
+        {/* Meta row + Move to */}
+        <div className="mt-3 flex items-center justify-between border-t border-border pt-3">
+          <div className="flex items-center gap-4">
+            {job.photos > 0 && (
+              <span className="flex items-center gap-1 text-[11px] text-text-tertiary">
+                <Camera size={12} />
+                {job.photos} photo{job.photos !== 1 ? "s" : ""}
+              </span>
+            )}
+            {job.partsNeeded && (
+              <span className="flex items-center gap-1.5 text-[11px] font-medium text-accent-amber">
+                <ShoppingCart size={12} />
+                Parts needed
+              </span>
+            )}
+          </div>
+          <MoveToDropdown currentStage={stage} onMove={(newStage) => onMove(job.id, newStage)} />
+        </div>
+      </Card>
+    </Link>
+  );
+}
+
+// ── Compact card (board view) ────────────────────────────────────────────────
+
+function JobCardCompact({
+  job,
+  onMove,
+}: {
+  job: Job;
+  onMove: (jobId: string, stage: PipelineStage) => void;
+}) {
+  const stage = toPipelineStage(job.status);
+
+  return (
+    <Link href={`/jobs/${job.id}`} className="block">
+      <Card padding="sm" className="hover:shadow-[0_4px_12px_rgba(0,0,0,0.10)] transition-shadow">
+        <div className="flex items-start justify-between gap-2">
+          <div className="min-w-0 flex-1">
+            <p className="text-[13px] font-semibold text-text-primary truncate">{job.client}</p>
+            <div className="mt-1 flex items-center gap-1.5">
+              <MapPin size={11} className="shrink-0 text-text-tertiary" />
+              <span className="text-[11px] text-text-secondary truncate">{job.address}</span>
+            </div>
+          </div>
+          <span className="text-[14px] font-bold text-text-primary shrink-0">{job.estimate}</span>
+        </div>
+        <div className="mt-2 flex items-center justify-between">
+          <div className="flex items-center gap-2">
+            <span className="text-[11px] text-text-tertiary">
+              {job.tasks.length} task{job.tasks.length !== 1 ? "s" : ""}
+            </span>
+            {job.partsNeeded && (
+              <span className="flex items-center gap-1 text-[10px] font-medium text-accent-amber">
+                <ShoppingCart size={10} />
+                Parts
+              </span>
+            )}
+            {job.photos > 0 && (
+              <span className="flex items-center gap-1 text-[10px] text-text-tertiary">
+                <Camera size={10} />
+                {job.photos}
+              </span>
+            )}
+          </div>
+          <MoveToDropdown currentStage={stage} onMove={(newStage) => onMove(job.id, newStage)} />
+        </div>
+      </Card>
+    </Link>
+  );
+}
+
+// ── Kanban column ────────────────────────────────────────────────────────────
+
+function KanbanColumn({
+  stage,
+  jobs: columnJobs,
+  revenue,
+  onMove,
+}: {
+  stage: (typeof STAGES)[number];
+  jobs: Job[];
+  revenue: number;
+  onMove: (jobId: string, stage: PipelineStage) => void;
+}) {
+  return (
+    <div className="flex flex-col min-h-0">
+      {/* Column header */}
+      <div className="rounded-t-xl border-t-[4px] bg-surface px-3.5 pt-3 pb-2.5" style={{ borderTopColor: stage.color }}>
+        <div className="flex items-center justify-between">
+          <div className="flex items-center gap-2">
+            <span className={`h-2.5 w-2.5 rounded-full ${stage.dotClass}`} />
+            <span className="text-[13px] font-bold text-text-primary">{stage.label}</span>
+            <span className="flex h-5 min-w-[20px] items-center justify-center rounded-full bg-surface-secondary px-1.5 text-[11px] font-semibold text-text-secondary">
+              {columnJobs.length}
+            </span>
+          </div>
+          <span className="text-[12px] font-semibold text-text-secondary">${revenue.toLocaleString()}</span>
+        </div>
+      </div>
+
+      {/* Column body */}
+      <div className="flex-1 space-y-2 overflow-y-auto rounded-b-xl border border-t-0 border-border bg-surface-secondary/50 p-2.5">
+        {columnJobs.length === 0 && (
+          <div className="flex items-center justify-center py-8">
+            <p className="text-[12px] text-text-tertiary">No jobs</p>
+          </div>
+        )}
+        {columnJobs.map((job) => (
+          <JobCardCompact key={job.id} job={job} onMove={onMove} />
+        ))}
+      </div>
+    </div>
+  );
+}
+
+// ── Page ─────────────────────────────────────────────────────────────────────
+
+export default function JobsPage() {
+  const [search, setSearch] = useState("");
+  const [activeStage, setActiveStage] = useState<PipelineStage | "all">("all");
+  const [view, setView] = useState<"list" | "board">("list");
+  const [jobData, setJobData] = useState<Job[]>(jobs);
+
+  // Default to board on desktop
+  useEffect(() => {
+    const mql = window.matchMedia("(min-width: 1024px)");
+    if (mql.matches) setView("board");
+    const handler = (e: MediaQueryListEvent) => setView(e.matches ? "board" : "list");
+    mql.addEventListener("change", handler);
+    return () => mql.removeEventListener("change", handler);
+  }, []);
+
+  // Move handler
+  const handleMove = (jobId: string, newStage: PipelineStage) => {
+    setJobData((prev) =>
+      prev.map((j) =>
+        j.id === jobId
+          ? { ...j, status: newStage as JobStatus, partsNeeded: newStage === "pending" ? j.partsNeeded : false }
+          : j
+      )
+    );
+  };
+
+  // Compute stage counts & revenue from full data (before search filter)
+  const { stageCounts, stageRevenue, totalRevenue } = useMemo(() => {
+    const counts: Record<PipelineStage, number> = { pending: 0, confirmed: 0, "in-progress": 0, completed: 0 };
+    const revenue: Record<PipelineStage, number> = { pending: 0, confirmed: 0, "in-progress": 0, completed: 0 };
+    let total = 0;
+    for (const j of jobData) {
+      const s = toPipelineStage(j.status);
+      counts[s]++;
+      const amt = parseDollars(j.estimate);
+      revenue[s] += amt;
+      total += amt;
+    }
+    return { stageCounts: counts, stageRevenue: revenue, totalRevenue: total };
+  }, [jobData]);
+
+  // Filtered jobs
+  const filtered = useMemo(() => {
+    let result = jobData;
+
+    // Stage filter
+    if (activeStage !== "all") {
+      result = result.filter((j) => toPipelineStage(j.status) === activeStage);
+    }
+
+    // Search
+    if (search.trim()) {
+      const q = search.toLowerCase();
+      result = result.filter(
+        (j) =>
+          j.client.toLowerCase().includes(q) ||
+          j.tasks.some((t) => t.toLowerCase().includes(q)) ||
+          j.address.toLowerCase().includes(q)
+      );
+    }
+
+    return result;
+  }, [activeStage, search, jobData]);
+
+  // Group by stage for board view
+  const groupedByStage = useMemo(() => {
+    const groups: Record<PipelineStage, Job[]> = { pending: [], confirmed: [], "in-progress": [], completed: [] };
+    for (const j of filtered) {
+      groups[toPipelineStage(j.status)].push(j);
+    }
+    return groups;
+  }, [filtered]);
+
+  const showEmpty = filtered.length === 0;
+
+  return (
+    <div className="px-5 pt-14 lg:pt-8 pb-24 bg-background min-h-screen">
+      {/* Header */}
+      <div className="mb-5 flex items-end justify-between">
+        <div>
+          <p className="text-[11px] font-semibold uppercase tracking-wider text-text-tertiary">Manage</p>
+          <h1 className="mt-0.5 text-[26px] font-bold text-text-primary leading-tight">Jobs</h1>
+        </div>
+        {/* View toggle */}
+        <div className="flex items-center gap-1 rounded-lg border border-border bg-surface p-0.5">
+          <button
+            onClick={() => setView("list")}
+            className={`flex items-center gap-1.5 rounded-md px-2.5 py-1.5 text-[12px] font-semibold transition-colors ${
+              view === "list" ? "bg-primary text-white shadow-sm" : "text-text-secondary hover:bg-surface-secondary"
+            }`}
+          >
+            <List size={14} />
+            <span className="hidden sm:inline">List</span>
+          </button>
+          <button
+            onClick={() => setView("board")}
+            className={`flex items-center gap-1.5 rounded-md px-2.5 py-1.5 text-[12px] font-semibold transition-colors ${
+              view === "board" ? "bg-primary text-white shadow-sm" : "text-text-secondary hover:bg-surface-secondary"
+            }`}
+          >
+            <LayoutGrid size={14} />
+            <span className="hidden sm:inline">Board</span>
+          </button>
+        </div>
+      </div>
+
+      {/* Search Bar */}
+      <div className="mb-3 flex gap-2">
+        <div className="flex flex-1 items-center gap-2.5 rounded-xl border border-border bg-surface px-3.5 py-2.5 shadow-[0_1px_2px_rgba(0,0,0,0.04)]">
+          <Search size={16} className="shrink-0 text-text-tertiary" />
+          <input
+            type="text"
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+            placeholder="Search clients, tasks, addresses..."
+            className="flex-1 bg-transparent text-[14px] text-text-primary placeholder:text-text-tertiary focus:outline-none"
+          />
+        </div>
+        <button className="flex h-[44px] w-[44px] shrink-0 items-center justify-center rounded-xl border border-border bg-surface shadow-[0_1px_2px_rgba(0,0,0,0.04)] active:bg-surface-secondary transition-colors">
+          <Filter size={17} className="text-text-secondary" />
+        </button>
+      </div>
+
+      {/* Pipeline summary (visible in both views) */}
+      <PipelineSummary
+        stageCounts={stageCounts}
+        stageRevenue={stageRevenue}
+        activeStage={activeStage}
+        onStageClick={setActiveStage}
+        totalRevenue={totalRevenue}
+      />
+
+      {/* Results count */}
+      {search.trim() && filtered.length > 0 && (
+        <p className="mb-3 text-[12px] text-text-tertiary">
+          {filtered.length} result{filtered.length !== 1 ? "s" : ""} for &ldquo;{search}&rdquo;
+        </p>
+      )}
+
+      {/* ── List view ─────────────────────────────────────────────────────────── */}
+      {view === "list" && (
+        <div className="space-y-3">
+          {showEmpty ? (
+            <JobsEmptyState hasSearch={search.trim() !== "" || activeStage !== "all"} searchQuery={search} />
+          ) : (
+            filtered.map((job) => <JobCardList key={job.id} job={job} onMove={handleMove} />)
+          )}
+        </div>
+      )}
+
+      {/* ── Board view ────────────────────────────────────────────────────────── */}
+      {view === "board" && (
+        <>
+          {showEmpty && activeStage !== "all" ? (
+            <JobsEmptyState hasSearch={search.trim() !== "" || activeStage !== "all"} searchQuery={search} />
+          ) : (
+            <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
+              {STAGES.map((stage) => (
+                <KanbanColumn
+                  key={stage.key}
+                  stage={stage}
+                  jobs={groupedByStage[stage.key]}
+                  revenue={stageRevenue[stage.key]}
+                  onMove={handleMove}
+                />
+              ))}
+            </div>
+          )}
+        </>
+      )}
+    </div>
+  );
+}

@@ -1,0 +1,479 @@
+"use client";
+
+import { useState, useEffect, Suspense } from "react";
+import { useSearchParams, useRouter } from "next/navigation";
+import Card from "@/components/Card";
+import Button from "@/components/Button";
+import {
+  Calendar, Clock, Camera, ChevronLeft, ChevronRight,
+  Upload, X, Check, Repeat, Zap, Info, Sun, Sunset,
+} from "lucide-react";
+
+// ─── All calendar data (6 weeks) ────────────────────────────────────────────
+
+const allCalendarWeeks = [
+  // March/April 2026 — show 3 weeks
+  [
+    { date: 30, month: "Mar", day: "Mon", available: true },
+    { date: 31, month: "Mar", day: "Tue", available: true },
+    { date: 1, month: "Apr", day: "Wed", available: true },
+    { date: 2, month: "Apr", day: "Thu", available: false },
+    { date: 3, month: "Apr", day: "Fri", available: true },
+    { date: 4, month: "Apr", day: "Sat", available: false },
+    { date: 5, month: "Apr", day: "Sun", available: false },
+  ],
+  [
+    { date: 6, month: "Apr", day: "Mon", available: true },
+    { date: 7, month: "Apr", day: "Tue", available: true },
+    { date: 8, month: "Apr", day: "Wed", available: true },
+    { date: 9, month: "Apr", day: "Thu", available: true },
+    { date: 10, month: "Apr", day: "Fri", available: true },
+    { date: 11, month: "Apr", day: "Sat", available: false },
+    { date: 12, month: "Apr", day: "Sun", available: false },
+  ],
+  [
+    { date: 13, month: "Apr", day: "Mon", available: true },
+    { date: 14, month: "Apr", day: "Tue", available: false },
+    { date: 15, month: "Apr", day: "Wed", available: true },
+    { date: 16, month: "Apr", day: "Thu", available: true },
+    { date: 17, month: "Apr", day: "Fri", available: true },
+    { date: 18, month: "Apr", day: "Sat", available: false },
+    { date: 19, month: "Apr", day: "Sun", available: false },
+  ],
+  [
+    { date: 20, month: "Apr", day: "Mon", available: true },
+    { date: 21, month: "Apr", day: "Tue", available: true },
+    { date: 22, month: "Apr", day: "Wed", available: false },
+    { date: 23, month: "Apr", day: "Thu", available: true },
+    { date: 24, month: "Apr", day: "Fri", available: true },
+    { date: 25, month: "Apr", day: "Sat", available: false },
+    { date: 26, month: "Apr", day: "Sun", available: false },
+  ],
+  [
+    { date: 27, month: "Apr", day: "Mon", available: true },
+    { date: 28, month: "Apr", day: "Tue", available: true },
+    { date: 29, month: "Apr", day: "Wed", available: true },
+    { date: 30, month: "Apr", day: "Thu", available: false },
+    { date: 1,  month: "May", day: "Fri", available: true },
+    { date: 2,  month: "May", day: "Sat", available: false },
+    { date: 3,  month: "May", day: "Sun", available: false },
+  ],
+];
+
+const WEEKS_PER_PAGE = 3;
+
+const morningSlots = [
+  { time: "8:00 AM", available: true },
+  { time: "9:00 AM", available: true },
+  { time: "10:00 AM", available: true },
+  { time: "11:00 AM", available: true },
+];
+
+const afternoonSlots = [
+  { time: "12:00 PM", available: false },
+  { time: "1:00 PM", available: true },
+  { time: "2:00 PM", available: true },
+  { time: "3:00 PM", available: false },
+  { time: "4:00 PM", available: true },
+];
+
+const categories = [
+  "General Repair", "Plumbing", "Electrical",
+  "Painting", "Carpentry", "Smart Home", "HVAC", "Other",
+];
+
+const serviceTypes = [
+  { id: "one-time", label: "One-Time Visit", desc: "Single service call", icon: Zap },
+  { id: "subscription", label: "Subscription", desc: "Ongoing maintenance plan", icon: Repeat },
+];
+
+interface Photo { id: string; url: string; name: string; }
+
+function BookingPageInner() {
+  const router = useRouter();
+  const searchParams = useSearchParams();
+  const [step, setStep] = useState(1);
+  const [selectedDay, setSelectedDay] = useState<number | null>(null);
+  const [selectedMonth, setSelectedMonth] = useState<string | null>(null);
+  const [selectedTime, setSelectedTime] = useState<string | null>(null);
+  const [serviceType, setServiceType] = useState("one-time");
+  const [description, setDescription] = useState("");
+  const [photos, setPhotos] = useState<Photo[]>([]);
+  const [calendarPage, setCalendarPage] = useState(0);
+  const [selectedCategories, setSelectedCategories] = useState<string[]>([]);
+  const [partsNote, setPartsNote] = useState("");
+
+  // Pre-fill from URL params (coming from Services page)
+  useEffect(() => {
+    const service = searchParams.get("service");
+    const category = searchParams.get("category");
+    if (service) setDescription(`Service requested: ${service}`);
+    if (category && !selectedCategories.includes(category)) {
+      setSelectedCategories([category]);
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  const calendarWeeks = allCalendarWeeks.slice(calendarPage * WEEKS_PER_PAGE, (calendarPage + 1) * WEEKS_PER_PAGE);
+  const totalPages = Math.ceil(allCalendarWeeks.length / WEEKS_PER_PAGE);
+  const monthLabel = calendarPage === 0 ? "March – April 2026" : "April – May 2026";
+
+  function goTo(s: number) { setStep(s); window.scrollTo(0,0); }
+  function toggleCategory(cat: string) {
+    setSelectedCategories((prev) => prev.includes(cat) ? prev.filter((c) => c !== cat) : [...prev, cat]);
+  }
+  function handlePhotoUpload() {
+    const id = Math.random().toString(36).slice(2);
+    setPhotos((prev) => [...prev, { id, url: `https://picsum.photos/seed/${id}/200/200`, name: `Photo ${prev.length + 1}` }]);
+  }
+  function removePhoto(id: string) { setPhotos((prev) => prev.filter((p) => p.id !== id)); }
+
+  const selectedLabel = selectedDay && selectedMonth ? `${selectedMonth} ${selectedDay}` : null;
+  const canStep1Continue = selectedDay !== null && selectedTime !== null;
+
+  return (
+    <div className="min-h-screen bg-background">
+      {/* Header */}
+      <div className="bg-white px-5 pt-14 lg:pt-8 pb-4 border-b border-border">
+        <div className="flex items-center gap-3 mb-3">
+          {step > 1 && (
+            <button onClick={() => goTo(step - 1)} className="flex h-9 w-9 items-center justify-center rounded-full bg-surface-secondary active:bg-border transition-colors">
+              <ChevronLeft size={18} className="text-text-secondary" />
+            </button>
+          )}
+          <div className="flex-1">
+            <p className="text-[11px] font-semibold uppercase tracking-widest text-text-tertiary">Step {step} of 3</p>
+            <h1 className="text-[22px] font-bold text-text-primary leading-tight">
+              {step === 1 ? "When works for you?" : step === 2 ? "Tell us what you need" : "Review & Confirm"}
+            </h1>
+          </div>
+        </div>
+        <div className="flex gap-1.5">
+          {[1, 2, 3].map((s) => (
+            <div key={s} className={`h-1.5 flex-1 rounded-full transition-all duration-500 ${s <= step ? "bg-primary" : "bg-border"}`} />
+          ))}
+        </div>
+      </div>
+
+      <div className="px-5 pt-5 pb-28">
+
+        {/* ═══ STEP 1: Date & Time ═══ */}
+        {step === 1 && (
+          <div className="space-y-0">
+            {/* Service Type */}
+            <div className="mb-6">
+              <p className="mb-3 text-sm font-semibold uppercase tracking-wider text-text-secondary">Service Type</p>
+              <div className="flex gap-3">
+                {serviceTypes.map(({ id, label, desc, icon: Icon }) => (
+                  <button
+                    key={id}
+                    onClick={() => setServiceType(id)}
+                    className={`flex-1 rounded-xl border-2 p-4 text-left transition-all ${
+                      serviceType === id
+                        ? "border-primary bg-primary-50 shadow-[0_0_0_1px_#2563EB]"
+                        : "border-border bg-surface hover:border-primary/40"
+                    }`}
+                  >
+                    <div className={`mb-2 inline-flex h-8 w-8 items-center justify-center rounded-lg ${
+                      serviceType === id ? "bg-primary/10" : "bg-surface-secondary"
+                    }`}>
+                      <Icon size={16} className={serviceType === id ? "text-primary" : "text-text-tertiary"} />
+                    </div>
+                    <p className={`text-[13px] font-semibold ${serviceType === id ? "text-primary" : "text-text-primary"}`}>{label}</p>
+                    <p className="text-[11px] text-text-tertiary mt-0.5">{desc}</p>
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            {/* Calendar Grid */}
+            <div className="mb-6">
+              <p className="mb-3 text-sm font-semibold uppercase tracking-wider text-text-secondary">Pick a Date</p>
+              <Card padding="md" className="border border-border">
+                {/* Month header */}
+                <div className="flex items-center justify-between mb-4">
+                  <button
+                    onClick={() => setCalendarPage(p => Math.max(0, p - 1))}
+                    disabled={calendarPage === 0}
+                    className="flex h-8 w-8 items-center justify-center rounded-full hover:bg-surface-secondary transition-colors disabled:opacity-30"
+                  >
+                    <ChevronLeft size={18} className="text-text-secondary" />
+                  </button>
+                  <span className="text-[15px] font-semibold text-text-primary">{monthLabel}</span>
+                  <button
+                    onClick={() => setCalendarPage(p => Math.min(totalPages - 1, p + 1))}
+                    disabled={calendarPage === totalPages - 1}
+                    className="flex h-8 w-8 items-center justify-center rounded-full hover:bg-surface-secondary transition-colors disabled:opacity-30"
+                  >
+                    <ChevronRight size={18} className="text-text-secondary" />
+                  </button>
+                </div>
+
+                {/* Day labels */}
+                <div className="grid grid-cols-7 gap-1 mb-2">
+                  {["M", "T", "W", "T", "F", "S", "S"].map((d, i) => (
+                    <div key={i} className="text-center text-[11px] font-semibold text-text-tertiary">{d}</div>
+                  ))}
+                </div>
+
+                {/* Calendar weeks */}
+                {calendarWeeks.map((week, wi) => (
+                  <div key={wi} className="grid grid-cols-7 gap-1 mb-1">
+                    {week.map((day) => {
+                      const isSelected = selectedDay === day.date && selectedMonth === day.month;
+                      const isToday = day.date === 29 && day.month === "Mar";
+                      return (
+                        <button
+                          key={`${day.month}-${day.date}`}
+                          disabled={!day.available}
+                          onClick={() => { setSelectedDay(day.date); setSelectedMonth(day.month); setSelectedTime(null); }}
+                          className={`relative flex flex-col items-center justify-center rounded-xl h-11 transition-all ${
+                            isSelected
+                              ? "bg-primary text-white shadow-[0_2px_8px_rgba(37,99,235,0.30)]"
+                              : day.available
+                              ? "bg-surface hover:bg-primary-50 text-text-primary"
+                              : "text-text-tertiary/30 cursor-not-allowed"
+                          }`}
+                        >
+                          <span className={`text-[14px] font-semibold ${isSelected ? "text-white" : ""}`}>{day.date}</span>
+                          {day.available && !isSelected && (
+                            <div className="absolute bottom-1 h-1 w-1 rounded-full bg-success" />
+                          )}
+                          {isToday && !isSelected && (
+                            <div className="absolute bottom-1 h-1 w-3 rounded-full bg-primary" />
+                          )}
+                        </button>
+                      );
+                    })}
+                  </div>
+                ))}
+
+                {/* Legend */}
+                <div className="mt-3 flex items-center gap-4 pt-3 border-t border-border">
+                  <div className="flex items-center gap-1.5">
+                    <div className="h-1.5 w-1.5 rounded-full bg-success" />
+                    <span className="text-[10px] text-text-tertiary">Available</span>
+                  </div>
+                  <div className="flex items-center gap-1.5">
+                    <div className="h-1.5 w-3 rounded-full bg-primary" />
+                    <span className="text-[10px] text-text-tertiary">Today</span>
+                  </div>
+                </div>
+              </Card>
+            </div>
+
+            {/* Time Slots — only show after date selected */}
+            {selectedDay && (
+              <div className="mb-6 animate-slide-up">
+                <p className="mb-3 text-sm font-semibold uppercase tracking-wider text-text-secondary">
+                  Pick a Time for {selectedLabel}
+                </p>
+
+                {/* Morning */}
+                <div className="mb-4">
+                  <div className="flex items-center gap-2 mb-2">
+                    <Sun size={14} className="text-warning" />
+                    <span className="text-[12px] font-semibold text-text-secondary">Morning</span>
+                  </div>
+                  <div className="grid grid-cols-4 gap-2">
+                    {morningSlots.map(({ time, available }) => {
+                      const isSelected = selectedTime === time;
+                      return (
+                        <button
+                          key={time}
+                          disabled={!available}
+                          onClick={() => setSelectedTime(time)}
+                          className={`rounded-xl py-3 text-[13px] font-semibold transition-all ${
+                            isSelected
+                              ? "bg-primary text-white shadow-[0_2px_8px_rgba(37,99,235,0.3)]"
+                              : available
+                              ? "bg-surface border border-border text-text-secondary hover:border-primary/40 hover:bg-primary-50"
+                              : "bg-surface-secondary text-text-tertiary/40 cursor-not-allowed"
+                          }`}
+                        >
+                          {time.replace(" AM", "a").replace(" PM", "p")}
+                        </button>
+                      );
+                    })}
+                  </div>
+                </div>
+
+                {/* Afternoon */}
+                <div>
+                  <div className="flex items-center gap-2 mb-2">
+                    <Sunset size={14} className="text-accent-coral" />
+                    <span className="text-[12px] font-semibold text-text-secondary">Afternoon</span>
+                  </div>
+                  <div className="grid grid-cols-4 gap-2">
+                    {afternoonSlots.map(({ time, available }) => {
+                      const isSelected = selectedTime === time;
+                      return (
+                        <button
+                          key={time}
+                          disabled={!available}
+                          onClick={() => setSelectedTime(time)}
+                          className={`rounded-xl py-3 text-[13px] font-semibold transition-all ${
+                            isSelected
+                              ? "bg-primary text-white shadow-[0_2px_8px_rgba(37,99,235,0.3)]"
+                              : available
+                              ? "bg-surface border border-border text-text-secondary hover:border-primary/40 hover:bg-primary-50"
+                              : "bg-surface-secondary text-text-tertiary/40 cursor-not-allowed"
+                          }`}
+                        >
+                          {time.replace(" AM", "a").replace(" PM", "p")}
+                        </button>
+                      );
+                    })}
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {/* Selection summary */}
+            {canStep1Continue && (
+              <Card variant="flat" padding="sm" className="mb-5 flex items-center gap-3 border border-success/20 bg-success-light animate-scale-in">
+                <Check size={18} className="text-success shrink-0" />
+                <p className="text-[13px] font-semibold text-text-primary">
+                  {selectedLabel} at {selectedTime}
+                </p>
+              </Card>
+            )}
+
+            <Button variant="primary" size="lg" fullWidth disabled={!canStep1Continue} onClick={() => goTo(2)}>
+              Continue <ChevronRight size={16} className="ml-1" />
+            </Button>
+          </div>
+        )}
+
+        {/* ═══ STEP 2: Describe the Job ═══ */}
+        {step === 2 && (
+          <div>
+            <Card variant="flat" padding="sm" className="mb-5 flex items-center gap-3 border border-primary-100">
+              <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-primary-50">
+                <Calendar size={16} className="text-primary" />
+              </div>
+              <div>
+                <p className="text-[13px] font-semibold text-text-primary">{selectedLabel} at {selectedTime}</p>
+                <p className="text-[11px] text-text-tertiary capitalize">{serviceType.replace("-", " ")} visit</p>
+              </div>
+            </Card>
+
+            <div className="mb-6">
+              <p className="mb-2 text-sm font-semibold uppercase tracking-wider text-text-secondary">What needs to be done?</p>
+              <textarea
+                value={description}
+                onChange={(e) => setDescription(e.target.value)}
+                placeholder="Describe the issue or service needed in detail..."
+                rows={5}
+                className="w-full resize-none rounded-xl border border-border bg-surface p-4 text-[14px] text-text-primary placeholder:text-text-tertiary focus:border-primary focus:ring-3 focus:ring-primary/10 focus:outline-none transition-colors"
+              />
+              <p className="mt-1.5 text-[11px] text-text-tertiary text-right">{description.length} characters</p>
+            </div>
+
+            <div className="mb-6">
+              <p className="mb-2 text-sm font-semibold uppercase tracking-wider text-text-secondary">Service Category</p>
+              <div className="flex flex-wrap gap-2">
+                {categories.map((cat) => {
+                  const active = selectedCategories.includes(cat);
+                  return (
+                    <button key={cat} onClick={() => toggleCategory(cat)}
+                      className={`rounded-full px-4 py-2 text-[13px] font-medium transition-all ${
+                        active ? "bg-primary text-white shadow-sm" : "border border-border bg-surface text-text-secondary hover:border-primary/40"
+                      }`}>
+                      {cat}
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+
+            <div className="mb-6">
+              <div className="mb-2 flex items-center justify-between">
+                <p className="text-sm font-semibold uppercase tracking-wider text-text-secondary">Photos <span className="ml-1 text-[11px] normal-case font-normal text-text-tertiary">(optional)</span></p>
+                <span className="text-[11px] text-text-tertiary">{photos.length}/5</span>
+              </div>
+              <div className="flex gap-2 overflow-x-auto no-scrollbar pb-1">
+                <button onClick={handlePhotoUpload} className="flex h-24 w-24 shrink-0 flex-col items-center justify-center gap-1.5 rounded-xl border-2 border-dashed border-border bg-surface hover:border-primary/50 hover:bg-primary-50 transition-colors">
+                  <Camera size={22} className="text-text-tertiary" />
+                  <span className="text-[10px] font-medium text-text-tertiary">Camera</span>
+                </button>
+                <button onClick={handlePhotoUpload} className="flex h-24 w-24 shrink-0 flex-col items-center justify-center gap-1.5 rounded-xl border-2 border-dashed border-border bg-surface hover:border-primary/50 hover:bg-primary-50 transition-colors">
+                  <Upload size={22} className="text-text-tertiary" />
+                  <span className="text-[10px] font-medium text-text-tertiary">Upload</span>
+                </button>
+                {photos.map((photo) => (
+                  <div key={photo.id} className="relative h-24 w-24 shrink-0 rounded-xl overflow-hidden border border-border">
+                    <img src={photo.url} alt={photo.name} className="h-full w-full object-cover" />
+                    <button onClick={() => removePhoto(photo.id)} className="absolute right-1 top-1 flex h-5 w-5 items-center justify-center rounded-full bg-black/60">
+                      <X size={10} className="text-white" />
+                    </button>
+                  </div>
+                ))}
+              </div>
+            </div>
+
+            <div className="mb-8">
+              <p className="mb-2 text-sm font-semibold uppercase tracking-wider text-text-secondary">Parts Needed <span className="ml-1 text-[11px] normal-case font-normal text-text-tertiary">(optional)</span></p>
+              <input type="text" value={partsNote} onChange={(e) => setPartsNote(e.target.value)} placeholder="e.g. Broan fan motor, Ecobee thermostat…"
+                className="w-full rounded-xl border border-border bg-surface px-4 py-3 text-[14px] text-text-primary placeholder:text-text-tertiary focus:border-primary focus:ring-3 focus:ring-primary/10 focus:outline-none transition-colors" />
+              <div className="mt-2 flex items-start gap-1.5">
+                <Info size={12} className="mt-0.5 shrink-0 text-text-tertiary" />
+                <p className="text-[11px] text-text-tertiary">Tech can purchase parts for a $10 procurement fee, or you can provide them yourself.</p>
+              </div>
+            </div>
+
+            <div className="flex gap-3">
+              <Button variant="outline" size="lg" onClick={() => goTo(1)}><ChevronLeft size={16} className="-ml-1 mr-1" />Back</Button>
+              <Button variant="primary" size="lg" fullWidth onClick={() => goTo(3)}>Review Booking</Button>
+            </div>
+          </div>
+        )}
+
+        {/* ═══ STEP 3: Confirm ═══ */}
+        {step === 3 && (
+          <div>
+            <Card padding="md" className="mb-4">
+              <p className="text-sm font-semibold uppercase tracking-wider text-text-secondary mb-4">Booking Summary</p>
+              <div className="space-y-4">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-2.5 text-text-tertiary"><Calendar size={15} /><span className="text-[12px] font-medium uppercase tracking-wide">Date & Time</span></div>
+                  <span className="text-[14px] font-semibold text-text-primary">{selectedLabel} at {selectedTime}</span>
+                </div>
+                <div className="h-px bg-border" />
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-2.5 text-text-tertiary"><Zap size={15} /><span className="text-[12px] font-medium uppercase tracking-wide">Type</span></div>
+                  <span className="text-[14px] font-semibold text-text-primary capitalize">{serviceType === "subscription" ? "Subscription" : "One-Time"}</span>
+                </div>
+                {selectedCategories.length > 0 && (<><div className="h-px bg-border" /><div><span className="text-[12px] font-medium uppercase tracking-wide text-text-tertiary">Categories</span><div className="mt-2 flex flex-wrap gap-1.5">{selectedCategories.map((c) => (<span key={c} className="rounded-full bg-primary-50 px-3 py-1 text-[11px] font-medium text-primary">{c}</span>))}</div></div></>)}
+                {description && (<><div className="h-px bg-border" /><div><span className="text-[12px] font-medium uppercase tracking-wide text-text-tertiary">Description</span><p className="mt-1.5 text-[13px] text-text-secondary leading-relaxed">{description}</p></div></>)}
+                {partsNote && (<><div className="h-px bg-border" /><div className="flex items-center justify-between"><span className="text-[12px] font-medium uppercase tracking-wide text-text-tertiary">Parts</span><span className="text-[13px] text-text-secondary">{partsNote}</span></div></>)}
+                {photos.length > 0 && (<><div className="h-px bg-border" /><div><span className="text-[12px] font-medium uppercase tracking-wide text-text-tertiary">Photos ({photos.length})</span><div className="mt-2 flex gap-2">{photos.map((p) => (<img key={p.id} src={p.url} alt="" className="h-14 w-14 rounded-lg object-cover border border-border" />))}</div></div></>)}
+              </div>
+            </Card>
+
+            <Card variant="flat" padding="sm" className="mb-6 border border-success/20 bg-success-light flex items-start gap-3">
+              <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-success/10 mt-0.5"><Check size={15} className="text-success" /></div>
+              <div>
+                <p className="text-[13px] font-semibold text-text-primary">You&apos;ll get a confirmation right away</p>
+                <p className="text-[12px] text-text-secondary mt-0.5">Text + email confirmation, plus a reminder 24 hours before.</p>
+              </div>
+            </Card>
+
+            <div className="flex gap-3">
+              <Button variant="outline" size="lg" onClick={() => goTo(2)}><ChevronLeft size={16} className="-ml-1 mr-1" />Back</Button>
+              <Button variant="primary" size="lg" fullWidth onClick={() => router.push("/book/confirmation")}>Confirm Booking</Button>
+            </div>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
+export default function BookingPage() {
+  return (
+    <Suspense fallback={<div className="min-h-screen bg-background" />}>
+      <BookingPageInner />
+    </Suspense>
+  );
+}

@@ -1,0 +1,275 @@
+"use client";
+
+import { useState, useRef, useEffect } from "react";
+import Link from "next/link";
+import { Send, Camera, Paperclip, ArrowLeft, Phone, MoreVertical } from "lucide-react";
+
+interface Message {
+  id: string;
+  text: string;
+  sender: "customer" | "tech";
+  timestamp: string;
+  type: "text" | "photo" | "system";
+}
+
+interface Thread {
+  id: string;
+  name: string;
+  role: string;
+  initials: string;
+  lastMessage: string;
+  time: string;
+  unread: number;
+  online: boolean;
+  nextVisit: string;
+  address: string;
+  phone: string;
+  messages: Message[];
+}
+
+const threads: Thread[] = [
+  {
+    id: "anthony",
+    name: "Anthony B.",
+    role: "Your Handyman",
+    initials: "A",
+    lastMessage: "Classic alignment issue. I'll bring my laser level. See you Tuesday! 👍",
+    time: "11:20 AM",
+    unread: 0,
+    online: true,
+    nextVisit: "Tue, Apr 1 · 9:00 AM",
+    address: "4821 Oak Hollow Dr",
+    phone: "(214) 555-0199",
+    messages: [
+      { id: "1", text: "Hi Sarah! Just confirming our appointment for Tuesday. I'll be there around 9 AM.", sender: "tech", timestamp: "Mar 28, 10:30 AM", type: "text" },
+      { id: "2", text: "Sounds great! The kitchen faucet has been leaking worse this week.", sender: "customer", timestamp: "Mar 28, 10:45 AM", type: "text" },
+      { id: "3", text: "Got it, I'll bring a Moen cartridge. Any preference on finish?", sender: "tech", timestamp: "Mar 28, 11:02 AM", type: "text" },
+      { id: "4", text: "Brushed nickel if possible! Also the garage door sensor has been acting up — it closes then reopens immediately.", sender: "customer", timestamp: "Mar 28, 11:15 AM", type: "text" },
+      { id: "5", text: "Classic alignment issue. I'll bring my laser level. See you Tuesday! 👍", sender: "tech", timestamp: "Mar 28, 11:20 AM", type: "text" },
+      { id: "s1", text: "Appointment confirmed for Tue, Apr 1 at 9:00 AM", sender: "tech", timestamp: "Mar 28, 11:21 AM", type: "system" },
+    ],
+  },
+  {
+    id: "support",
+    name: "HandyAnt Support",
+    role: "Customer Support",
+    initials: "HA",
+    lastMessage: "Welcome to HandyAnt! Tap to say hi or ask us anything.",
+    time: "Mar 27",
+    unread: 1,
+    online: true,
+    nextVisit: "",
+    address: "",
+    phone: "",
+    messages: [
+      { id: "s1", text: "Welcome to HandyAnt! 🏡 We're here if you ever need help with your account, scheduling, or anything else. How can we help?", sender: "tech", timestamp: "Mar 27", type: "text" },
+    ],
+  },
+];
+
+export default function MessagesPage() {
+  const [activeThread, setActiveThread] = useState<Thread | null>(null);
+  const [messagesByThread, setMessagesByThread] = useState<Record<string, Message[]>>(
+    Object.fromEntries(threads.map((t) => [t.id, t.messages]))
+  );
+  const [input, setInput] = useState("");
+  const bottomRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    bottomRef.current?.scrollIntoView({ behavior: "smooth" });
+  }, [activeThread, messagesByThread]);
+
+  function sendMessage() {
+    if (!input.trim() || !activeThread) return;
+    const msg: Message = {
+      id: Date.now().toString(),
+      text: input.trim(),
+      sender: "customer",
+      timestamp: "Just now",
+      type: "text",
+    };
+    setMessagesByThread((prev) => ({
+      ...prev,
+      [activeThread.id]: [...(prev[activeThread.id] || []), msg],
+    }));
+    setInput("");
+
+    setTimeout(() => {
+      setMessagesByThread((prev) => ({
+        ...prev,
+        [activeThread.id]: [...(prev[activeThread.id] || []), {
+          id: (Date.now() + 1).toString(),
+          text: activeThread.id === "support"
+            ? "Thanks for reaching out! Someone from our team will follow up shortly."
+            : "Got it, thanks for the heads up! See you Tuesday 👍",
+          sender: "tech",
+          timestamp: "Just now",
+          type: "text",
+        }],
+      }));
+    }, 1500);
+  }
+
+  // ── Thread view ──────────────────────────────────────────────────────────────
+  if (activeThread) {
+    const messages = messagesByThread[activeThread.id] || [];
+    return (
+      <div className="fixed inset-0 lg:left-64 flex flex-col bg-background">
+        {/* Header */}
+        <div className="bg-white border-b border-border px-4 pt-14 lg:pt-4 pb-3 flex items-center gap-3 shrink-0">
+          <button
+            onClick={() => setActiveThread(null)}
+            className="flex h-9 w-9 items-center justify-center rounded-full hover:bg-surface-secondary transition-colors"
+          >
+            <ArrowLeft size={20} className="text-text-secondary" />
+          </button>
+          <div className="flex items-center gap-3 flex-1">
+            <div className="relative">
+              <div className="h-10 w-10 rounded-full bg-primary flex items-center justify-center">
+                <span className="text-[13px] font-bold text-white">{activeThread.initials}</span>
+              </div>
+              {activeThread.online && (
+                <div className="absolute -bottom-0.5 -right-0.5 h-3 w-3 rounded-full border-2 border-white bg-success" />
+              )}
+            </div>
+            <div>
+              <p className="text-[15px] font-semibold text-text-primary">{activeThread.name}</p>
+              <p className={`text-[11px] font-medium ${activeThread.online ? "text-success" : "text-text-tertiary"}`}>
+                {activeThread.online ? "Online now" : "Offline"}
+              </p>
+            </div>
+          </div>
+          <div className="flex items-center gap-1">
+            {activeThread.phone && (
+              <a href={`tel:${activeThread.phone}`} className="flex h-9 w-9 items-center justify-center rounded-full hover:bg-surface-secondary transition-colors">
+                <Phone size={18} className="text-text-secondary" />
+              </a>
+            )}
+            <button className="flex h-9 w-9 items-center justify-center rounded-full hover:bg-surface-secondary transition-colors">
+              <MoreVertical size={18} className="text-text-secondary" />
+            </button>
+          </div>
+        </div>
+
+        {/* Pinned visit bar */}
+        {activeThread.nextVisit && (
+          <div className="bg-primary-50 border-b border-primary-100 px-4 py-2 flex items-center justify-between shrink-0">
+            <div className="flex items-center gap-2">
+              <div className="h-1.5 w-1.5 rounded-full bg-primary" />
+              <span className="text-[11px] font-semibold text-primary">Next: {activeThread.nextVisit}</span>
+            </div>
+            <span className="text-[11px] text-text-tertiary">{activeThread.address}</span>
+          </div>
+        )}
+
+        {/* Messages */}
+        <div className="flex-1 overflow-y-auto px-4 py-4 space-y-3">
+          {messages.map((msg) => {
+            if (msg.type === "system") {
+              return (
+                <div key={msg.id} className="flex justify-center">
+                  <span className="rounded-full bg-surface-secondary px-4 py-1.5 text-[11px] font-medium text-text-tertiary">
+                    {msg.text}
+                  </span>
+                </div>
+              );
+            }
+            const isCustomer = msg.sender === "customer";
+            return (
+              <div key={msg.id} className={`flex ${isCustomer ? "justify-end" : "justify-start"}`}>
+                <div className={`max-w-[80%] rounded-2xl px-4 py-2.5 ${
+                  isCustomer
+                    ? "bg-primary text-white rounded-br-md"
+                    : "bg-white border border-border text-text-primary rounded-bl-md shadow-[0_1px_2px_rgba(0,0,0,0.04)]"
+                }`}>
+                  <p className="text-[14px] leading-relaxed">{msg.text}</p>
+                  <p className={`text-[10px] mt-1 ${isCustomer ? "text-white/50" : "text-text-tertiary"}`}>{msg.timestamp}</p>
+                </div>
+              </div>
+            );
+          })}
+          <div ref={bottomRef} />
+        </div>
+
+        {/* Input */}
+        <div className="bg-white border-t border-border px-4 py-3 shrink-0" style={{ paddingBottom: "calc(80px + env(safe-area-inset-bottom, 0px))" }}>
+          <div className="flex items-end gap-2">
+            <button className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full hover:bg-surface-secondary transition-colors">
+              <Paperclip size={20} className="text-text-tertiary" />
+            </button>
+            <button className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full hover:bg-surface-secondary transition-colors">
+              <Camera size={20} className="text-text-tertiary" />
+            </button>
+            <div className="flex-1 flex items-end gap-2 rounded-2xl border border-border bg-surface-secondary px-4 py-2.5">
+              <input
+                type="text"
+                value={input}
+                onChange={(e) => setInput(e.target.value)}
+                onKeyDown={(e) => e.key === "Enter" && sendMessage()}
+                placeholder="Type a message…"
+                className="flex-1 bg-transparent text-[14px] text-text-primary placeholder:text-text-tertiary outline-none"
+              />
+            </div>
+            <button
+              onClick={sendMessage}
+              disabled={!input.trim()}
+              className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-full transition-all ${
+                input.trim() ? "bg-primary text-white shadow-sm" : "bg-surface-secondary text-text-tertiary"
+              }`}
+            >
+              <Send size={18} />
+            </button>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  // ── Inbox list ───────────────────────────────────────────────────────────────
+  return (
+    <div className="min-h-screen bg-background pb-28">
+      <div className="bg-white border-b border-border px-5 pt-14 lg:pt-8 pb-5">
+        <h1 className="text-[26px] font-bold text-text-primary">Messages</h1>
+        <p className="mt-0.5 text-[13px] text-text-secondary">
+          {threads.filter(t => t.unread > 0).length > 0
+            ? `${threads.filter(t => t.unread > 0).length} unread`
+            : "All caught up"}
+        </p>
+      </div>
+
+      <div className="px-5 pt-4 space-y-2">
+        {threads.map((thread) => (
+          <button
+            key={thread.id}
+            className="flex w-full items-center gap-3.5 rounded-2xl bg-white border border-border px-4 py-4 text-left hover:bg-surface-secondary transition-colors active:scale-[0.99]"
+            onClick={() => setActiveThread(thread)}
+          >
+            <div className="relative shrink-0">
+              <div className="h-12 w-12 rounded-full bg-primary flex items-center justify-center">
+                <span className="text-[14px] font-bold text-white">{thread.initials}</span>
+              </div>
+              {thread.online && (
+                <div className="absolute -bottom-0.5 -right-0.5 h-3.5 w-3.5 rounded-full border-2 border-white bg-success" />
+              )}
+            </div>
+            <div className="flex-1 min-w-0">
+              <div className="flex items-center justify-between mb-0.5">
+                <p className="text-[15px] font-semibold text-text-primary">{thread.name}</p>
+                <span className="text-[11px] text-text-tertiary shrink-0 ml-2">{thread.time}</span>
+              </div>
+              <p className="text-[12px] text-text-secondary truncate pr-2">{thread.lastMessage}</p>
+              {thread.nextVisit && (
+                <p className="text-[11px] text-primary font-medium mt-1">📅 {thread.nextVisit}</p>
+              )}
+            </div>
+            {thread.unread > 0 && (
+              <div className="flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-primary">
+                <span className="text-[10px] font-bold text-white">{thread.unread}</span>
+              </div>
+            )}
+          </button>
+        ))}
+      </div>
+    </div>
+  );
+}
