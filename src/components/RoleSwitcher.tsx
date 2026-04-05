@@ -1,15 +1,21 @@
 "use client";
 
 import { usePathname } from "next/navigation";
+import { useSession } from "next-auth/react";
 import { User, Wrench } from "lucide-react";
 
 export default function RoleSwitcher() {
   const pathname = usePathname();
+  const { data: session } = useSession();
 
-  const adminPrefixes = ["/dashboard", "/schedule", "/jobs", "/homes", "/admin-messages"];
+  const role = (session?.user as Record<string, unknown> | undefined)?.role as string | undefined;
+
+  // Only show switcher for tech users who can access both views
+  if (role !== "tech") return null;
+
+  const adminPrefixes = ["/dashboard", "/schedule", "/jobs", "/homes", "/admin-messages", "/reports", "/settings"];
   const isAdmin = adminPrefixes.some((p) => pathname.startsWith(p));
 
-  // Use <a> tags instead of router.push to ensure navigation works on all devices
   return (
     <div
       className="lg:hidden fixed left-1/2 -translate-x-1/2 z-[9999] flex rounded-full bg-white border border-border p-1"

@@ -1,0 +1,49 @@
+import { getToken } from "next-auth/jwt";
+import { NextRequest, NextResponse } from "next/server";
+
+const publicPaths = ["/login", "/signup", "/api/auth", "/onboarding", "/demo"];
+
+export async function proxy(req: NextRequest) {
+  const { pathname } = req.nextUrl;
+
+  // Allow public paths and static assets
+  if (
+    publicPaths.some((p) => pathname.startsWith(p)) ||
+    pathname.startsWith("/_next") ||
+    pathname.startsWith("/favicon")
+  ) {
+    return NextResponse.next();
+  }
+
+  // Demo mode bypass — allow browsing with ?demo=true or demo cookie
+  const isDemo =
+    req.nextUrl.searchParams.get("demo") === "true" ||
+    req.cookies.get("demo_mode")?.value === "true";
+
+  if (isDemo) {
+    const res = NextResponse.next();
+    // Set cookie so demo persists across page navigations
+    res.cookies.set("demo_mode", "true", { path: "/", maxAge: 60 * 60 }); // 1 hour
+    return res;
+  }
+
+  const token = await getToken({ req, secret: process.env.NEXTAUTH_SECRET });
+
+  if (!token) {
+    const loginUrl = new URL("/login", req.url);
+    loginUrl.searchParams.set("callbackUrl", pathname);
+    return NextResponse.redirect(loginUrl);
+  }
+
+  // Admin routes require tech role
+  const adminPaths = ["/dashboard", "/schedule", "/jobs", "/homes", "/admin-messages", "/reports", "/settings"];
+  if (adminPaths.some((p) => pathname.startsWith(p)) && token.role !== "tech") {
+    return NextResponse.redirect(new URL("/", req.url));
+  }
+
+  return NextResponse.next();
+}
+
+export const config = {
+  matcher: ["/((?!_next/static|_next/image|favicon.ico).*)"],
+};
