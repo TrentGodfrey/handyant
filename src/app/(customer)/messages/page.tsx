@@ -1,8 +1,8 @@
 "use client";
 
 import { useState, useRef, useEffect } from "react";
-import Link from "next/link";
-import { Send, Camera, Paperclip, ArrowLeft, Phone, MoreVertical } from "lucide-react";
+import { useSession } from "next-auth/react";
+import { Send, Camera, Paperclip, ArrowLeft, Phone, MoreVertical, MessageSquare } from "lucide-react";
 
 interface Message {
   id: string;
@@ -27,7 +27,7 @@ interface Thread {
   messages: Message[];
 }
 
-const threads: Thread[] = [
+const DEMO_THREADS: Thread[] = [
   {
     id: "anthony",
     name: "Anthony B.",
@@ -68,11 +68,63 @@ const threads: Thread[] = [
 ];
 
 export default function MessagesPage() {
+  const { data: session } = useSession();
+  const isDemo = typeof document !== "undefined" && document.cookie.includes("demo_mode=true");
+
+  const [threads, setThreads] = useState<Thread[]>([]);
+  const [loading, setLoading] = useState(true);
   const [activeThread, setActiveThread] = useState<Thread | null>(null);
-  const [messagesByThread, setMessagesByThread] = useState<Record<string, Message[]>>(
-    Object.fromEntries(threads.map((t) => [t.id, t.messages]))
-  );
+  const [messagesByThread, setMessagesByThread] = useState<Record<string, Message[]>>({});
   const [input, setInput] = useState("");
+
+  const userId = (session?.user as Record<string, unknown> | undefined)?.id as string | undefined;
+
+  useEffect(() => {
+    if (isDemo) {
+      setThreads(DEMO_THREADS);
+      setMessagesByThread(Object.fromEntries(DEMO_THREADS.map((t) => [t.id, t.messages])));
+      setLoading(false);
+      return;
+    }
+
+    fetch("/api/messages")
+      .then((r) => r.json())
+      .then((convos) => {
+        if (!Array.isArray(convos) || convos.length === 0) {
+          setThreads([]);
+          setLoading(false);
+          return;
+        }
+        const mapped: Thread[] = convos.map((c: Record<string, unknown>) => {
+          const other = (c as { customerId: string }).customerId === userId
+            ? (c as { tech: { name: string; avatarUrl?: string } }).tech
+            : (c as { customer: { name: string; avatarUrl?: string } }).customer;
+          const msgs = (c as { messages: Array<{ text: string; sender: { id: string; name: string }; createdAt: string }> }).messages;
+          const lastMsg = msgs?.[0];
+          return {
+            id: (c as { id: string }).id,
+            name: other?.name || "Unknown",
+            role: "Handyman",
+            initials: other?.name?.[0]?.toUpperCase() || "?",
+            lastMessage: lastMsg?.text || "",
+            time: lastMsg?.createdAt ? new Date(lastMsg.createdAt as string).toLocaleTimeString([], { hour: "numeric", minute: "2-digit" }) : "",
+            unread: 0,
+            online: false,
+            nextVisit: "",
+            address: "",
+            phone: "",
+            messages: [],
+          };
+        });
+        setThreads(mapped);
+        setMessagesByThread(Object.fromEntries(mapped.map((t) => [t.id, []])));
+        setLoading(false);
+      })
+      .catch(() => {
+        setThreads([]);
+        setLoading(false);
+      });
+  }, [isDemo, userId]);
   const bottomRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -231,11 +283,27 @@ export default function MessagesPage() {
       <div className="bg-white border-b border-border px-5 pt-14 lg:pt-8 pb-5">
         <h1 className="text-[26px] font-bold text-text-primary">Messages</h1>
         <p className="mt-0.5 text-[13px] text-text-secondary">
-          {threads.filter(t => t.unread > 0).length > 0
-            ? `${threads.filter(t => t.unread > 0).length} unread`
-            : "All caught up"}
+          {loading
+            ? "Loading..."
+            : threads.filter(t => t.unread > 0).length > 0
+              ? `${threads.filter(t => t.unread > 0).length} unread`
+              : threads.length > 0
+                ? "All caught up"
+                : "No conversations yet"}
         </p>
       </div>
+
+      {!loading && threads.length === 0 && (
+        <div className="flex flex-col items-center justify-center py-20 px-5 text-center">
+          <div className="flex h-16 w-16 items-center justify-center rounded-2xl bg-primary-50 mb-4">
+            <MessageSquare size={28} className="text-primary" />
+          </div>
+          <h3 className="text-[16px] font-bold text-text-primary">No messages yet</h3>
+          <p className="mt-1.5 max-w-[240px] text-[13px] text-text-secondary leading-relaxed">
+            Once you book a visit, you&apos;ll be able to message your handyman here.
+          </p>
+        </div>
+      )}
 
       <div className="px-5 pt-4 space-y-2">
         {threads.map((thread) => (

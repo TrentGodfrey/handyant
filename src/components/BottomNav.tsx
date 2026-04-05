@@ -2,9 +2,10 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
+import { useSession, signOut } from "next-auth/react";
 import {
   Home, Wrench, CalendarPlus, User, LayoutDashboard, Calendar,
-  ClipboardList, Building2, MessageCircle, Settings,
+  ClipboardList, Building2, MessageCircle, Settings, LogOut,
 } from "lucide-react";
 
 const customerTabs = [
@@ -24,18 +25,22 @@ const adminTabs = [
   { href: "/settings", icon: Settings, label: "Settings" },
 ];
 
-/* Hardcoded badge counts for demo */
-const badgeCounts: Record<string, Record<string, number>> = {
-  customer: { "/messages": 1 },
-  admin: { "/admin-messages": 2 },
-};
-
 export default function BottomNav({ variant = "customer" }: { variant?: "customer" | "admin" }) {
   const pathname = usePathname();
+  const { data: session } = useSession();
   const tabs = variant === "admin" ? adminTabs : customerTabs;
-
   const isAdmin = variant === "admin";
-  const badges = badgeCounts[variant] ?? {};
+
+  const role = (session?.user as Record<string, unknown> | undefined)?.role as string | undefined;
+  const isTech = role === "tech";
+
+  const userName = session?.user?.name || "User";
+  const userInitials = userName
+    .split(" ")
+    .map((n) => n[0])
+    .join("")
+    .toUpperCase()
+    .slice(0, 2);
 
   return (
     <>
@@ -54,14 +59,7 @@ export default function BottomNav({ variant = "customer" }: { variant?: "custome
                   isActive ? "text-primary" : "text-text-tertiary hover:text-text-secondary"
                 }`}
               >
-                <span className="relative">
-                  <tab.icon size={22} strokeWidth={isActive ? 2.2 : 1.6} />
-                  {badges[tab.href] && (
-                    <span className="absolute -top-1 -right-1 flex h-4 w-4 items-center justify-center rounded-full bg-primary text-[9px] font-bold text-white">
-                      {badges[tab.href]}
-                    </span>
-                  )}
-                </span>
+                <tab.icon size={22} strokeWidth={isActive ? 2.2 : 1.6} />
                 <span className={`text-[10px] tracking-wide ${isActive ? "font-semibold" : "font-medium"}`}>
                   {tab.label}
                 </span>
@@ -75,7 +73,6 @@ export default function BottomNav({ variant = "customer" }: { variant?: "custome
       <aside className="hidden lg:flex fixed left-0 top-0 h-screen w-64 bg-white border-r border-gray-200 flex-col z-50">
         {/* Logo + Role Switcher */}
         <div className="px-5 pt-6 pb-4 border-b border-gray-100">
-          {/* Logo */}
           <div className="flex items-center gap-2.5 mb-4">
             <div className="relative flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-primary shadow-[0_2px_8px_rgba(37,99,235,0.30)]">
               <Home size={14} className="absolute text-white" style={{ top: 7, left: 8 }} />
@@ -84,31 +81,33 @@ export default function BottomNav({ variant = "customer" }: { variant?: "custome
             <span className="text-[18px] font-black tracking-tight text-text-primary">HandyAnt</span>
           </div>
 
-          {/* Role Switcher */}
-          <div className="flex rounded-full bg-gray-100 p-1">
-            <a
-              href="/"
-              className={`flex flex-1 items-center justify-center gap-1.5 rounded-full px-3 py-1.5 text-[12px] font-semibold transition-all no-underline ${
-                !isAdmin
-                  ? "bg-white text-primary shadow-sm"
-                  : "text-gray-400 hover:text-gray-600"
-              }`}
-            >
-              <User size={12} />
-              Customer
-            </a>
-            <a
-              href="/dashboard"
-              className={`flex flex-1 items-center justify-center gap-1.5 rounded-full px-3 py-1.5 text-[12px] font-semibold transition-all no-underline ${
-                isAdmin
-                  ? "bg-white text-primary shadow-sm"
-                  : "text-gray-400 hover:text-gray-600"
-              }`}
-            >
-              <Wrench size={12} />
-              Staff
-            </a>
-          </div>
+          {/* Role Switcher — only for tech users */}
+          {isTech && (
+            <div className="flex rounded-full bg-gray-100 p-1">
+              <a
+                href="/"
+                className={`flex flex-1 items-center justify-center gap-1.5 rounded-full px-3 py-1.5 text-[12px] font-semibold transition-all no-underline ${
+                  !isAdmin
+                    ? "bg-white text-primary shadow-sm"
+                    : "text-gray-400 hover:text-gray-600"
+                }`}
+              >
+                <User size={12} />
+                Customer
+              </a>
+              <a
+                href="/dashboard"
+                className={`flex flex-1 items-center justify-center gap-1.5 rounded-full px-3 py-1.5 text-[12px] font-semibold transition-all no-underline ${
+                  isAdmin
+                    ? "bg-white text-primary shadow-sm"
+                    : "text-gray-400 hover:text-gray-600"
+                }`}
+              >
+                <Wrench size={12} />
+                Staff
+              </a>
+            </div>
+          )}
         </div>
 
         {/* Nav Items */}
@@ -128,22 +127,10 @@ export default function BottomNav({ variant = "customer" }: { variant?: "custome
                       : "text-gray-500 hover:bg-gray-50 hover:text-gray-900"
                   }`}
                 >
-                  <span className="relative">
-                    <tab.icon size={18} strokeWidth={isActive ? 2.2 : 1.8} />
-                    {badges[tab.href] && !isActive && (
-                      <span className="absolute -top-1 -right-1 flex h-4 w-4 items-center justify-center rounded-full bg-primary text-[9px] font-bold text-white">
-                        {badges[tab.href]}
-                      </span>
-                    )}
-                  </span>
+                  <tab.icon size={18} strokeWidth={isActive ? 2.2 : 1.8} />
                   <span className={`text-[14px] ${isActive ? "font-semibold" : "font-medium"}`}>
                     {tab.label}
                   </span>
-                  {badges[tab.href] && isActive && (
-                    <span className="ml-auto flex h-5 w-5 items-center justify-center rounded-full bg-white/20 text-[10px] font-bold text-white">
-                      {badges[tab.href]}
-                    </span>
-                  )}
                 </Link>
               );
             })}
@@ -154,14 +141,19 @@ export default function BottomNav({ variant = "customer" }: { variant?: "custome
         <div className="px-3 pb-5 pt-3 border-t border-gray-100">
           <div className="flex items-center gap-3 rounded-xl bg-gray-50 px-3 py-3">
             <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-primary">
-              <span className="text-[13px] font-bold text-white">A</span>
+              <span className="text-[13px] font-bold text-white">{userInitials}</span>
             </div>
             <div className="flex-1 min-w-0">
-              <p className="text-[13px] font-semibold text-text-primary truncate">Anthony</p>
-              <span className="inline-flex items-center rounded-full bg-primary-50 px-2 py-0.5 text-[10px] font-semibold text-primary">
-                Pro Plan
-              </span>
+              <p className="text-[13px] font-semibold text-text-primary truncate">{userName}</p>
+              <p className="text-[10px] text-text-tertiary">{isTech ? "Technician" : "Customer"}</p>
             </div>
+            <button
+              onClick={() => signOut({ callbackUrl: "/login" })}
+              className="flex h-8 w-8 items-center justify-center rounded-lg text-gray-400 hover:bg-gray-200 hover:text-gray-600 transition-colors"
+              title="Sign out"
+            >
+              <LogOut size={15} />
+            </button>
           </div>
         </div>
       </aside>
