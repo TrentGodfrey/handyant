@@ -7,22 +7,11 @@ import Card from "@/components/Card";
 import StatusBadge from "@/components/StatusBadge";
 import {
   Search, MapPin, Clock, Star, ArrowRight, Camera,
-  MessageCircle, Phone, Wrench, Droplets, Lightbulb,
-  PaintBucket, Hammer, Zap, Layers, ChevronRight, CheckCircle2,
+  MessageCircle, Phone, CheckCircle2,
   CalendarDays, BadgeCheck, Users, CalendarPlus, Sparkles,
 } from "lucide-react";
 
 // ─── Static Data (UI config, not mock) ──────────────────────────────────────
-
-const quickCategories = [
-  { icon: Wrench, label: "General", color: "text-primary", bg: "bg-primary-50" },
-  { icon: Droplets, label: "Plumbing", color: "text-[#0EA5E9]", bg: "bg-[#F0F9FF]" },
-  { icon: Lightbulb, label: "Electrical", color: "text-warning", bg: "bg-warning-light" },
-  { icon: PaintBucket, label: "Painting", color: "text-accent-purple", bg: "bg-[#F5F3FF]" },
-  { icon: Hammer, label: "Carpentry", color: "text-accent-coral", bg: "bg-[#FFF7ED]" },
-  { icon: Zap, label: "Smart Home", color: "text-success", bg: "bg-success-light" },
-  { icon: Layers, label: "Conversions", color: "text-[#F97316]", bg: "bg-[#FFF7ED]" },
-];
 
 const trustStats = [
   { icon: BadgeCheck, label: "Licensed & Insured", sub: "TX Contractor #TXH-2824", color: "text-primary" },
@@ -134,21 +123,7 @@ export default function CustomerHome() {
 
       <div className="px-5 pt-4">
 
-        {/* ── Quick Category Chips ────────────────────────────────────── */}
-        <div className="mb-5">
-          <div className="flex gap-2.5 overflow-x-auto no-scrollbar pb-1">
-            {quickCategories.map((cat) => (
-              <Link key={cat.label} href="/services">
-                <div className="flex flex-col items-center gap-1.5 shrink-0 active:scale-[0.96] transition-transform">
-                  <div className={`h-12 w-12 rounded-2xl ${cat.bg} flex items-center justify-center`}>
-                    <cat.icon size={22} className={cat.color} />
-                  </div>
-                  <span className="text-[11px] font-medium text-text-secondary whitespace-nowrap">{cat.label}</span>
-                </div>
-              </Link>
-            ))}
-          </div>
-        </div>
+        {/* spacer */}
 
         {/* ── Track Banner (only if upcoming booking) ────────────────── */}
         {nextBooking && nextBooking.tech && (
