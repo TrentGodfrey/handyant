@@ -1,6 +1,7 @@
 import type { Metadata, Viewport } from "next";
 import { Inter } from "next/font/google";
 import RoleSwitcher from "@/components/RoleSwitcher";
+import Providers from "@/components/Providers";
 import "./globals.css";
 
 const inter = Inter({
@@ -35,8 +36,10 @@ export default function RootLayout({
   return (
     <html lang="en" className={`${inter.variable} h-full`}>
       <body className="min-h-full flex flex-col bg-background">
-        <RoleSwitcher />
-        {children}
+        <Providers>
+          <RoleSwitcher />
+          {children}
+        </Providers>
       </body>
     </html>
   );

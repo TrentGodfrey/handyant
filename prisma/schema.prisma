@@ -1,0 +1,248 @@
+generator client {
+  provider = "prisma-client"
+  output   = "../src/generated/prisma"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+model User {
+  id                 String         @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  email              String?        @unique
+  passwordHash       String?        @map("password_hash")
+  name               String
+  phone              String?
+  avatarUrl          String?        @map("avatar_url")
+  role               String         @default("customer")
+  googleId           String?        @unique @map("google_id")
+  emailVerified      Boolean?       @default(false) @map("email_verified")
+  createdAt          DateTime?      @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt          DateTime?      @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(6)
+  bookingsAsCustomer Booking[]      @relation("CustomerBookings")
+  bookingsAsTech     Booking[]      @relation("TechBookings")
+  convosAsCustomer   Conversation[] @relation("CustomerConversations")
+  convosAsTech       Conversation[] @relation("TechConversations")
+  homes              Home[]
+  invoices           Invoice[]
+  sentMessages       Message[]
+  notifications      Notification[]
+  reviewsGiven       Review[]       @relation("CustomerReviews")
+  reviewsReceived    Review[]       @relation("TechReviews")
+  serviceAreas       ServiceArea[]
+  subscriptions      Subscription[]
+
+  @@map("users")
+}
+
+model Home {
+  id         String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  customerId String    @map("customer_id") @db.Uuid
+  address    String
+  city       String?
+  state      String?   @default("TX")
+  zip        String?
+  lat        Float?
+  lng        Float?
+  notes      String?
+  gateCode   String?   @map("gate_code")
+  createdAt  DateTime? @default(now()) @map("created_at") @db.Timestamptz(6)
+  bookings   Booking[]
+  customer   User      @relation(fields: [customerId], references: [id], onDelete: Cascade, onUpdate: NoAction)
+  photos     Photo[]
+
+  @@index([customerId], map: "idx_homes_customer")
+  @@map("homes")
+}
+
+model ServiceCategory {
+  id        String            @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  name      String            @unique
+  icon      String?
+  sortOrder Int?              @default(0) @map("sort_order")
+  bookings  BookingCategory[]
+
+  @@map("service_categories")
+}
+
+model Booking {
+  id              String            @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  customerId      String            @map("customer_id") @db.Uuid
+  homeId          String?           @map("home_id") @db.Uuid
+  techId          String?           @map("tech_id") @db.Uuid
+  status          String            @default("pending")
+  scheduledDate   DateTime          @map("scheduled_date") @db.Date
+  scheduledTime   DateTime          @map("scheduled_time") @db.Time(6)
+  durationMinutes Int?              @default(120) @map("duration_minutes")
+  serviceType     String?           @default("one_time") @map("service_type")
+  description     String?
+  customerNotes   String?           @map("customer_notes")
+  techNotes       String?           @map("tech_notes")
+  estimatedCost   Decimal?          @map("estimated_cost") @db.Decimal(10, 2)
+  finalCost       Decimal?          @map("final_cost") @db.Decimal(10, 2)
+  createdAt       DateTime?         @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt       DateTime?         @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(6)
+  categories      BookingCategory[]
+  customer        User              @relation("CustomerBookings", fields: [customerId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  home            Home?             @relation(fields: [homeId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  tech            User?             @relation("TechBookings", fields: [techId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  invoices        Invoice[]
+  parts           Part[]
+  photos          Photo[]
+  reviews         Review[]
+  tasks           Task[]
+
+  @@index([customerId], map: "idx_bookings_customer")
+  @@index([techId], map: "idx_bookings_tech")
+  @@index([scheduledDate], map: "idx_bookings_date")
+  @@index([status], map: "idx_bookings_status")
+  @@map("bookings")
+}
+
+model BookingCategory {
+  bookingId  String          @map("booking_id") @db.Uuid
+  categoryId String          @map("category_id") @db.Uuid
+  booking    Booking         @relation(fields: [bookingId], references: [id], onDelete: Cascade, onUpdate: NoAction)
+  category   ServiceCategory @relation(fields: [categoryId], references: [id], onDelete: Cascade, onUpdate: NoAction)
+
+  @@id([bookingId, categoryId])
+  @@map("booking_categories")
+}
+
+model Task {
+  id        String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  bookingId String   @map("booking_id") @db.Uuid
+  label     String
+  done      Boolean? @default(false)
+  notes     String?
+  sortOrder Int?     @default(0) @map("sort_order")
+  booking   Booking  @relation(fields: [bookingId], references: [id], onDelete: Cascade, onUpdate: NoAction)
+
+  @@map("tasks")
+}
+
+model Part {
+  id        String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  bookingId String   @map("booking_id") @db.Uuid
+  item      String
+  qty       Int?     @default(1)
+  cost      Decimal? @db.Decimal(10, 2)
+  status    String?  @default("needed")
+  booking   Booking  @relation(fields: [bookingId], references: [id], onDelete: Cascade, onUpdate: NoAction)
+
+  @@map("parts")
+}
+
+model Photo {
+  id         String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  bookingId  String?   @map("booking_id") @db.Uuid
+  homeId     String?   @map("home_id") @db.Uuid
+  url        String
+  label      String?
+  type       String?   @default("before")
+  uploadedAt DateTime? @default(now()) @map("uploaded_at") @db.Timestamptz(6)
+  booking    Booking?  @relation(fields: [bookingId], references: [id], onDelete: Cascade, onUpdate: NoAction)
+  home       Home?     @relation(fields: [homeId], references: [id], onDelete: Cascade, onUpdate: NoAction)
+
+  @@map("photos")
+}
+
+model Conversation {
+  id            String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  customerId    String    @map("customer_id") @db.Uuid
+  techId        String    @map("tech_id") @db.Uuid
+  lastMessageAt DateTime? @default(now()) @map("last_message_at") @db.Timestamptz(6)
+  createdAt     DateTime? @default(now()) @map("created_at") @db.Timestamptz(6)
+  customer      User      @relation("CustomerConversations", fields: [customerId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  tech          User      @relation("TechConversations", fields: [techId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  messages      Message[]
+
+  @@map("conversations")
+}
+
+model Message {
+  id             String       @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  conversationId String       @map("conversation_id") @db.Uuid
+  senderId       String       @map("sender_id") @db.Uuid
+  text           String
+  type           String?      @default("text")
+  read           Boolean?     @default(false)
+  createdAt      DateTime?    @default(now()) @map("created_at") @db.Timestamptz(6)
+  conversation   Conversation @relation(fields: [conversationId], references: [id], onDelete: Cascade, onUpdate: NoAction)
+  sender         User         @relation(fields: [senderId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+
+  @@index([conversationId, createdAt], map: "idx_messages_convo")
+  @@map("messages")
+}
+
+model Review {
+  id         String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  bookingId  String    @map("booking_id") @db.Uuid
+  customerId String    @map("customer_id") @db.Uuid
+  techId     String    @map("tech_id") @db.Uuid
+  rating     Int
+  comment    String?
+  categories String[]
+  createdAt  DateTime? @default(now()) @map("created_at") @db.Timestamptz(6)
+  booking    Booking   @relation(fields: [bookingId], references: [id], onDelete: Cascade, onUpdate: NoAction)
+  customer   User      @relation("CustomerReviews", fields: [customerId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  tech       User      @relation("TechReviews", fields: [techId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+
+  @@map("reviews")
+}
+
+model Invoice {
+  id         String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  bookingId  String    @map("booking_id") @db.Uuid
+  customerId String    @map("customer_id") @db.Uuid
+  number     String    @unique
+  subtotal   Decimal   @db.Decimal(10, 2)
+  tax        Decimal?  @default(0) @db.Decimal(10, 2)
+  total      Decimal   @db.Decimal(10, 2)
+  status     String?   @default("draft")
+  sentAt     DateTime? @map("sent_at") @db.Timestamptz(6)
+  paidAt     DateTime? @map("paid_at") @db.Timestamptz(6)
+  createdAt  DateTime? @default(now()) @map("created_at") @db.Timestamptz(6)
+  booking    Booking   @relation(fields: [bookingId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  customer   User      @relation(fields: [customerId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+
+  @@map("invoices")
+}
+
+model ServiceArea {
+  id     String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  techId String   @map("tech_id") @db.Uuid
+  city   String
+  active Boolean? @default(true)
+  tech   User     @relation(fields: [techId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+
+  @@unique([techId, city])
+  @@map("service_areas")
+}
+
+model Notification {
+  id        String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  userId    String    @map("user_id") @db.Uuid
+  title     String
+  body      String?
+  type      String?   @default("info")
+  read      Boolean?  @default(false)
+  link      String?
+  createdAt DateTime? @default(now()) @map("created_at") @db.Timestamptz(6)
+  user      User      @relation(fields: [userId], references: [id], onDelete: Cascade, onUpdate: NoAction)
+
+  @@index([userId, read], map: "idx_notifications_user")
+  @@map("notifications")
+}
+
+model Subscription {
+  id         String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  customerId String    @map("customer_id") @db.Uuid
+  plan       String    @default("basic")
+  status     String?   @default("active")
+  startedAt  DateTime? @default(now()) @map("started_at") @db.Timestamptz(6)
+  endsAt     DateTime? @map("ends_at") @db.Timestamptz(6)
+  customer   User      @relation(fields: [customerId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+
+  @@map("subscriptions")
+}
