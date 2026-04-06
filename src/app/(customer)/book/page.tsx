@@ -2,6 +2,7 @@
 
 import { useState, useEffect, Suspense } from "react";
 import { useSearchParams, useRouter } from "next/navigation";
+import { useSession } from "next-auth/react";
 import Card from "@/components/Card";
 import Button from "@/components/Button";
 import {
@@ -77,7 +78,7 @@ const afternoonSlots = [
   { time: "4:00 PM", available: true },
 ];
 
-const categories = [
+const fallbackCategories = [
   "General Repair", "Plumbing", "Electrical",
   "Painting", "Carpentry", "Smart Home", "HVAC", "Other",
 ];
@@ -87,11 +88,38 @@ const serviceTypes = [
   { id: "subscription", label: "Subscription", desc: "Ongoing maintenance plan", icon: Repeat },
 ];
 
+// Convert display time (e.g. "9:00 AM") to HH:MM (24-hour)
+function timeToHHMM(displayTime: string): string {
+  const [timePart, period] = displayTime.split(" ");
+  const [hourStr, minuteStr] = timePart.split(":");
+  let hour = parseInt(hourStr, 10);
+  const minute = minuteStr ?? "00";
+  if (period === "PM" && hour !== 12) hour += 12;
+  if (period === "AM" && hour === 12) hour = 0;
+  return `${String(hour).padStart(2, "0")}:${minute}`;
+}
+
+// Convert selected day/month to ISO date string (assumes year 2026)
+function toISODate(day: number, month: string): string {
+  const monthMap: Record<string, string> = {
+    Jan: "01", Feb: "02", Mar: "03", Apr: "04", May: "05", Jun: "06",
+    Jul: "07", Aug: "08", Sep: "09", Oct: "10", Nov: "11", Dec: "12",
+  };
+  const m = monthMap[month] ?? "01";
+  return `2026-${m}-${String(day).padStart(2, "0")}`;
+}
+
 interface Photo { id: string; url: string; name: string; }
+interface ServiceCategory { id: string; name: string; }
 
 function BookingPageInner() {
   const router = useRouter();
   const searchParams = useSearchParams();
+  useSession(); // ensure session is available (used server-side by the API)
+
+  const isDemo =
+    typeof document !== "undefined" && document.cookie.includes("demo_mode=true");
+
   const [step, setStep] = useState(1);
   const [selectedDay, setSelectedDay] = useState<number | null>(null);
   const [selectedMonth, setSelectedMonth] = useState<string | null>(null);
@@ -102,6 +130,26 @@ function BookingPageInner() {
   const [calendarPage, setCalendarPage] = useState(0);
   const [selectedCategories, setSelectedCategories] = useState<string[]>([]);
   const [partsNote, setPartsNote] = useState("");
+  const [categories, setCategories] = useState<string[]>(fallbackCategories);
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [submitError, setSubmitError] = useState<string | null>(null);
+
+  // Fetch real service categories, fall back to hardcoded list on error
+  useEffect(() => {
+    fetch("/api/services")
+      .then((res) => {
+        if (!res.ok) throw new Error("services 404");
+        return res.json();
+      })
+      .then((data: ServiceCategory[]) => {
+        if (Array.isArray(data) && data.length > 0) {
+          setCategories(data.map((c) => c.name));
+        }
+      })
+      .catch(() => {
+        // keep fallbackCategories
+      });
+  }, []);
 
   // Pre-fill from URL params (coming from Services page)
   useEffect(() => {
@@ -118,7 +166,7 @@ function BookingPageInner() {
   const totalPages = Math.ceil(allCalendarWeeks.length / WEEKS_PER_PAGE);
   const monthLabel = calendarPage === 0 ? "March – April 2026" : "April – May 2026";
 
-  function goTo(s: number) { setStep(s); window.scrollTo(0,0); }
+  function goTo(s: number) { setStep(s); window.scrollTo(0, 0); }
   function toggleCategory(cat: string) {
     setSelectedCategories((prev) => prev.includes(cat) ? prev.filter((c) => c !== cat) : [...prev, cat]);
   }
@@ -130,6 +178,45 @@ function BookingPageInner() {
 
   const selectedLabel = selectedDay && selectedMonth ? `${selectedMonth} ${selectedDay}` : null;
   const canStep1Continue = selectedDay !== null && selectedTime !== null;
+
+  async function handleConfirmBooking() {
+    if (isDemo) {
+      // Demo mode: keep existing mock behavior
+      router.push("/book/confirmation");
+      return;
+    }
+
+    setIsSubmitting(true);
+    setSubmitError(null);
+
+    try {
+      const scheduledDate = toISODate(selectedDay!, selectedMonth!);
+      const scheduledTime = timeToHHMM(selectedTime!);
+      const apiServiceType = serviceType === "subscription" ? "subscription" : "one_time";
+
+      const res = await fetch("/api/bookings", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          scheduledDate,
+          scheduledTime,
+          description,
+          serviceType: apiServiceType,
+          durationMinutes: 120,
+        }),
+      });
+
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({}));
+        throw new Error(data?.error ?? `Request failed (${res.status})`);
+      }
+
+      router.push("/book/confirmation");
+    } catch (err) {
+      setSubmitError(err instanceof Error ? err.message : "Something went wrong. Please try again.");
+      setIsSubmitting(false);
+    }
+  }
 
   return (
     <div className="min-h-screen bg-background">
@@ -459,9 +546,36 @@ function BookingPageInner() {
               </div>
             </Card>
 
+            {/* Error banner */}
+            {submitError && (
+              <div className="mb-4 rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-[13px] text-red-700">
+                {submitError}
+              </div>
+            )}
+
             <div className="flex gap-3">
-              <Button variant="outline" size="lg" onClick={() => goTo(2)}><ChevronLeft size={16} className="-ml-1 mr-1" />Back</Button>
-              <Button variant="primary" size="lg" fullWidth onClick={() => router.push("/book/confirmation")}>Confirm Booking</Button>
+              <Button variant="outline" size="lg" onClick={() => goTo(2)} disabled={isSubmitting}>
+                <ChevronLeft size={16} className="-ml-1 mr-1" />Back
+              </Button>
+              <Button
+                variant="primary"
+                size="lg"
+                fullWidth
+                disabled={isSubmitting}
+                onClick={handleConfirmBooking}
+              >
+                {isSubmitting ? (
+                  <span className="flex items-center gap-2">
+                    <svg className="h-4 w-4 animate-spin" viewBox="0 0 24 24" fill="none">
+                      <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                      <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v4a4 4 0 00-4 4H4z" />
+                    </svg>
+                    Confirming…
+                  </span>
+                ) : (
+                  "Confirm Booking"
+                )}
+              </Button>
             </div>
           </div>
         )}
