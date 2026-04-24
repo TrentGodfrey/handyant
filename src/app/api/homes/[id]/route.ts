@@ -14,8 +14,16 @@ export async function GET(_req: NextRequest, ctx: { params: Promise<{ id: string
       customer: { select: { id: true, name: true, phone: true, email: true, avatarUrl: true } },
       bookings: {
         orderBy: { scheduledDate: "desc" },
-        include: { tasks: true, categories: { include: { category: true } } },
+        include: {
+          tasks: true,
+          categories: { include: { category: true } },
+          tech: { select: { id: true, name: true, avatarUrl: true } },
+          reviews: true,
+        },
       },
+      householdMembers: { orderBy: { sortOrder: "asc" } },
+      todos: { orderBy: [{ sortOrder: "asc" }, { createdAt: "desc" }] },
+      techNotes: { orderBy: { createdAt: "desc" } },
     },
   });
 
@@ -36,7 +44,21 @@ export async function PATCH(req: NextRequest, ctx: { params: Promise<{ id: strin
 
   const body = await req.json();
   const data: Record<string, unknown> = {};
-  for (const key of ["address", "city", "state", "zip", "notes", "gateCode"]) {
+  for (const key of [
+    "address",
+    "city",
+    "state",
+    "zip",
+    "notes",
+    "gateCode",
+    "wifiName",
+    "wifiPassword",
+    "yearBuilt",
+    "waterHeaterYear",
+    "panelAmps",
+    "lat",
+    "lng",
+  ]) {
     if (body[key] !== undefined) data[key] = body[key];
   }
 

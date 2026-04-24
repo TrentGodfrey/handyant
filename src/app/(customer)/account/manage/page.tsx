@@ -33,6 +33,13 @@ interface HomeRecord {
   zip?: string | null;
 }
 
+interface AddressDraft {
+  address: string;
+  city: string;
+  state: string;
+  zip: string;
+}
+
 interface SubscriptionRecord {
   id: string;
   plan: string;
@@ -82,6 +89,11 @@ export default function AccountManagePage() {
   // Address (from Home record in real mode)
   const [home, setHome] = useState<HomeRecord | null>(null);
   const [demoAddress, setDemoAddress] = useState("4821 Oak Hollow Dr, Plano TX 75024");
+  const [editingAddress, setEditingAddress] = useState(false);
+  const [addressDraft, setAddressDraft] = useState<AddressDraft>({ address: "", city: "", state: "", zip: "" });
+  const [savingAddress, setSavingAddress] = useState(false);
+  const [addressError, setAddressError] = useState<string | null>(null);
+  const [addressSuccess, setAddressSuccess] = useState(false);
 
   // Notification prefs (real mode persisted via /api/me/preferences)
   const [prefs, setPrefs] = useState<Prefs>({
@@ -128,6 +140,12 @@ export default function AccountManagePage() {
       setName(DEMO_USER.name);
       setEmail(DEMO_USER.email);
       setPhone(DEMO_USER.phone);
+      setAddressDraft({
+        address: "4821 Oak Hollow Dr",
+        city: "Plano",
+        state: "TX",
+        zip: "75024",
+      });
       setLoading(false);
       return;
     }
@@ -155,7 +173,14 @@ export default function AccountManagePage() {
         if (homesRes.ok) {
           const homes = await homesRes.json();
           if (!cancelled && Array.isArray(homes) && homes.length > 0) {
-            setHome(homes[0]);
+            const h = homes[0] as HomeRecord;
+            setHome(h);
+            setAddressDraft({
+              address: h.address ?? "",
+              city: h.city ?? "",
+              state: h.state ?? "",
+              zip: h.zip ?? "",
+            });
           }
         }
         if (prefsRes.ok) {
@@ -372,6 +397,111 @@ export default function AccountManagePage() {
     }
   }
 
+  async function refetchHome() {
+    try {
+      const res = await fetch("/api/homes");
+      if (!res.ok) return;
+      const homes = await res.json();
+      if (Array.isArray(homes) && homes.length > 0) {
+        const h = homes[0] as HomeRecord;
+        setHome(h);
+        setAddressDraft({
+          address: h.address ?? "",
+          city: h.city ?? "",
+          state: h.state ?? "",
+          zip: h.zip ?? "",
+        });
+      }
+    } catch { /* noop */ }
+  }
+
+  async function saveAddress() {
+    if (isDemo) {
+      setEditingAddress(false);
+      setDemoAddress(`${addressDraft.address}, ${addressDraft.city} ${addressDraft.state} ${addressDraft.zip}`.trim());
+      return;
+    }
+    setAddressError(null);
+    setAddressSuccess(false);
+    if (!addressDraft.address.trim()) {
+      setAddressError("Address is required");
+      return;
+    }
+    if (!home) {
+      // Create a new home record
+      setSavingAddress(true);
+      try {
+        const res = await fetch("/api/homes", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            address: addressDraft.address.trim(),
+            city: addressDraft.city.trim() || null,
+            state: addressDraft.state.trim() || "TX",
+            zip: addressDraft.zip.trim() || null,
+          }),
+        });
+        if (!res.ok) {
+          const err = await res.json().catch(() => ({}));
+          throw new Error(err.error ?? "Failed to save address");
+        }
+        await refetchHome();
+        setEditingAddress(false);
+        setAddressSuccess(true);
+        setTimeout(() => setAddressSuccess(false), 3000);
+      } catch (e: unknown) {
+        setAddressError(e instanceof Error ? e.message : "Failed to save address");
+      } finally {
+        setSavingAddress(false);
+      }
+      return;
+    }
+    setSavingAddress(true);
+    try {
+      const res = await fetch(`/api/homes/${home.id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          address: addressDraft.address.trim(),
+          city: addressDraft.city.trim() || null,
+          state: addressDraft.state.trim() || null,
+          zip: addressDraft.zip.trim() || null,
+        }),
+      });
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({}));
+        throw new Error(err.error ?? "Failed to save address");
+      }
+      await refetchHome();
+      setEditingAddress(false);
+      setAddressSuccess(true);
+      setTimeout(() => setAddressSuccess(false), 3000);
+    } catch (e: unknown) {
+      setAddressError(e instanceof Error ? e.message : "Failed to save address");
+    } finally {
+      setSavingAddress(false);
+    }
+  }
+
+  function cancelAddressEdit() {
+    setEditingAddress(false);
+    setAddressError(null);
+    if (isDemo) {
+      // Keep current draft on cancel in demo mode (no source of truth to restore from)
+      return;
+    }
+    if (home) {
+      setAddressDraft({
+        address: home.address ?? "",
+        city: home.city ?? "",
+        state: home.state ?? "",
+        zip: home.zip ?? "",
+      });
+    } else {
+      setAddressDraft({ address: "", city: "", state: "", zip: "" });
+    }
+  }
+
   // Address display value
   const addressValue = (() => {
     if (isDemo) return demoAddress;
@@ -512,15 +642,90 @@ export default function AccountManagePage() {
             <FieldRow label="Full Name" value={name} icon={User} field="name" onChange={setName} />
             <FieldRow label="Email" value={email} icon={Mail} field="email" onChange={setEmail} readOnly />
             <FieldRow label="Phone" value={phone} icon={Phone} field="phone" onChange={setPhone} />
-            <FieldRow
-              label="Service Address"
-              value={addressValue}
-              icon={MapPin}
-              field="address"
-              onChange={isDemo ? setDemoAddress : undefined}
-              readOnly={!isDemo}
-              placeholder={isDemo ? "—" : (home ? "—" : "Add a home in Home Profile")}
-            />
+
+            {/* Service Address — inline editable (real + demo) */}
+            <div className="py-3.5">
+              <div className="flex items-start gap-3">
+                <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-surface-secondary">
+                  <MapPin size={16} className="text-text-secondary" />
+                </div>
+                <div className="flex-1 min-w-0">
+                  <div className="flex items-center justify-between">
+                    <p className="text-[11px] font-semibold uppercase tracking-wider text-text-tertiary">Service Address</p>
+                    {!editingAddress && !loading && (
+                      <button
+                        type="button"
+                        onClick={() => setEditingAddress(true)}
+                        className="flex h-7 items-center justify-center rounded-full px-2 hover:bg-surface-secondary transition-colors"
+                        aria-label={addressValue ? "Edit address" : "Add address"}
+                      >
+                        {addressValue
+                          ? <Pencil size={14} className="text-text-tertiary" />
+                          : <span className="text-[12px] font-semibold text-primary">Add</span>}
+                      </button>
+                    )}
+                  </div>
+
+                  {loading ? (
+                    <div className="mt-1.5 h-4 w-32 rounded bg-surface-secondary animate-pulse" />
+                  ) : !editingAddress ? (
+                    <p className="text-[14px] font-medium text-text-primary mt-0.5 truncate">
+                      {addressValue || <span className="text-text-tertiary">No address yet</span>}
+                    </p>
+                  ) : (
+                    <div className="mt-2 space-y-2">
+                      <input
+                        type="text"
+                        value={addressDraft.address}
+                        onChange={(e) => setAddressDraft((s) => ({ ...s, address: e.target.value }))}
+                        placeholder="Street address"
+                        autoFocus
+                        className="w-full rounded-lg border border-border bg-surface px-3 py-2 text-[13px] outline-none focus:border-primary"
+                      />
+                      <div className="grid grid-cols-3 gap-2">
+                        <input
+                          type="text"
+                          value={addressDraft.city}
+                          onChange={(e) => setAddressDraft((s) => ({ ...s, city: e.target.value }))}
+                          placeholder="City"
+                          className="rounded-lg border border-border bg-surface px-3 py-2 text-[13px] outline-none focus:border-primary"
+                        />
+                        <input
+                          type="text"
+                          value={addressDraft.state}
+                          onChange={(e) => setAddressDraft((s) => ({ ...s, state: e.target.value }))}
+                          placeholder="State"
+                          maxLength={2}
+                          className="rounded-lg border border-border bg-surface px-3 py-2 text-[13px] outline-none focus:border-primary"
+                        />
+                        <input
+                          type="text"
+                          value={addressDraft.zip}
+                          onChange={(e) => setAddressDraft((s) => ({ ...s, zip: e.target.value }))}
+                          placeholder="ZIP"
+                          className="rounded-lg border border-border bg-surface px-3 py-2 text-[13px] outline-none focus:border-primary"
+                        />
+                      </div>
+                      <div className="flex gap-2 items-center">
+                        <Button variant="primary" size="sm" disabled={savingAddress} onClick={saveAddress}>
+                          {savingAddress ? "Saving…" : "Save"}
+                        </Button>
+                        <Button variant="outline" size="sm" disabled={savingAddress} onClick={cancelAddressEdit}>
+                          Cancel
+                        </Button>
+                        {addressSuccess && (
+                          <span className="flex items-center gap-1 text-[12px] font-medium text-success">
+                            <Check size={13} />
+                            Saved
+                          </span>
+                        )}
+                      </div>
+                      {addressError && <p className="text-[12px] text-error">{addressError}</p>}
+                    </div>
+                  )}
+                </div>
+              </div>
+            </div>
           </Card>
 
           {/* Save row */}

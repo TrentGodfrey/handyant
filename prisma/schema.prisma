@@ -37,23 +37,79 @@ model User {
 }
 
 model Home {
-  id         String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
-  customerId String    @map("customer_id") @db.Uuid
-  address    String
-  city       String?
-  state      String?   @default("TX")
-  zip        String?
-  lat        Float?
-  lng        Float?
-  notes      String?
-  gateCode   String?   @map("gate_code")
-  createdAt  DateTime? @default(now()) @map("created_at") @db.Timestamptz(6)
-  bookings   Booking[]
-  customer   User      @relation(fields: [customerId], references: [id], onDelete: Cascade, onUpdate: NoAction)
-  photos     Photo[]
+  id                String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  customerId        String    @map("customer_id") @db.Uuid
+  address           String
+  city              String?
+  state             String?   @default("TX")
+  zip               String?
+  lat               Float?
+  lng               Float?
+  notes             String?
+  gateCode          String?   @map("gate_code")
+  wifiName          String?   @map("wifi_name")
+  wifiPassword      String?   @map("wifi_password")
+  yearBuilt         Int?      @map("year_built")
+  waterHeaterYear   Int?      @map("water_heater_year")
+  panelAmps         Int?      @map("panel_amps")
+  createdAt         DateTime? @default(now()) @map("created_at") @db.Timestamptz(6)
+  bookings          Booking[]
+  customer          User      @relation(fields: [customerId], references: [id], onDelete: Cascade, onUpdate: NoAction)
+  photos            Photo[]
+  householdMembers  HouseholdMember[]
+  todos             HomeTodo[]
+  techNotes         HomeNote[]
 
   @@index([customerId], map: "idx_homes_customer")
   @@map("homes")
+}
+
+model HouseholdMember {
+  id        String  @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  homeId    String  @map("home_id") @db.Uuid
+  name      String
+  role      String?
+  phone     String?
+  sortOrder Int?    @default(0) @map("sort_order")
+  createdAt DateTime? @default(now()) @map("created_at") @db.Timestamptz(6)
+  home      Home    @relation(fields: [homeId], references: [id], onDelete: Cascade, onUpdate: NoAction)
+
+  @@index([homeId], map: "idx_household_members_home")
+  @@map("household_members")
+}
+
+model HomeTodo {
+  id          String  @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  homeId      String  @map("home_id") @db.Uuid
+  task        String
+  priority    String  @default("medium")
+  status      String  @default("pending")
+  parts       String?
+  partStatus  String? @map("part_status")
+  specialist  Boolean? @default(false)
+  hasPhoto    Boolean? @default(false) @map("has_photo")
+  notes       String?
+  sortOrder   Int?    @default(0) @map("sort_order")
+  createdAt   DateTime? @default(now()) @map("created_at") @db.Timestamptz(6)
+  home        Home    @relation(fields: [homeId], references: [id], onDelete: Cascade, onUpdate: NoAction)
+
+  @@index([homeId], map: "idx_home_todos_home")
+  @@map("home_todos")
+}
+
+model HomeNote {
+  id          String  @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  homeId      String  @map("home_id") @db.Uuid
+  title       String
+  body        String?
+  severity    String? @default("info")
+  authorId    String? @map("author_id") @db.Uuid
+  authorName  String? @map("author_name")
+  createdAt   DateTime? @default(now()) @map("created_at") @db.Timestamptz(6)
+  home        Home    @relation(fields: [homeId], references: [id], onDelete: Cascade, onUpdate: NoAction)
+
+  @@index([homeId], map: "idx_home_notes_home")
+  @@map("home_notes")
 }
 
 model ServiceCategory {
