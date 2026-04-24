@@ -1,6 +1,6 @@
 "use client";
 
-import { Suspense, useEffect, useState } from "react";
+import { Suspense, useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import Card from "@/components/Card";
@@ -181,7 +181,15 @@ function ScheduleNewPageInner() {
   const [description, setDescription] = useState("");
   const [hasParts, setHasParts] = useState(false);
   const [partsList, setPartsList] = useState("");
+  const partsTextareaRef = useRef<HTMLTextAreaElement | null>(null);
   const [jobNotes, setJobNotes] = useState("");
+
+  // Focus the parts textarea whenever the toggle flips on.
+  useEffect(() => {
+    if (hasParts) {
+      partsTextareaRef.current?.focus();
+    }
+  }, [hasParts]);
 
   // Block mode
   const [blockDate, setBlockDate] = useState<Date | null>(null);
@@ -287,6 +295,15 @@ function ScheduleNewPageInner() {
     setSubmitting(true);
     setSubmitError(null);
     try {
+      // Only send parts when the toggle is on AND the textarea has content.
+      // Split on newlines so each line becomes its own Part row.
+      const partItems =
+        hasParts && partsList.trim()
+          ? partsList
+              .split("\n")
+              .map((line) => line.trim())
+              .filter((line) => line.length > 0)
+          : [];
       const res = await fetch("/api/bookings", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -299,6 +316,7 @@ function ScheduleNewPageInner() {
           durationMinutes: durationToMinutes(duration),
           categoryIds: [],
           customerNotes: jobNotes || null,
+          parts: partItems,
         }),
       });
       if (!res.ok) {
@@ -615,9 +633,10 @@ function ScheduleNewPageInner() {
               </div>
               {hasParts && (
                 <textarea
+                  ref={partsTextareaRef}
                   className={`${inputCls} resize-none animate-fade-in`}
                   rows={2}
-                  placeholder="List parts needed, e.g. Moen 7594ESRS faucet, 1/2&quot; caulk..."
+                  placeholder="List parts needed, one per line — e.g. Moen 7594ESRS faucet"
                   value={partsList}
                   onChange={(e) => setPartsList(e.target.value)}
                 />

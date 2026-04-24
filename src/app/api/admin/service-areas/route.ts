@@ -20,10 +20,23 @@ export async function POST(req: NextRequest) {
   const body = await req.json();
   if (!body.city) return badRequest("city required");
 
+  const lat = typeof body.lat === "number" ? body.lat : null;
+  const lng = typeof body.lng === "number" ? body.lng : null;
+
   const area = await prisma.serviceArea.upsert({
     where: { techId_city: { techId: tech.id, city: body.city } },
-    update: { active: true },
-    create: { techId: tech.id, city: body.city, active: true },
+    update: {
+      active: true,
+      ...(lat !== null ? { lat } : {}),
+      ...(lng !== null ? { lng } : {}),
+    },
+    create: {
+      techId: tech.id,
+      city: body.city,
+      active: true,
+      lat,
+      lng,
+    },
   });
   return Response.json(area, { status: 201 });
 }

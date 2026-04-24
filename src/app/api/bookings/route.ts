@@ -40,6 +40,14 @@ export async function POST(req: NextRequest) {
   const isTechCreating = role === "tech" && typeof body.customerId === "string" && body.customerId.length > 0;
   const customerId = isTechCreating ? (body.customerId as string) : userId;
 
+  // Normalize parts payload — accept string[] of items, drop blanks.
+  const partItems: string[] = Array.isArray(body.parts)
+    ? (body.parts as unknown[])
+        .filter((p): p is string => typeof p === "string")
+        .map((p) => p.trim())
+        .filter((p) => p.length > 0)
+    : [];
+
   const booking = await prisma.booking.create({
     data: {
       customerId,
@@ -59,10 +67,16 @@ export async function POST(req: NextRequest) {
             })),
           }
         : undefined,
+      parts: partItems.length
+        ? {
+            create: partItems.map((item) => ({ item })),
+          }
+        : undefined,
     },
     include: {
       home: true,
       categories: { include: { category: true } },
+      parts: true,
     },
   });
 

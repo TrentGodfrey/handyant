@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import dynamic from "next/dynamic";
 import Card from "@/components/Card";
@@ -23,8 +23,12 @@ import {
   ToggleRight,
   ChevronRight,
   Coffee,
+  Search,
+  Plus,
+  Crosshair,
 } from "lucide-react";
 import { useDemoMode } from "@/lib/useDemoMode";
+import type { ServiceCity } from "@/components/ServiceAreaMap";
 
 // Lazy-loaded Leaflet map (no SSR — Leaflet needs `window`)
 const ServiceAreaMap = dynamic(() => import("@/components/ServiceAreaMap"), {
@@ -128,7 +132,14 @@ export default function SettingsPage() {
 
   // Service area
   const [activeCities, setActiveCities] = useState<Set<string>>(new Set());
-  const [showMapTooltip, setShowMapTooltip] = useState(false);
+  const [customCities, setCustomCities] = useState<ServiceCity[]>([]);
+  const [citySearch, setCitySearch] = useState("");
+  const [searching, setSearching] = useState(false);
+  const [searchError, setSearchError] = useState<string | null>(null);
+  const [dropPinMode, setDropPinMode] = useState(false);
+  const [pendingPin, setPendingPin] = useState<{ lat: number; lng: number } | null>(null);
+  const [pendingPinName, setPendingPinName] = useState("");
+  const lastSearchAt = useRef(0);
 
   // Availability — backed by BusinessProfile.workingHours
   const [workingHours, setWorkingHours] = useState<WorkingHours>(DEFAULT_HOURS);
@@ -164,12 +175,27 @@ export default function SettingsPage() {
         }
         if (Array.isArray(areas)) {
           const ids = new Set<string>();
+          const customs: ServiceCity[] = [];
           for (const a of areas) {
             if (!a.active) continue;
-            const id = cityNameToId.get(String(a.city ?? "").toLowerCase());
-            if (id) ids.add(id);
+            const cityName = String(a.city ?? "");
+            const id = cityNameToId.get(cityName.toLowerCase());
+            if (id) {
+              ids.add(id);
+            } else if (typeof a.lat === "number" && typeof a.lng === "number") {
+              const customId = `custom-${cityName.toLowerCase().replace(/\s+/g, "-")}`;
+              customs.push({
+                id: customId,
+                name: cityName,
+                lat: a.lat,
+                lng: a.lng,
+                custom: true,
+              });
+              ids.add(customId);
+            }
           }
           setActiveCities(ids);
+          setCustomCities(customs);
         }
         if (business) {
           if (business.businessName) setBizName(business.businessName);
@@ -246,8 +272,15 @@ export default function SettingsPage() {
     setTimeout(() => setSavedField(null), 1800);
   }
 
+  function findCityById(id: string): ServiceCity | undefined {
+    const fixed = DFW_CITIES.find((c) => c.id === id);
+    if (fixed) return fixed;
+    return customCities.find((c) => c.id === id);
+  }
+
   async function toggleCity(id: string) {
-    const cityName = DFW_CITIES.find((c) => c.id === id)?.name;
+    const city = findCityById(id);
+    if (!city) return;
     const wasActive = activeCities.has(id);
 
     setActiveCities((prev) => {
@@ -257,17 +290,17 @@ export default function SettingsPage() {
       return next;
     });
 
-    if (isDemo || !cityName) return;
+    if (isDemo) return;
     try {
       if (wasActive) {
-        await fetch(`/api/admin/service-areas?city=${encodeURIComponent(cityName)}`, {
+        await fetch(`/api/admin/service-areas?city=${encodeURIComponent(city.name)}`, {
           method: "DELETE",
         });
       } else {
         await fetch("/api/admin/service-areas", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ city: cityName }),
+          body: JSON.stringify({ city: city.name, lat: city.lat, lng: city.lng }),
         });
       }
     } catch {
@@ -276,20 +309,154 @@ export default function SettingsPage() {
   }
 
   async function removeCity(id: string) {
-    const cityName = DFW_CITIES.find((c) => c.id === id)?.name;
+    const city = findCityById(id);
+    if (!city) return;
     setActiveCities((prev) => {
       const next = new Set(prev);
       next.delete(id);
       return next;
     });
-    if (isDemo || !cityName) return;
+    // If it's a custom city, drop it from the custom list too
+    if (city.custom) {
+      setCustomCities((prev) => prev.filter((c) => c.id !== id));
+    }
+    if (isDemo) return;
     try {
-      await fetch(`/api/admin/service-areas?city=${encodeURIComponent(cityName)}`, {
+      await fetch(`/api/admin/service-areas?city=${encodeURIComponent(city.name)}`, {
         method: "DELETE",
       });
     } catch {
       /* keep optimistic state */
     }
+  }
+
+  async function addCustomCity(name: string, lat: number, lng: number) {
+    const trimmed = name.trim();
+    if (!trimmed) return;
+    const customId = `custom-${trimmed.toLowerCase().replace(/\s+/g, "-")}`;
+
+    // Avoid duplicates with existing predefined cities
+    const existingFixed = DFW_CITIES.find(
+      (c) => c.name.toLowerCase() === trimmed.toLowerCase(),
+    );
+    if (existingFixed) {
+      setActiveCities((prev) => new Set(prev).add(existingFixed.id));
+      if (!isDemo) {
+        try {
+          await fetch("/api/admin/service-areas", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              city: existingFixed.name,
+              lat: existingFixed.lat,
+              lng: existingFixed.lng,
+            }),
+          });
+        } catch {
+          /* swallow */
+        }
+      }
+      return;
+    }
+
+    setCustomCities((prev) => {
+      if (prev.some((c) => c.id === customId)) return prev;
+      return [...prev, { id: customId, name: trimmed, lat, lng, custom: true }];
+    });
+    setActiveCities((prev) => new Set(prev).add(customId));
+
+    if (isDemo) return;
+    try {
+      await fetch("/api/admin/service-areas", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ city: trimmed, lat, lng }),
+      });
+    } catch {
+      /* swallow — keep optimistic state */
+    }
+  }
+
+  async function handleSearchCity(e?: React.FormEvent) {
+    e?.preventDefault();
+    const query = citySearch.trim();
+    if (!query) return;
+
+    // Simple rate-limit guard: at most one Nominatim hit per 1.2s
+    const now = Date.now();
+    if (now - lastSearchAt.current < 1200) {
+      setSearchError("Please wait a moment before searching again.");
+      return;
+    }
+    lastSearchAt.current = now;
+
+    setSearching(true);
+    setSearchError(null);
+
+    if (isDemo) {
+      // In demo mode, just fake a TX-area pin near Dallas
+      await addCustomCity(query, 32.85 + (Math.random() - 0.5) * 0.4, -96.95 + (Math.random() - 0.5) * 0.4);
+      setCitySearch("");
+      setSearching(false);
+      return;
+    }
+
+    try {
+      const res = await fetch(
+        `https://nominatim.openstreetmap.org/search?q=${encodeURIComponent(`${query} TX`)}&format=json&limit=1`,
+        {
+          headers: {
+            // Nominatim policy requires identifying User-Agent; browsers
+            // forbid setting it directly so use a Referer-style header.
+            "Accept-Language": "en",
+          },
+        },
+      );
+      if (!res.ok) {
+        setSearchError("Search failed. Try again.");
+        return;
+      }
+      const data: Array<{ display_name: string; lat: string; lon: string }> = await res.json();
+      if (!data.length) {
+        setSearchError(`Couldn't find "${query}". Try a more specific name.`);
+        return;
+      }
+      const hit = data[0];
+      const lat = parseFloat(hit.lat);
+      const lng = parseFloat(hit.lon);
+      if (!Number.isFinite(lat) || !Number.isFinite(lng)) {
+        setSearchError("Invalid result from geocoder.");
+        return;
+      }
+      // Use the user's friendly query as the city name (capitalized)
+      const cityName = query.replace(/\b\w/g, (c) => c.toUpperCase());
+      await addCustomCity(cityName, lat, lng);
+      setCitySearch("");
+    } catch {
+      setSearchError("Network error. Try again.");
+    } finally {
+      setSearching(false);
+    }
+  }
+
+  function handleMapClick(lat: number, lng: number) {
+    setPendingPin({ lat, lng });
+    setPendingPinName("");
+    setDropPinMode(false);
+  }
+
+  async function confirmPendingPin() {
+    if (!pendingPin) return;
+    const name = pendingPinName.trim();
+    if (!name) return;
+    await addCustomCity(name, pendingPin.lat, pendingPin.lng);
+    setPendingPin(null);
+    setPendingPinName("");
+  }
+
+  function cancelPendingPin() {
+    setPendingPin(null);
+    setPendingPinName("");
   }
 
   async function persistWorkingHours(next: WorkingHours) {
@@ -378,7 +545,8 @@ export default function SettingsPage() {
   }
 
   const labelCls = "block text-[12px] font-semibold uppercase tracking-wider text-text-secondary mb-1.5";
-  const activeCityList = DFW_CITIES.filter((c) => activeCities.has(c.id));
+  const allMapCities: ServiceCity[] = [...DFW_CITIES, ...customCities];
+  const activeCityList = allMapCities.filter((c) => activeCities.has(c.id));
 
   // Working day set / shared start/end derived from workingHours
   const activeDayKeys = WEEK_DAYS.filter(({ key }) => workingHours[key]?.enabled).map((d) => d.key);
@@ -485,14 +653,21 @@ export default function SettingsPage() {
             <p className="text-[12px] text-text-secondary mb-3">
               Tap cities to toggle them on/off.{" "}
               <span className="font-semibold text-primary">{activeCities.size} active</span>
+              {dropPinMode && (
+                <span className="ml-2 inline-flex items-center gap-1 rounded-full bg-primary px-2 py-0.5 text-[11px] font-bold text-white">
+                  <Crosshair size={10} /> Click map to drop pin
+                </span>
+              )}
             </p>
 
             {/* Interactive Leaflet map */}
-            <div className="rounded-xl overflow-hidden border border-border">
+            <div className={`rounded-xl overflow-hidden border ${dropPinMode ? "border-primary ring-2 ring-primary/20" : "border-border"}`}>
               <ServiceAreaMap
-                cities={DFW_CITIES}
+                cities={allMapCities}
                 activeIds={activeCities}
                 onToggle={toggleCity}
+                dropPinMode={dropPinMode}
+                onMapClick={handleMapClick}
               />
             </div>
 
@@ -502,39 +677,128 @@ export default function SettingsPage() {
                 {activeCityList.map((city) => (
                   <span
                     key={city.id}
-                    className="inline-flex items-center gap-1.5 rounded-full bg-primary-50 border border-primary/20 px-2.5 py-1 text-[12px] font-semibold text-primary"
+                    className={`inline-flex items-center gap-1.5 rounded-full border px-2.5 py-1 text-[12px] font-semibold ${
+                      city.custom
+                        ? "bg-purple-50 border-purple-300 text-purple-700"
+                        : "bg-primary-50 border-primary/20 text-primary"
+                    }`}
                   >
                     {city.name}
+                    {city.custom && <span className="text-[9px] opacity-70">(custom)</span>}
                     <button
                       onClick={() => removeCity(city.id)}
-                      className="flex h-3.5 w-3.5 items-center justify-center rounded-full bg-primary/20 hover:bg-primary/40 transition-colors"
+                      className={`flex h-3.5 w-3.5 items-center justify-center rounded-full transition-colors ${
+                        city.custom
+                          ? "bg-purple-300/40 hover:bg-purple-300/70"
+                          : "bg-primary/20 hover:bg-primary/40"
+                      }`}
                     >
-                      <X size={9} className="text-primary" strokeWidth={2.5} />
+                      <X size={9} className={city.custom ? "text-purple-700" : "text-primary"} strokeWidth={2.5} />
                     </button>
                   </span>
                 ))}
               </div>
             )}
 
-            {/* Draw custom zone button */}
-            <div className="mt-3 relative">
+            {/* Add custom city by name */}
+            <form onSubmit={handleSearchCity} className="mt-3 flex gap-2">
+              <div className="flex-1 relative">
+                <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-text-tertiary pointer-events-none" />
+                <input
+                  type="text"
+                  value={citySearch}
+                  onChange={(e) => { setCitySearch(e.target.value); setSearchError(null); }}
+                  placeholder="Add a city (e.g. Lewisville)"
+                  className="w-full rounded-xl border border-border bg-surface pl-9 pr-3 py-2.5 text-[13px] text-text-primary focus:outline-none focus:border-primary"
+                  disabled={searching}
+                />
+              </div>
               <button
-                onClick={() => setShowMapTooltip((v) => !v)}
-                className="w-full flex items-center justify-center gap-2 rounded-xl border-2 border-dashed border-border bg-surface py-2.5 text-[13px] font-semibold text-text-secondary hover:border-primary/30 hover:text-primary transition-colors"
+                type="submit"
+                disabled={searching || !citySearch.trim()}
+                className="flex items-center gap-1.5 rounded-xl bg-primary px-4 text-[13px] font-semibold text-white shadow-sm hover:bg-primary-dark disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
               >
-                <MapPin size={14} />
-                Draw Custom Zone
+                {searching ? (
+                  <div className="h-3.5 w-3.5 border-2 border-white border-t-transparent rounded-full animate-spin" />
+                ) : (
+                  <Plus size={14} />
+                )}
+                Add
               </button>
-              {showMapTooltip && (
-                <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 w-52 rounded-xl bg-text-primary px-3 py-2 text-center shadow-lg animate-fade-in">
-                  <p className="text-[12px] font-medium text-white">
-                    Custom polygon drawing coming soon
-                  </p>
-                  <div className="absolute left-1/2 -translate-x-1/2 top-full h-0 w-0 border-l-4 border-r-4 border-t-4 border-transparent border-t-text-primary" />
-                </div>
-              )}
-            </div>
+            </form>
+            {searchError && (
+              <p className="mt-1.5 text-[12px] text-error">{searchError}</p>
+            )}
+
+            {/* Drop-pin button (replaces Draw Custom Zone) */}
+            <button
+              type="button"
+              onClick={() => {
+                setDropPinMode((v) => !v);
+                setSearchError(null);
+              }}
+              className={`mt-2 w-full flex items-center justify-center gap-2 rounded-xl border-2 border-dashed py-2.5 text-[13px] font-semibold transition-colors ${
+                dropPinMode
+                  ? "border-primary bg-primary-50 text-primary"
+                  : "border-border bg-surface text-text-secondary hover:border-primary/30 hover:text-primary"
+              }`}
+            >
+              <Crosshair size={14} />
+              {dropPinMode ? "Click on map to drop pin (or tap to cancel)" : "Drop a Custom Pin"}
+            </button>
           </Card>
+
+          {/* Pending pin naming dialog */}
+          {pendingPin && (
+            <div
+              className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 px-5 animate-fade-in"
+              onClick={cancelPendingPin}
+            >
+              <div
+                className="w-full max-w-sm rounded-2xl bg-surface p-5 shadow-2xl"
+                onClick={(e) => e.stopPropagation()}
+              >
+                <div className="flex items-center gap-2 mb-3">
+                  <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-primary-50">
+                    <MapPin size={15} className="text-primary" />
+                  </div>
+                  <div>
+                    <p className="text-[14px] font-bold text-text-primary leading-none">Name this area</p>
+                    <p className="text-[11px] text-text-tertiary mt-1">
+                      {pendingPin.lat.toFixed(4)}, {pendingPin.lng.toFixed(4)}
+                    </p>
+                  </div>
+                </div>
+                <input
+                  autoFocus
+                  type="text"
+                  value={pendingPinName}
+                  onChange={(e) => setPendingPinName(e.target.value)}
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter") confirmPendingPin();
+                    if (e.key === "Escape") cancelPendingPin();
+                  }}
+                  placeholder="e.g. North Dallas"
+                  className="w-full rounded-xl border border-border bg-surface px-3 py-2.5 text-[14px] text-text-primary focus:outline-none focus:border-primary"
+                />
+                <div className="mt-3 flex gap-2">
+                  <button
+                    onClick={cancelPendingPin}
+                    className="flex-1 rounded-xl bg-surface-secondary px-3 py-2.5 text-[13px] font-semibold text-text-secondary hover:bg-border transition-colors"
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    onClick={confirmPendingPin}
+                    disabled={!pendingPinName.trim()}
+                    className="flex-1 rounded-xl bg-primary px-3 py-2.5 text-[13px] font-semibold text-white hover:bg-primary-dark disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                  >
+                    Add Pin
+                  </button>
+                </div>
+              </div>
+            </div>
+          )}
         </section>
 
         {/* ── SECTION: Availability ── */}

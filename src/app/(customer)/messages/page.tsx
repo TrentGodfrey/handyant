@@ -46,11 +46,16 @@ interface ApiConversationUser {
 
 interface ApiConversation {
   id: string;
-  customerId: string;
-  techId: string;
-  customer: ApiConversationUser;
-  tech: ApiConversationUser;
-  messages: Array<ApiMessage & { sender?: { id: string; name: string | null } }>;
+  // Optional because /api/conversations nests these inside customer/tech objects.
+  customerId?: string;
+  techId?: string;
+  customer: ApiConversationUser | null;
+  tech: ApiConversationUser | null;
+  // /api/messages returns a `messages` array; /api/conversations returns a single
+  // `lastMessage` object instead. Support both.
+  messages?: Array<ApiMessage & { sender?: { id: string; name: string | null } }>;
+  lastMessage?: { id: string; text: string; createdAt: string; senderId: string } | null;
+  lastMessageAt?: string | null;
 }
 
 interface ApiBookingLite {
@@ -162,13 +167,20 @@ export default function MessagesPage() {
     if (!userId) return;
 
     try {
-      const [convoRes, bookingsRes] = await Promise.all([
-        fetch("/api/messages").then((r) => r.json()),
+      const [convoRes, bookingsRes, defaultTechRes] = await Promise.all([
+        fetch("/api/conversations").then((r) => r.json()),
         fetch("/api/bookings").then((r) => r.json()).catch(() => []),
+        // Always look up a default tech so customers without bookings can still
+        // initiate a conversation. Falls back gracefully if route 404s.
+        fetch("/api/tech/default").then((r) => (r.ok ? r.json() : null)).catch(() => null),
       ]);
 
       const conversations: ApiConversation[] = Array.isArray(convoRes) ? convoRes : [];
       const bookings: ApiBookingLite[] = Array.isArray(bookingsRes) ? bookingsRes : [];
+      const defaultTech: { id: string; name: string | null; phone: string | null } | null =
+        defaultTechRes && typeof defaultTechRes === "object" && "id" in defaultTechRes
+          ? defaultTechRes
+          : null;
 
       // Build a map of techId → upcoming visit info
       const visitsByTech = new Map<string, ApiBookingLite>();
@@ -182,12 +194,18 @@ export default function MessagesPage() {
       }
 
       const mapped: Thread[] = conversations.map((c) => {
-        const other = c.customerId === userId ? c.tech : c.customer;
-        const lastMsg = c.messages?.[0];
-        const visit = visitsByTech.get(other.id);
+        // The /api/conversations response shape differs slightly: customer/tech
+        // are nested objects; customerId/techId may not be top-level.
+        const customerId = c.customerId ?? c.customer?.id ?? "";
+        const techId = c.techId ?? c.tech?.id ?? "";
+        const other = customerId === userId ? c.tech : c.customer;
+        const lastMsg = c.messages?.[0] ?? (c.lastMessage
+          ? { id: c.lastMessage.id, text: c.lastMessage.text, type: null, createdAt: c.lastMessage.createdAt, senderId: c.lastMessage.senderId }
+          : undefined);
+        const visit = other ? visitsByTech.get(other.id) : undefined;
         return {
           id: c.id,
-          techUserId: c.techId,
+          techUserId: techId,
           name: other?.name ?? "Unknown",
           role: "Your Handyman",
           initials: (other?.name?.[0] ?? "?").toUpperCase(),
@@ -204,27 +222,28 @@ export default function MessagesPage() {
         };
       });
 
-      // If the customer has no conversation yet but has a booking with a tech,
-      // surface a placeholder so they can start one.
-      if (mapped.length === 0 && bookings.length > 0) {
+      // If the customer has no conversation yet, surface a placeholder so they
+      // can start one. Prefer a tech tied to an upcoming booking; otherwise use
+      // the default tech (so even brand-new customers can message).
+      if (mapped.length === 0) {
         const bookingWithTech = bookings.find((b) => b.tech);
-        if (bookingWithTech?.tech) {
-          const t = bookingWithTech.tech;
+        const fallback = bookingWithTech?.tech ?? defaultTech;
+        if (fallback) {
           mapped.push({
-            id: `new:${t.id}`,
-            techUserId: t.id,
-            name: t.name ?? "Your Handyman",
+            id: `new:${fallback.id}`,
+            techUserId: fallback.id,
+            name: fallback.name ?? "Your Handyman",
             role: "Your Handyman",
-            initials: (t.name?.[0] ?? "?").toUpperCase(),
+            initials: (fallback.name?.[0] ?? "A").toUpperCase(),
             lastMessage: "Start a conversation",
             time: "",
             unread: 0,
             online: false,
-            nextVisit: bookingWithTech.scheduledDate
+            nextVisit: bookingWithTech?.scheduledDate
               ? new Date(bookingWithTech.scheduledDate).toLocaleDateString([], { weekday: "short", month: "short", day: "numeric" })
               : "",
-            address: bookingWithTech.home?.address ?? "",
-            phone: t.phone ?? "",
+            address: bookingWithTech?.home?.address ?? "",
+            phone: fallback.phone ?? "",
             messages: [],
           });
         }

@@ -1,10 +1,10 @@
 "use client";
 
-import { useState, useMemo, useEffect } from "react";
+import { useState, useMemo, useEffect, useRef } from "react";
 import Card from "@/components/Card";
 import StatusBadge from "@/components/StatusBadge";
-import Button from "@/components/Button";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import {
   Search,
   Filter,
@@ -12,7 +12,6 @@ import {
   MapPin,
   Camera,
   ShoppingCart,
-  ChevronRight,
   Wrench,
   Plus,
   LayoutGrid,
@@ -301,31 +300,55 @@ function JobsEmptyState({ hasSearch, searchQuery }: { hasSearch: boolean; search
 function MoveToDropdown({
   currentStage,
   onMove,
+  align = "right",
 }: {
   currentStage: PipelineStage;
   onMove: (stage: PipelineStage) => void;
+  align?: "right" | "left";
 }) {
   const [open, setOpen] = useState(false);
+  const ref = useRef<HTMLDivElement>(null);
   const targets = STAGES.filter((s) => s.key !== currentStage);
 
+  // Close on outside click / escape
+  useEffect(() => {
+    if (!open) return;
+    function onDocClick(e: MouseEvent) {
+      if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false);
+    }
+    function onKey(e: KeyboardEvent) {
+      if (e.key === "Escape") setOpen(false);
+    }
+    document.addEventListener("mousedown", onDocClick);
+    document.addEventListener("keydown", onKey);
+    return () => {
+      document.removeEventListener("mousedown", onDocClick);
+      document.removeEventListener("keydown", onKey);
+    };
+  }, [open]);
+
   return (
-    <div className="relative">
+    <div ref={ref} className="relative">
       <button
+        type="button"
         onClick={(e) => {
           e.preventDefault();
           e.stopPropagation();
-          setOpen(!open);
+          setOpen((v) => !v);
         }}
-        className="flex items-center gap-1 rounded-lg border border-border bg-surface px-2.5 py-1.5 text-[11px] font-semibold text-text-secondary hover:bg-surface-secondary transition-colors"
+        className="flex items-center gap-1 rounded-lg border border-border bg-surface px-2.5 py-1 text-[11px] font-semibold text-text-secondary hover:bg-surface-secondary hover:border-gray-300 transition-colors"
       >
-        Move to
+        Move
         <ChevronDown size={12} />
       </button>
       {open && (
-        <div className="absolute right-0 top-full z-20 mt-1 min-w-[140px] rounded-xl border border-border bg-surface py-1 shadow-[0_4px_16px_rgba(0,0,0,0.12)]">
+        <div
+          className={`absolute ${align === "right" ? "right-0" : "left-0"} bottom-full z-30 mb-1 min-w-[150px] rounded-xl border border-border bg-surface py-1 shadow-[0_8px_24px_rgba(0,0,0,0.15)]`}
+        >
           {targets.map((stage) => (
             <button
               key={stage.key}
+              type="button"
               onClick={(e) => {
                 e.preventDefault();
                 e.stopPropagation();
@@ -344,28 +367,26 @@ function MoveToDropdown({
   );
 }
 
-// ── Pipeline summary bar (mobile) ────────────────────────────────────────────
+// ── Pipeline summary (filter pills + compact total) ──────────────────────────
 
 function PipelineSummary({
   stageCounts,
-  stageRevenue,
   activeStage,
   onStageClick,
   totalRevenue,
+  showTotal,
 }: {
   stageCounts: Record<PipelineStage, number>;
-  stageRevenue: Record<PipelineStage, number>;
   activeStage: PipelineStage | "all";
   onStageClick: (stage: PipelineStage | "all") => void;
   totalRevenue: number;
+  showTotal: boolean;
 }) {
   const totalJobs = Object.values(stageCounts).reduce((a, b) => a + b, 0);
 
   return (
-    <div className="mb-4 space-y-3">
-      {/* Stage pills */}
-      <div className="flex gap-2 overflow-x-auto pb-1 no-scrollbar">
-        {/* All pill */}
+    <div className="mb-4 flex items-center gap-2">
+      <div className="flex flex-1 gap-2 overflow-x-auto pb-1 no-scrollbar">
         <button
           onClick={() => onStageClick("all")}
           className={`flex shrink-0 items-center gap-1.5 rounded-full px-3.5 py-1.5 text-[12px] font-semibold transition-all duration-150 ${
@@ -403,35 +424,12 @@ function PipelineSummary({
         ))}
       </div>
 
-      {/* Revenue bar */}
-      <div className="rounded-xl border border-border bg-surface px-3.5 py-2.5">
-        <div className="flex items-center justify-between mb-2">
-          <span className="text-[12px] font-semibold text-text-secondary">
-            ${totalRevenue.toLocaleString()} in pipeline
-          </span>
+      {showTotal && totalRevenue > 0 && (
+        <div className="hidden shrink-0 rounded-full border border-border bg-surface px-3.5 py-1.5 text-[12px] font-semibold text-text-secondary lg:block">
+          <span className="text-text-tertiary">Pipeline:</span>{" "}
+          <span className="text-text-primary">${totalRevenue.toLocaleString()}</span>
         </div>
-        <div className="flex h-2 w-full overflow-hidden rounded-full bg-surface-secondary">
-          {STAGES.map((stage) => {
-            const pct = totalRevenue > 0 ? (stageRevenue[stage.key] / totalRevenue) * 100 : 0;
-            if (pct === 0) return null;
-            return (
-              <div
-                key={stage.key}
-                className="h-full transition-all duration-300"
-                style={{ width: `${pct}%`, backgroundColor: stage.color }}
-              />
-            );
-          })}
-        </div>
-        <div className="mt-1.5 flex flex-wrap gap-x-4 gap-y-0.5">
-          {STAGES.map((stage) => (
-            <span key={stage.key} className="flex items-center gap-1 text-[10px] text-text-tertiary">
-              <span className="h-1.5 w-1.5 rounded-full" style={{ backgroundColor: stage.color }} />
-              ${stageRevenue[stage.key].toLocaleString()}
-            </span>
-          ))}
-        </div>
-      </div>
+      )}
     </div>
   );
 }
@@ -513,43 +511,77 @@ function JobCardCompact({
   job: Job;
   onMove: (jobId: string, stage: PipelineStage) => void;
 }) {
+  const router = useRouter();
   const stage = toPipelineStage(job.status);
+  const stageConfig = STAGES.find((s) => s.key === stage)!;
+  const taskSummary = job.tasks[0] ?? "No tasks";
+  const extraTasks = job.tasks.length > 1 ? job.tasks.length - 1 : 0;
 
   return (
-    <Link href={`/jobs/${job.id}`} className="block">
-      <Card padding="sm" className="hover:shadow-[0_4px_12px_rgba(0,0,0,0.10)] transition-shadow">
-        <div className="flex items-start justify-between gap-2">
-          <div className="min-w-0 flex-1">
-            <p className="text-[13px] font-semibold text-text-primary truncate">{job.client}</p>
-            <div className="mt-1 flex items-center gap-1.5">
-              <MapPin size={11} className="shrink-0 text-text-tertiary" />
-              <span className="text-[11px] text-text-secondary truncate">{job.address}</span>
-            </div>
-          </div>
-          <span className="text-[14px] font-bold text-text-primary shrink-0">{job.estimate}</span>
+    <div
+      role="button"
+      tabIndex={0}
+      onClick={() => router.push(`/jobs/${job.id}`)}
+      onKeyDown={(e) => {
+        if (e.key === "Enter" || e.key === " ") {
+          e.preventDefault();
+          router.push(`/jobs/${job.id}`);
+        }
+      }}
+      className="group relative cursor-pointer rounded-xl border border-border bg-surface p-3 shadow-[0_1px_2px_rgba(0,0,0,0.04)] transition-all duration-150 hover:-translate-y-0.5 hover:border-gray-300 hover:shadow-[0_4px_14px_rgba(0,0,0,0.08)] focus:outline-none focus-visible:ring-2 focus-visible:ring-primary/40"
+    >
+      {/* Client + address */}
+      <div className="min-w-0">
+        <p className="text-[13px] font-bold text-text-primary truncate">{job.client}</p>
+        <div className="mt-1 flex items-center gap-1.5">
+          <MapPin size={11} className="shrink-0 text-text-tertiary" />
+          <span className="text-[11px] text-text-secondary truncate">{job.address}</span>
         </div>
-        <div className="mt-2 flex items-center justify-between">
-          <div className="flex items-center gap-2">
-            <span className="text-[11px] text-text-tertiary">
-              {job.tasks.length} task{job.tasks.length !== 1 ? "s" : ""}
+      </div>
+
+      {/* Job description */}
+      <div className="mt-2">
+        <p className="text-[12px] text-text-secondary leading-snug line-clamp-2">
+          {taskSummary}
+          {extraTasks > 0 && (
+            <span className="text-text-tertiary"> +{extraTasks} more</span>
+          )}
+        </p>
+      </div>
+
+      {/* Meta */}
+      {(job.partsNeeded || job.photos > 0) && (
+        <div className="mt-2 flex items-center gap-3">
+          {job.partsNeeded && (
+            <span className="flex items-center gap-1 text-[10px] font-semibold text-accent-amber">
+              <ShoppingCart size={10} />
+              Parts
             </span>
-            {job.partsNeeded && (
-              <span className="flex items-center gap-1 text-[10px] font-medium text-accent-amber">
-                <ShoppingCart size={10} />
-                Parts
-              </span>
-            )}
-            {job.photos > 0 && (
-              <span className="flex items-center gap-1 text-[10px] text-text-tertiary">
-                <Camera size={10} />
-                {job.photos}
-              </span>
-            )}
-          </div>
-          <MoveToDropdown currentStage={stage} onMove={(newStage) => onMove(job.id, newStage)} />
+          )}
+          {job.photos > 0 && (
+            <span className="flex items-center gap-1 text-[10px] text-text-tertiary">
+              <Camera size={10} />
+              {job.photos}
+            </span>
+          )}
         </div>
-      </Card>
-    </Link>
+      )}
+
+      {/* Footer: status chip + amount + move */}
+      <div className="mt-3 flex items-center justify-between border-t border-border-light pt-2.5">
+        <div className="flex items-center gap-2 min-w-0">
+          <span
+            className="flex items-center gap-1 rounded-full px-2 py-0.5 text-[10px] font-semibold"
+            style={{ backgroundColor: `${stageConfig.color}15`, color: stageConfig.color }}
+          >
+            <span className="h-1.5 w-1.5 rounded-full" style={{ backgroundColor: stageConfig.color }} />
+            {stageConfig.label}
+          </span>
+          <span className="text-[13px] font-bold text-text-primary">{job.estimate}</span>
+        </div>
+        <MoveToDropdown currentStage={stage} onMove={(newStage) => onMove(job.id, newStage)} />
+      </div>
+    </div>
   );
 }
 
@@ -567,31 +599,41 @@ function KanbanColumn({
   onMove: (jobId: string, stage: PipelineStage) => void;
 }) {
   return (
-    <div className="flex flex-col min-h-0">
+    <div className="flex flex-col rounded-xl border border-border bg-surface-secondary/40">
       {/* Column header */}
-      <div className="rounded-t-xl border-t-[4px] bg-surface px-3.5 pt-3 pb-2.5" style={{ borderTopColor: stage.color }}>
-        <div className="flex items-center justify-between">
-          <div className="flex items-center gap-2">
-            <span className={`h-2.5 w-2.5 rounded-full ${stage.dotClass}`} />
-            <span className="text-[13px] font-bold text-text-primary">{stage.label}</span>
-            <span className="flex h-5 min-w-[20px] items-center justify-center rounded-full bg-surface-secondary px-1.5 text-[11px] font-semibold text-text-secondary">
+      <div
+        className="rounded-t-xl border-t-2 bg-surface px-3.5 py-2.5"
+        style={{ borderTopColor: stage.color }}
+      >
+        <div className="flex items-center justify-between gap-2">
+          <div className="flex items-center gap-2 min-w-0">
+            <span className={`h-2 w-2 shrink-0 rounded-full ${stage.dotClass}`} />
+            <span className="text-[12px] font-bold uppercase tracking-wide text-text-primary truncate">
+              {stage.label}
+            </span>
+            <span className="flex h-5 min-w-[20px] shrink-0 items-center justify-center rounded-full bg-surface-secondary px-1.5 text-[11px] font-semibold text-text-secondary">
               {columnJobs.length}
             </span>
           </div>
-          <span className="text-[12px] font-semibold text-text-secondary">${revenue.toLocaleString()}</span>
+          {revenue > 0 && (
+            <span className="text-[11px] font-semibold text-text-tertiary shrink-0">
+              ${revenue.toLocaleString()}
+            </span>
+          )}
         </div>
       </div>
 
-      {/* Column body */}
-      <div className="flex-1 space-y-2 overflow-y-auto rounded-b-xl border border-t-0 border-border bg-surface-secondary/50 p-2.5">
-        {columnJobs.length === 0 && (
-          <div className="flex items-center justify-center py-8">
+      {/* Column body — grows with content, page scrolls; dropdown stays unclipped */}
+      <div className="flex-1 space-y-2.5 p-2.5 min-h-[120px]">
+        {columnJobs.length === 0 ? (
+          <div className="flex items-center justify-center py-10">
             <p className="text-[12px] text-text-tertiary">No jobs</p>
           </div>
+        ) : (
+          columnJobs.map((job) => (
+            <JobCardCompact key={job.id} job={job} onMove={onMove} />
+          ))
         )}
-        {columnJobs.map((job) => (
-          <JobCardCompact key={job.id} job={job} onMove={onMove} />
-        ))}
       </div>
     </div>
   );
@@ -926,10 +968,10 @@ export default function JobsPage() {
       {/* Pipeline summary (visible in both views) */}
       <PipelineSummary
         stageCounts={stageCounts}
-        stageRevenue={stageRevenue}
         activeStage={activeStage}
         onStageClick={setActiveStage}
         totalRevenue={totalRevenue}
+        showTotal={view === "board"}
       />
 
       {/* Results count */}
@@ -963,7 +1005,7 @@ export default function JobsPage() {
           {showEmpty && activeStage !== "all" ? (
             <JobsEmptyState hasSearch={true} searchQuery={search} />
           ) : (
-            <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
+            <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 sm:gap-4 lg:grid-cols-4">
               {STAGES.map((stage) => (
                 <KanbanColumn
                   key={stage.key}

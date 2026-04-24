@@ -271,6 +271,8 @@ model ServiceArea {
   techId String   @map("tech_id") @db.Uuid
   city   String
   active Boolean? @default(true)
+  lat    Float?
+  lng    Float?
   tech   User     @relation(fields: [techId], references: [id], onDelete: NoAction, onUpdate: NoAction)
 
   @@unique([techId, city])

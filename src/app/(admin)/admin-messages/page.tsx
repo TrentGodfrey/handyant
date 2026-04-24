@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useRef, useEffect, useCallback } from "react";
-import { Send, Camera, Paperclip, ArrowLeft, MoreVertical, Search } from "lucide-react";
+import { Send, Camera, Paperclip, ArrowLeft, MoreVertical, Search, Plus, X } from "lucide-react";
 import { useDemoMode } from "@/lib/useDemoMode";
 
 interface Message {
@@ -170,6 +170,14 @@ type ApiBooking = {
   home: { address: string | null; city: string | null } | null;
 };
 
+type ApiClient = {
+  id: string;
+  name: string;
+  email: string | null;
+  phone: string | null;
+  avatarUrl: string | null;
+};
+
 function formatVisit(dateStr: string, timeStr: string): string {
   const d = new Date(dateStr);
   if (Number.isNaN(d.getTime())) return "";
@@ -195,6 +203,11 @@ export default function AdminMessagesPage() {
   const [loadingList, setLoadingList] = useState(true);
   const [loadingThread, setLoadingThread] = useState(false);
   const [currentUserId, setCurrentUserId] = useState<string | null>(null);
+  const [pickerOpen, setPickerOpen] = useState(false);
+  const [clients, setClients] = useState<ApiClient[]>([]);
+  const [clientsLoading, setClientsLoading] = useState(false);
+  const [pickerSearch, setPickerSearch] = useState("");
+  const [creating, setCreating] = useState(false);
   const bottomRef = useRef<HTMLDivElement>(null);
 
   // ── Initial load ────────────────────────────────────────────────────────
@@ -359,8 +372,99 @@ export default function AdminMessagesPage() {
     }
   }
 
+  // ── New-conversation picker ─────────────────────────────────────────────
+  async function openPicker() {
+    setPickerOpen(true);
+    setPickerSearch("");
+    if (clients.length > 0 || isDemo) return;
+    setClientsLoading(true);
+    try {
+      const r = await fetch("/api/admin/clients");
+      if (r.ok) {
+        const data: ApiClient[] = await r.json();
+        setClients(Array.isArray(data) ? data : []);
+      }
+    } catch {
+      setClients([]);
+    } finally {
+      setClientsLoading(false);
+    }
+  }
+
+  async function startConversationWith(client: ApiClient) {
+    if (creating) return;
+
+    // Demo mode: just spin up an in-memory conversation.
+    if (isDemo) {
+      const fake: Conversation = {
+        id: `demo-${Date.now()}`,
+        client: client.name,
+        initials: initialsOf(client.name),
+        lastMessage: "",
+        time: "",
+        unread: 0,
+        nextVisit: "",
+        address: "",
+        online: false,
+        messages: [],
+      };
+      setConversations((prev) => [fake, ...prev]);
+      setMessagesByConvo((prev) => ({ ...prev, [fake.id]: [] }));
+      setActiveConvo(fake);
+      setPickerOpen(false);
+      return;
+    }
+
+    // If a conversation with this client already exists, just open it.
+    const existing = conversations.find((c) => c.client === client.name);
+    if (existing) {
+      setActiveConvo(existing);
+      setPickerOpen(false);
+      return;
+    }
+
+    setCreating(true);
+    try {
+      const r = await fetch("/api/conversations", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ otherUserId: client.id }),
+      });
+      if (!r.ok) return;
+      const convo: { id: string } = await r.json();
+      const fresh: Conversation = {
+        id: convo.id,
+        client: client.name,
+        initials: initialsOf(client.name),
+        lastMessage: "",
+        time: "",
+        unread: 0,
+        nextVisit: "",
+        address: "",
+        online: false,
+        messages: [],
+      };
+      setConversations((prev) => {
+        // Don't double-insert if a refresh raced us.
+        if (prev.some((c) => c.id === fresh.id)) return prev;
+        return [fresh, ...prev];
+      });
+      setMessagesByConvo((prev) => ({ ...prev, [fresh.id]: [] }));
+      setActiveConvo(fresh);
+      setPickerOpen(false);
+    } finally {
+      setCreating(false);
+    }
+  }
+
   const filtered = conversations.filter((c) =>
     !search.trim() || c.client.toLowerCase().includes(search.toLowerCase())
+  );
+
+  const filteredClients = clients.filter((c) =>
+    !pickerSearch.trim() ||
+    c.name.toLowerCase().includes(pickerSearch.toLowerCase()) ||
+    (c.email ?? "").toLowerCase().includes(pickerSearch.toLowerCase())
   );
 
   // Thread view
@@ -484,9 +588,18 @@ export default function AdminMessagesPage() {
 
   return (
     <div className="min-h-screen bg-background pb-28">
-      <div className="bg-white border-b border-border px-5 pt-14 pb-4">
-        <h1 className="text-[26px] font-bold text-text-primary">Messages</h1>
-        <p className="mt-0.5 text-[13px] text-text-secondary">{unreadCount} unread</p>
+      <div className="bg-white border-b border-border px-5 pt-14 pb-4 flex items-start justify-between gap-3">
+        <div>
+          <h1 className="text-[26px] font-bold text-text-primary">Messages</h1>
+          <p className="mt-0.5 text-[13px] text-text-secondary">{unreadCount} unread</p>
+        </div>
+        <button
+          onClick={openPicker}
+          className="inline-flex items-center gap-1.5 rounded-full bg-primary px-3.5 py-2 text-[13px] font-semibold text-white shadow-sm hover:bg-primary-dark transition-colors active:scale-[0.98]"
+        >
+          <Plus size={16} />
+          <span>New</span>
+        </button>
       </div>
 
       {/* Search */}
@@ -547,6 +660,77 @@ export default function AdminMessagesPage() {
           ))
         )}
       </div>
+
+      {/* New-conversation picker */}
+      {pickerOpen && (
+        <div className="fixed inset-0 z-40 flex items-end sm:items-center justify-center bg-black/40 px-4 pb-4 sm:pb-0">
+          <button
+            aria-label="Close"
+            className="absolute inset-0 cursor-default"
+            onClick={() => setPickerOpen(false)}
+          />
+          <div className="relative w-full max-w-md max-h-[80vh] flex flex-col rounded-2xl bg-white shadow-xl overflow-hidden">
+            <div className="flex items-center justify-between px-5 py-4 border-b border-border shrink-0">
+              <h2 className="text-[16px] font-bold text-text-primary">New message</h2>
+              <button
+                onClick={() => setPickerOpen(false)}
+                className="flex h-8 w-8 items-center justify-center rounded-full hover:bg-surface-secondary transition-colors"
+              >
+                <X size={18} className="text-text-secondary" />
+              </button>
+            </div>
+            <div className="px-5 pt-3 pb-2 shrink-0">
+              <div className="flex items-center gap-2.5 rounded-xl border border-border bg-surface px-3.5 py-2.5">
+                <Search size={16} className="shrink-0 text-text-tertiary" />
+                <input
+                  type="text"
+                  value={pickerSearch}
+                  onChange={(e) => setPickerSearch(e.target.value)}
+                  placeholder="Search clients..."
+                  autoFocus
+                  className="flex-1 bg-transparent text-[14px] text-text-primary placeholder:text-text-tertiary focus:outline-none"
+                />
+              </div>
+            </div>
+            <div className="flex-1 overflow-y-auto px-3 pb-3">
+              {clientsLoading ? (
+                <div className="flex items-center justify-center py-10">
+                  <div className="h-6 w-6 border-2 border-primary border-t-transparent rounded-full animate-spin" />
+                </div>
+              ) : filteredClients.length === 0 ? (
+                <div className="text-center py-10">
+                  <p className="text-[13px] text-text-secondary">
+                    {clients.length === 0 ? "No clients yet" : "No matches"}
+                  </p>
+                </div>
+              ) : (
+                <div className="space-y-1">
+                  {filteredClients.map((c) => (
+                    <button
+                      key={c.id}
+                      disabled={creating}
+                      onClick={() => startConversationWith(c)}
+                      className="flex w-full items-center gap-3 rounded-xl px-3 py-2.5 text-left hover:bg-surface-secondary transition-colors disabled:opacity-50"
+                    >
+                      <div className="h-10 w-10 shrink-0 rounded-full bg-primary flex items-center justify-center">
+                        <span className="text-[13px] font-bold text-white">{initialsOf(c.name)}</span>
+                      </div>
+                      <div className="flex-1 min-w-0">
+                        <p className="text-[14px] font-semibold text-text-primary truncate">{c.name}</p>
+                        {(c.email || c.phone) && (
+                          <p className="text-[11px] text-text-tertiary truncate">
+                            {c.email ?? c.phone}
+                          </p>
+                        )}
+                      </div>
+                    </button>
+                  ))}
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

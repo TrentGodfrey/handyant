@@ -173,6 +173,11 @@ export default function JobDetailPage({ params }: { params: Promise<{ id: string
   const [uploading, setUploading] = useState(false);
   const [uploadError, setUploadError] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
+  const [showAddTask, setShowAddTask] = useState(false);
+  const [newTaskLabel, setNewTaskLabel] = useState("");
+  const [newTaskNotes, setNewTaskNotes] = useState("");
+  const [savingTask, setSavingTask] = useState(false);
+  const [addTaskError, setAddTaskError] = useState<string | null>(null);
   const fileInputRef = useRef<HTMLInputElement | null>(null);
   const tasksRef = useRef<HTMLDivElement | null>(null);
 
@@ -234,6 +239,70 @@ export default function JobDetailPage({ params }: { params: Promise<{ id: string
       // revert on failure
       setTasks((prev) => prev.map((t) => t.id === taskId ? { ...t, done: !newDone } : t));
     });
+  }
+
+  async function addTask() {
+    const label = newTaskLabel.trim();
+    if (!label) return;
+    const notesValue = newTaskNotes.trim();
+    setAddTaskError(null);
+
+    if (isDemo) {
+      setTasks((prev) => [
+        ...prev,
+        {
+          id: `demo-${Date.now()}`,
+          label,
+          done: false,
+          notes: notesValue || undefined,
+        },
+      ]);
+      setNewTaskLabel("");
+      setNewTaskNotes("");
+      setShowAddTask(false);
+      return;
+    }
+
+    setSavingTask(true);
+    try {
+      const res = await fetch(`/api/bookings/${id}/tasks`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          label,
+          notes: notesValue || undefined,
+          sortOrder: tasks.length,
+        }),
+      });
+      if (!res.ok) {
+        const body = await res.json().catch(() => ({}));
+        throw new Error(body?.error ?? `Failed to add task (${res.status})`);
+      }
+      const created = await res.json();
+      setTasks((prev) => [
+        ...prev,
+        {
+          id: created.id,
+          label: created.label,
+          done: !!created.done,
+          notes: created.notes ?? undefined,
+        },
+      ]);
+      setNewTaskLabel("");
+      setNewTaskNotes("");
+      setShowAddTask(false);
+    } catch (err) {
+      setAddTaskError(err instanceof Error ? err.message : "Failed to add task");
+    } finally {
+      setSavingTask(false);
+    }
+  }
+
+  function cancelAddTask() {
+    setNewTaskLabel("");
+    setNewTaskNotes("");
+    setAddTaskError(null);
+    setShowAddTask(false);
   }
 
   function addNote() {
@@ -419,10 +488,21 @@ export default function JobDetailPage({ params }: { params: Promise<{ id: string
 
         {/* Tasks */}
         <div ref={tasksRef}>
-          <p className="mb-2 text-sm font-semibold uppercase tracking-wider text-text-secondary">Checklist</p>
+          <div className="mb-2 flex items-center justify-between">
+            <p className="text-sm font-semibold uppercase tracking-wider text-text-secondary">Checklist</p>
+            {!showAddTask && (
+              <button
+                onClick={() => setShowAddTask(true)}
+                className="flex items-center gap-1 text-[12px] font-semibold text-primary"
+              >
+                <Plus size={14} />
+                Add Task
+              </button>
+            )}
+          </div>
           <Card className="divide-y divide-border-light">
-            {tasks.length === 0 && (
-              <p className="py-3 text-[13px] text-text-tertiary text-center">No tasks for this job.</p>
+            {tasks.length === 0 && !showAddTask && (
+              <p className="py-3 text-[13px] text-text-tertiary text-center">No tasks for this job yet.</p>
             )}
             {tasks.map((task) => (
               <button
@@ -443,6 +523,41 @@ export default function JobDetailPage({ params }: { params: Promise<{ id: string
                 </div>
               </button>
             ))}
+            {showAddTask && (
+              <div className="py-3 space-y-2">
+                <input
+                  autoFocus
+                  type="text"
+                  value={newTaskLabel}
+                  onChange={(e) => setNewTaskLabel(e.target.value)}
+                  placeholder="Task label (required)"
+                  className="w-full rounded-lg border border-border bg-surface-secondary px-3 py-2.5 text-[13px] text-text-primary placeholder:text-text-tertiary focus:outline-none focus:border-primary"
+                />
+                <input
+                  type="text"
+                  value={newTaskNotes}
+                  onChange={(e) => setNewTaskNotes(e.target.value)}
+                  placeholder="Notes (optional)"
+                  className="w-full rounded-lg border border-border bg-surface-secondary px-3 py-2.5 text-[13px] text-text-primary placeholder:text-text-tertiary focus:outline-none focus:border-primary"
+                />
+                {addTaskError && (
+                  <p className="text-[12px] text-error">{addTaskError}</p>
+                )}
+                <div className="flex gap-2">
+                  <Button
+                    variant="primary"
+                    size="sm"
+                    onClick={addTask}
+                    disabled={savingTask || !newTaskLabel.trim()}
+                  >
+                    {savingTask ? "Saving…" : "Save Task"}
+                  </Button>
+                  <Button variant="ghost" size="sm" onClick={cancelAddTask} disabled={savingTask}>
+                    Cancel
+                  </Button>
+                </div>
+              </div>
+            )}
           </Card>
         </div>
 
