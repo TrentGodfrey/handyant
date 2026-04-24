@@ -71,10 +71,10 @@ export default function AccountPage() {
   const displayedJobs = showAllJobs ? pastJobs : pastJobs.slice(0, 2);
 
   return (
-    <div className="min-h-screen bg-background pb-28">
+    <div className="min-h-screen bg-background pb-28 lg:pb-8">
       {/* Profile hero */}
-      <div className="bg-surface border-b border-border px-5 pt-14 lg:pt-8 pb-6">
-        <div className="flex items-start justify-between mb-5">
+      <div className="bg-surface border-b border-border px-5 pt-14 pb-6 lg:px-8 lg:pt-6 lg:pb-5 lg:rounded-2xl lg:border lg:mt-6 lg:shadow-sm">
+        <div className="flex items-start justify-between mb-5 lg:mb-4">
           <div className="flex items-center gap-4">
             <div className="relative">
               <div className="flex h-[62px] w-[62px] items-center justify-center rounded-full bg-primary text-[22px] font-bold text-white shadow-[0_2px_12px_rgba(37,99,235,0.3)]">
@@ -103,7 +103,7 @@ export default function AccountPage() {
         </div>
 
         {/* Quick stats */}
-        <div className="grid grid-cols-3 gap-2">
+        <div className="grid grid-cols-3 gap-2 lg:gap-3 lg:max-w-md">
           {[
             { label: "Total Visits", value: !mounted ? "-" : isDemo ? "12" : String(pastJobs.length), icon: Calendar, color: "text-primary", bg: "bg-primary-50" },
             { label: "Hours Used", value: !mounted ? "-" : isDemo ? "24h" : `${pastJobs.reduce((acc, j) => acc + parseFloat(j.hours), 0)}h`, icon: Clock, color: "text-accent-teal", bg: "bg-[#F0FDFA]" },
@@ -120,9 +120,9 @@ export default function AccountPage() {
         </div>
       </div>
 
-      <div className="px-5 py-5 space-y-6">
+      <div className="px-5 py-5 space-y-6 lg:px-0 lg:py-6 lg:space-y-7">
         {/* Chat CTA */}
-        <Link href="/messages">
+        <Link href="/messages" className="block">
           <Card className="flex items-center gap-4 border border-primary-100 bg-gradient-to-r from-primary-50 to-surface">
             <div className="relative shrink-0">
               <div className="flex h-12 w-12 items-center justify-center rounded-full bg-primary shadow-[0_2px_10px_rgba(37,99,235,0.25)]">

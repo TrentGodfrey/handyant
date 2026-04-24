@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import Link from "next/link";
+import dynamic from "next/dynamic";
 import Card from "@/components/Card";
 import Button from "@/components/Button";
 import {
@@ -21,28 +22,39 @@ import {
   ToggleLeft,
   ToggleRight,
   ChevronRight,
+  Coffee,
 } from "lucide-react";
 import { useDemoMode } from "@/lib/useDemoMode";
 
-// ── DFW City Zones (x, y within 420x310 SVG viewport) ──
+// Lazy-loaded Leaflet map (no SSR — Leaflet needs `window`)
+const ServiceAreaMap = dynamic(() => import("@/components/ServiceAreaMap"), {
+  ssr: false,
+  loading: () => (
+    <div className="flex h-[320px] items-center justify-center bg-[#E8EDF2] rounded-xl">
+      <div className="h-6 w-6 border-2 border-primary border-t-transparent rounded-full animate-spin" />
+    </div>
+  ),
+});
+
+// ── DFW City Zones (real lat/lng) ──
 const DFW_CITIES = [
-  { id: "denton",       name: "Denton",       x: 82,  y: 28  },
-  { id: "justin",       name: "Justin",        x: 82,  y: 78  },
-  { id: "keller",       name: "Keller",        x: 108, y: 128 },
-  { id: "southlake",    name: "Southlake",     x: 158, y: 118 },
-  { id: "fort-worth",   name: "Fort Worth",    x: 95,  y: 205 },
-  { id: "grapevine",    name: "Grapevine",     x: 178, y: 162 },
-  { id: "arlington",    name: "Arlington",     x: 168, y: 220 },
-  { id: "irving",       name: "Irving",        x: 220, y: 192 },
-  { id: "frisco",       name: "Frisco",        x: 248, y: 44  },
-  { id: "mckinney",     name: "McKinney",      x: 335, y: 36  },
-  { id: "allen",        name: "Allen",         x: 322, y: 86  },
-  { id: "plano",        name: "Plano",         x: 262, y: 96  },
-  { id: "richardson",   name: "Richardson",    x: 300, y: 140 },
-  { id: "garland",      name: "Garland",       x: 350, y: 168 },
-  { id: "dallas",       name: "Dallas",        x: 268, y: 188 },
-  { id: "mesquite",     name: "Mesquite",      x: 362, y: 212 },
-  { id: "waxahachie",   name: "Waxahachie",    x: 248, y: 282 },
+  { id: "denton",       name: "Denton",      lat: 33.2148, lng: -97.1331 },
+  { id: "justin",       name: "Justin",      lat: 33.0848, lng: -97.2961 },
+  { id: "keller",       name: "Keller",      lat: 32.9346, lng: -97.2289 },
+  { id: "southlake",    name: "Southlake",   lat: 32.9412, lng: -97.1342 },
+  { id: "fort-worth",   name: "Fort Worth",  lat: 32.7555, lng: -97.3308 },
+  { id: "grapevine",    name: "Grapevine",   lat: 32.9343, lng: -97.0780 },
+  { id: "arlington",    name: "Arlington",   lat: 32.7357, lng: -97.1081 },
+  { id: "irving",       name: "Irving",      lat: 32.8140, lng: -96.9489 },
+  { id: "frisco",       name: "Frisco",      lat: 33.1507, lng: -96.8236 },
+  { id: "mckinney",     name: "McKinney",    lat: 33.1972, lng: -96.6398 },
+  { id: "allen",        name: "Allen",       lat: 33.1031, lng: -96.6705 },
+  { id: "plano",        name: "Plano",       lat: 33.0198, lng: -96.6989 },
+  { id: "richardson",   name: "Richardson",  lat: 32.9483, lng: -96.7299 },
+  { id: "garland",      name: "Garland",     lat: 32.9126, lng: -96.6389 },
+  { id: "dallas",       name: "Dallas",      lat: 32.7767, lng: -96.7970 },
+  { id: "mesquite",     name: "Mesquite",    lat: 32.7668, lng: -96.5992 },
+  { id: "waxahachie",   name: "Waxahachie",  lat: 32.3865, lng: -96.8485 },
 ];
 
 const DEFAULT_ACTIVE = ["justin", "plano", "frisco", "allen", "mckinney", "richardson", "southlake", "keller"];
@@ -65,7 +77,9 @@ const TIME_OPTIONS = [
 
 type EditableField = "name" | "owner" | "phone" | "email" | null;
 
-type WorkingHours = Record<string, { start: string; end: string; enabled: boolean }>;
+type DayHours = { start: string; end: string; enabled: boolean };
+type LunchBreak = { enabled: boolean; start: string; end: string };
+type WorkingHours = Record<string, DayHours> & { lunch?: LunchBreak };
 type NotifyPrefs = {
   jobReminders?: boolean;
   leadAlerts?: boolean;
@@ -77,6 +91,8 @@ type NotifyPrefs = {
 
 const cityNameToId = new Map(DFW_CITIES.map((c) => [c.name.toLowerCase(), c.id]));
 
+const DEFAULT_LUNCH: LunchBreak = { enabled: true, start: "12:00", end: "13:00" };
+
 const DEFAULT_HOURS: WorkingHours = {
   mon: { start: "08:00", end: "17:00", enabled: true },
   tue: { start: "08:00", end: "17:00", enabled: true },
@@ -85,6 +101,7 @@ const DEFAULT_HOURS: WorkingHours = {
   fri: { start: "08:00", end: "17:00", enabled: true },
   sat: { start: "09:00", end: "13:00", enabled: false },
   sun: { start: "09:00", end: "13:00", enabled: false },
+  lunch: DEFAULT_LUNCH,
 };
 
 function format12h(h24: string): string {
@@ -300,7 +317,10 @@ export default function SettingsPage() {
   function updateAllStartTimes(time: string) {
     setWorkingHours((prev) => {
       const next: WorkingHours = { ...prev };
-      for (const k of Object.keys(next)) next[k] = { ...next[k], start: time };
+      for (const { key } of WEEK_DAYS) {
+        const day = next[key] ?? DEFAULT_HOURS[key];
+        next[key] = { ...day, start: time };
+      }
       void persistWorkingHours(next);
       return next;
     });
@@ -309,7 +329,28 @@ export default function SettingsPage() {
   function updateAllEndTimes(time: string) {
     setWorkingHours((prev) => {
       const next: WorkingHours = { ...prev };
-      for (const k of Object.keys(next)) next[k] = { ...next[k], end: time };
+      for (const { key } of WEEK_DAYS) {
+        const day = next[key] ?? DEFAULT_HOURS[key];
+        next[key] = { ...day, end: time };
+      }
+      void persistWorkingHours(next);
+      return next;
+    });
+  }
+
+  function toggleLunch() {
+    setWorkingHours((prev) => {
+      const cur = prev.lunch ?? DEFAULT_LUNCH;
+      const next: WorkingHours = { ...prev, lunch: { ...cur, enabled: !cur.enabled } };
+      void persistWorkingHours(next);
+      return next;
+    });
+  }
+
+  function updateLunchTime(which: "start" | "end", time: string) {
+    setWorkingHours((prev) => {
+      const cur = prev.lunch ?? DEFAULT_LUNCH;
+      const next: WorkingHours = { ...prev, lunch: { ...cur, [which]: time } };
       void persistWorkingHours(next);
       return next;
     });
@@ -346,6 +387,7 @@ export default function SettingsPage() {
     workingHours[activeDayKeys[0] ?? "mon"]?.start ?? DEFAULT_HOURS.mon.start;
   const sharedEnd =
     workingHours[activeDayKeys[0] ?? "mon"]?.end ?? DEFAULT_HOURS.mon.end;
+  const lunch = workingHours.lunch ?? DEFAULT_LUNCH;
 
   if (!mounted || loading) {
     return (
@@ -445,62 +487,13 @@ export default function SettingsPage() {
               <span className="font-semibold text-primary">{activeCities.size} active</span>
             </p>
 
-            {/* SVG Map */}
-            <div className="rounded-xl overflow-hidden border border-border bg-[#F0F4F8]">
-              <svg
-                viewBox="0 0 420 310"
-                className="w-full"
-                style={{ touchAction: "manipulation", maxHeight: "310px" }}
-              >
-                <rect x="18" y="12" width="386" height="286" rx="14" fill="#E8EDF2" stroke="#C8D0DA" strokeWidth="1" />
-
-                <line x1="88" y1="12" x2="88" y2="298" stroke="#C8D0DA" strokeWidth="1.5" strokeDasharray="5 4" />
-                <line x1="265" y1="12" x2="265" y2="298" stroke="#C8D0DA" strokeWidth="1.5" strokeDasharray="5 4" />
-                <line x1="18" y1="195" x2="404" y2="195" stroke="#C8D0DA" strokeWidth="1.5" strokeDasharray="5 4" />
-                <line x1="108" y1="128" x2="340" y2="86" stroke="#C8D0DA" strokeWidth="1" strokeDasharray="4 5" opacity="0.5" />
-
-                <circle cx="82" cy="78" r="28" fill="#EEF2FF" stroke="#A5B4FC" strokeWidth="1.5" opacity="0.6" />
-
-                {DFW_CITIES.map((city) => {
-                  const active = activeCities.has(city.id);
-                  const r = 20;
-                  const words = city.name.split(" ");
-                  return (
-                    <g key={city.id} onClick={() => toggleCity(city.id)} style={{ cursor: "pointer" }}>
-                      <circle cx={city.x} cy={city.y} r={r + 6} fill="transparent" />
-                      <circle
-                        cx={city.x}
-                        cy={city.y}
-                        r={r}
-                        fill={active ? "#2563EB" : "#E5E7EB"}
-                        stroke={active ? "#1D4ED8" : "#D1D5DB"}
-                        strokeWidth={active ? "2" : "1"}
-                        style={{ filter: active ? "drop-shadow(0 2px 4px rgba(37,99,235,0.4))" : "none", transition: "fill 0.15s" }}
-                      />
-                      {words.length === 1 ? (
-                        <text x={city.x} y={city.y + 1} textAnchor="middle" dominantBaseline="middle"
-                          fontSize="7.5" fontWeight="700" fill={active ? "white" : "#6B7280"}
-                          style={{ userSelect: "none", pointerEvents: "none" }}>
-                          {city.name}
-                        </text>
-                      ) : (
-                        <>
-                          <text x={city.x} y={city.y - 3} textAnchor="middle" dominantBaseline="middle"
-                            fontSize="7" fontWeight="700" fill={active ? "white" : "#6B7280"}
-                            style={{ userSelect: "none", pointerEvents: "none" }}>
-                            {words[0]}
-                          </text>
-                          <text x={city.x} y={city.y + 6} textAnchor="middle" dominantBaseline="middle"
-                            fontSize="7" fontWeight="700" fill={active ? "white" : "#6B7280"}
-                            style={{ userSelect: "none", pointerEvents: "none" }}>
-                            {words[1]}
-                          </text>
-                        </>
-                      )}
-                    </g>
-                  );
-                })}
-              </svg>
+            {/* Interactive Leaflet map */}
+            <div className="rounded-xl overflow-hidden border border-border">
+              <ServiceAreaMap
+                cities={DFW_CITIES}
+                activeIds={activeCities}
+                onToggle={toggleCity}
+              />
             </div>
 
             {/* Active city chips */}
@@ -556,18 +549,31 @@ export default function SettingsPage() {
               <label className={labelCls}>Working Days</label>
               <div className="flex gap-1.5">
                 {WEEK_DAYS.map(({ key, label }) => {
-                  const on = workingHours[key]?.enabled ?? false;
+                  const day = workingHours[key];
+                  const on = day?.enabled ?? false;
                   return (
                     <button
                       key={key}
                       onClick={() => toggleDay(key)}
-                      className={`flex flex-1 flex-col items-center gap-0.5 rounded-xl py-2.5 text-center transition-all duration-150 border-2 ${
+                      aria-pressed={on}
+                      title={on ? `${label}: ${format12h(day?.start ?? "08:00")} – ${format12h(day?.end ?? "17:00")}` : `${label}: off`}
+                      className={`group relative flex flex-1 flex-col items-center justify-center gap-0.5 rounded-xl py-3 text-center transition-all duration-200 border ${
                         on
-                          ? "border-primary bg-primary text-white shadow-[0_2px_8px_rgba(37,99,235,0.22)]"
-                          : "border-border bg-surface text-text-tertiary"
+                          ? "border-primary bg-gradient-to-b from-primary to-primary-dark text-white shadow-[0_4px_12px_rgba(37,99,235,0.32)] scale-[1.04]"
+                          : "border-border bg-surface text-text-tertiary opacity-70 hover:opacity-100 hover:border-primary/40 hover:bg-primary-50 hover:text-primary"
                       }`}
                     >
-                      <span className="text-[10px] font-bold leading-none">{label}</span>
+                      {on && (
+                        <span className="absolute -top-1 -right-1 flex h-3.5 w-3.5 items-center justify-center rounded-full bg-success ring-2 ring-surface">
+                          <Check size={8} className="text-white" strokeWidth={3.5} />
+                        </span>
+                      )}
+                      <span className="text-[11px] font-bold leading-none uppercase tracking-wide">
+                        {label}
+                      </span>
+                      <span className={`text-[9px] font-medium leading-none mt-1 ${on ? "text-white/85" : "text-text-tertiary/70"}`}>
+                        {on ? format12h(day?.start ?? "08:00").replace(":00 ", " ") : "Off"}
+                      </span>
                     </button>
                   );
                 })}
@@ -606,6 +612,61 @@ export default function SettingsPage() {
               <p className="mt-2 text-[11px] text-text-tertiary">
                 Customers can only book within these hours
               </p>
+            </div>
+
+            {/* Lunch Break */}
+            <div className="border-t border-border pt-4">
+              <div className="flex items-center justify-between mb-3">
+                <div className="flex items-center gap-2">
+                  <div className="flex h-7 w-7 items-center justify-center rounded-lg bg-warning-light">
+                    <Coffee size={13} className="text-warning" />
+                  </div>
+                  <div>
+                    <p className="text-[13px] font-semibold text-text-primary leading-none">Lunch Break</p>
+                    <p className="text-[11px] text-text-tertiary mt-0.5">Block time for a midday break</p>
+                  </div>
+                </div>
+                <button
+                  onClick={toggleLunch}
+                  className="shrink-0 transition-colors"
+                  aria-label="Toggle lunch break"
+                >
+                  {lunch.enabled ? (
+                    <ToggleRight size={32} className="text-primary" />
+                  ) : (
+                    <ToggleLeft size={32} className="text-text-tertiary" />
+                  )}
+                </button>
+              </div>
+
+              {lunch.enabled && (
+                <div className="grid grid-cols-2 gap-3 animate-fade-in">
+                  <div>
+                    <p className="text-[11px] text-text-tertiary mb-1">Start</p>
+                    <select
+                      value={lunch.start}
+                      onChange={(e) => updateLunchTime("start", e.target.value)}
+                      className="w-full rounded-xl border border-border bg-surface px-3 py-2.5 text-[14px] font-semibold text-text-primary focus:outline-none focus:border-primary"
+                    >
+                      {TIME_OPTIONS.map((t) => (
+                        <option key={t} value={t}>{format12h(t)}</option>
+                      ))}
+                    </select>
+                  </div>
+                  <div>
+                    <p className="text-[11px] text-text-tertiary mb-1">End</p>
+                    <select
+                      value={lunch.end}
+                      onChange={(e) => updateLunchTime("end", e.target.value)}
+                      className="w-full rounded-xl border border-border bg-surface px-3 py-2.5 text-[14px] font-semibold text-text-primary focus:outline-none focus:border-primary"
+                    >
+                      {TIME_OPTIONS.map((t) => (
+                        <option key={t} value={t}>{format12h(t)}</option>
+                      ))}
+                    </select>
+                  </div>
+                </div>
+              )}
             </div>
           </Card>
         </section>
