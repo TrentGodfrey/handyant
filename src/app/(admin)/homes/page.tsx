@@ -1,11 +1,34 @@
 "use client";
 
-import { useState, useMemo } from "react";
+import { useState, useMemo, useEffect } from "react";
 import Card from "@/components/Card";
 import Link from "next/link";
 import { Search, MapPin, Calendar, Wrench, Plus, Home, UserPlus, Building2 } from "lucide-react";
+import { useDemoMode } from "@/lib/useDemoMode";
 
-interface Home {
+interface ApiHome {
+  id: string;
+  address: string;
+  city: string | null;
+  state: string | null;
+  zip: string | null;
+  customer: {
+    id: string;
+    name: string;
+    phone: string | null;
+    email: string | null;
+    avatarUrl: string | null;
+    subscriptions: Array<{ id: string; plan: string; status: string | null }>;
+  };
+  bookings: Array<{ id: string; status: string; scheduledDate: string }>;
+  photos: unknown[];
+  lastVisit: string | null;
+  openTasks: number;
+  totalVisits: number;
+  subscriptionType: string | null;
+}
+
+interface HomeRow {
   id: string;
   name: string;
   address: string;
@@ -16,7 +39,7 @@ interface Home {
   initials: string;
 }
 
-const homes: Home[] = [
+const DEMO_HOMES: HomeRow[] = [
   {
     id: "1",
     name: "Sarah Mitchell",
@@ -79,10 +102,73 @@ const homes: Home[] = [
   },
 ];
 
+function initialsFor(name: string): string {
+  const parts = name.trim().split(/\s+/);
+  if (parts.length === 0) return "?";
+  if (parts.length === 1) return parts[0].slice(0, 2).toUpperCase();
+  return (parts[0][0] + parts[parts.length - 1][0]).toUpperCase();
+}
+
+function formatDateShort(iso: string | null): string {
+  if (!iso) return "—";
+  try {
+    const d = new Date(iso);
+    return d.toLocaleDateString("en-US", { month: "short", day: "numeric" });
+  } catch {
+    return "—";
+  }
+}
+
+function apiHomeToRow(h: ApiHome): HomeRow {
+  const cityPart = h.city ? `, ${h.city}` : "";
+  return {
+    id: h.id,
+    name: h.customer.name,
+    address: `${h.address}${cityPart}`,
+    type: h.subscriptionType ? "Subscription" : "One-Time",
+    lastVisit: formatDateShort(h.lastVisit),
+    openTasks: h.openTasks,
+    totalVisits: h.totalVisits,
+    initials: initialsFor(h.customer.name),
+  };
+}
+
 export default function HomesPage() {
   const [search, setSearch] = useState("");
+  const [homes, setHomes] = useState<HomeRow[]>([]);
+  const [loading, setLoading] = useState(true);
+
+  const { isDemo, mounted } = useDemoMode();
+
+  useEffect(() => {
+    if (!mounted) return;
+    if (isDemo) {
+      setHomes(DEMO_HOMES);
+      setLoading(false);
+      return;
+    }
+    setLoading(true);
+    const url = search.trim() ? `/api/admin/homes?q=${encodeURIComponent(search.trim())}` : "/api/admin/homes";
+    const ctrl = new AbortController();
+    fetch(url, { signal: ctrl.signal })
+      .then((r) => r.json())
+      .then((data) => {
+        if (Array.isArray(data)) {
+          setHomes(data.map(apiHomeToRow));
+        } else {
+          setHomes([]);
+        }
+      })
+      .catch((err) => {
+        if (err?.name !== "AbortError") setHomes([]);
+      })
+      .finally(() => setLoading(false));
+    return () => ctrl.abort();
+  }, [isDemo, search, mounted]);
 
   const filtered = useMemo(() => {
+    // For demo mode, do client-side filtering. For API mode, results already filtered server-side.
+    if (!isDemo) return homes;
     if (!search.trim()) return homes;
     const q = search.toLowerCase();
     return homes.filter(
@@ -90,11 +176,12 @@ export default function HomesPage() {
         h.name.toLowerCase().includes(q) ||
         h.address.toLowerCase().includes(q)
     );
-  }, [search]);
+  }, [search, homes, isDemo]);
 
-  const hasAnyClients = homes.length > 0;
-  const noSearchResults = search.trim() !== "" && filtered.length === 0;
+  const hasAnyClients = homes.length > 0 || (search.trim() !== "" && !isDemo);
+  const noSearchResults = search.trim() !== "" && filtered.length === 0 && !loading;
   const showClientList = filtered.length > 0;
+  const subscriptionsCount = homes.filter((h) => h.type === "Subscription").length;
 
   return (
     <div className="px-5 pt-14 lg:pt-8 pb-24 bg-background min-h-screen">
@@ -141,15 +228,22 @@ export default function HomesPage() {
             <span className="text-[12px] text-text-tertiary">matching &ldquo;{search}&rdquo;</span>
           )}
           <span className="ml-auto text-[11px] text-text-tertiary">
-            {homes.filter((h) => h.type === "Subscription").length} subscriptions
+            {subscriptionsCount} subscriptions
           </span>
+        </div>
+      )}
+
+      {/* Loading state */}
+      {loading && !showClientList && (
+        <div className="flex items-center justify-center py-16">
+          <div className="h-6 w-6 border-2 border-primary border-t-transparent rounded-full animate-spin" />
         </div>
       )}
 
       {/* ── Empty States ────────────────────────────────────────────────── */}
 
       {/* No clients at all */}
-      {!hasAnyClients && (
+      {!loading && !hasAnyClients && (
         <div className="flex flex-col items-center justify-center py-20 text-center">
           {/* Icon composition */}
           <div className="relative mb-5">

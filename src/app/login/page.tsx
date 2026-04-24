@@ -28,7 +28,7 @@ export default function LoginPage() {
     if (res?.error) {
       setError("Invalid email or password");
     } else {
-      router.push("/");
+      router.push("/home");
       router.refresh();
     }
   }
@@ -47,7 +47,7 @@ export default function LoginPage() {
 
         {/* Google */}
         <button
-          onClick={() => signIn("google", { callbackUrl: "/" })}
+          onClick={() => signIn("google", { callbackUrl: "/home" })}
           className="w-full flex items-center justify-center gap-3 px-4 py-3 rounded-xl border border-border bg-white text-foreground font-medium hover:bg-gray-50 transition"
         >
           <svg width="20" height="20" viewBox="0 0 24 24">

@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import Card from "@/components/Card";
 import StatusBadge from "@/components/StatusBadge";
 import Button from "@/components/Button";
@@ -22,8 +22,58 @@ import {
   TrendingDown,
   Settings,
 } from "lucide-react";
+import { useDemoMode } from "@/lib/useDemoMode";
 
-const todaySchedule = [
+type ScheduleItem = {
+  id: string | number;
+  time: string;
+  duration: string;
+  client: string;
+  address: string;
+  tasks: string[];
+  status: "confirmed" | "pending" | "completed" | "in-progress" | "needs-parts" | "scheduled" | "cancelled";
+  partsNeeded: boolean;
+};
+
+type MonthlyMetric = {
+  label: string;
+  value: string;
+  trend: string;
+  positive: boolean;
+  icon: typeof Wrench;
+  sparkline: number[];
+};
+
+type StatsResponse = {
+  today: {
+    jobs: number;
+    hours: number;
+    partsToBuy: number;
+    schedule: Array<{
+      id: string;
+      scheduledTime: string;
+      durationMinutes: number | null;
+      status: string;
+      description: string | null;
+      tasks: { label: string }[];
+      parts: { id: string }[];
+      customer: { name: string } | null;
+      home: { address: string; city: string | null } | null;
+    }>;
+  };
+  week: { jobs: number; hours: number; revenue: number };
+  month: {
+    jobs: number;
+    completed: number;
+    revenue: number;
+    tasksPerVisit: number;
+    avgRating: number;
+    reviewCount: number;
+  };
+  partsNeeded: { id: string; item: string; qty: number; bookingId: string; client: string }[];
+};
+
+const demoTodaySchedule: ScheduleItem[] = [
   {
     id: 1,
     time: "9:00 AM",
@@ -31,7 +81,7 @@ const todaySchedule = [
     client: "Sarah Mitchell",
     address: "4821 Oak Hollow Dr, Plano",
     tasks: ["Replace kitchen faucet", "Fix garage door sensor"],
-    status: "confirmed" as const,
+    status: "confirmed",
     partsNeeded: true,
   },
   {
@@ -41,7 +91,7 @@ const todaySchedule = [
     client: "Robert Chen",
     address: "1205 Elm Creek Ct, Frisco",
     tasks: ["Install smart thermostat", "Replace 3 outlets"],
-    status: "confirmed" as const,
+    status: "confirmed",
     partsNeeded: false,
   },
   {
@@ -51,7 +101,7 @@ const todaySchedule = [
     client: "Maria Garcia",
     address: "890 Sunset Ridge, Roanoke",
     tasks: ["Drywall repair (2 holes)", "Touch-up paint"],
-    status: "pending" as const,
+    status: "pending",
     partsNeeded: false,
   },
   {
@@ -61,7 +111,7 @@ const todaySchedule = [
     client: "Team Meeting",
     address: "",
     tasks: ["Weekly sync"],
-    status: "confirmed" as const,
+    status: "confirmed",
     partsNeeded: false,
   },
 ];
@@ -83,14 +133,20 @@ const pendingOffers = [
   },
 ];
 
-const monthlyMetrics = [
+const demoMonthlyMetrics: MonthlyMetric[] = [
   { label: "Tasks / Visit", value: "3.2", trend: "+0.4", positive: true, icon: Wrench, sparkline: [2.8, 3.0, 2.9, 3.1, 3.2] },
   { label: "Avg Rating", value: "4.9", trend: "+0.1", positive: true, icon: Star, sparkline: [4.8, 4.8, 4.9, 4.9, 4.9] },
   { label: "Revenue", value: "$8.2k", trend: "+12%", positive: true, icon: TrendingUp, sparkline: [6800, 7200, 7500, 7800, 8200] },
   { label: "Total Visits", value: "18", trend: "+3", positive: true, icon: Calendar, sparkline: [14, 15, 16, 17, 18] },
 ];
 
-/* ── Mini Sparkline for Monthly Metrics ── */
+const demoKpis = {
+  jobs: "4",
+  hours: "7.5",
+  partsToBuy: "2",
+  weekRevenue: "$2.4k",
+};
+
 function MiniSparkline({ data, positive }: { data: number[]; positive: boolean }) {
   const min = Math.min(...data);
   const max = Math.max(...data);
@@ -120,7 +176,6 @@ function MiniSparkline({ data, positive }: { data: number[]; positive: boolean }
   );
 }
 
-/* ── Revenue Trend Chart ── */
 function RevenueTrendChart() {
   const [period, setPeriod] = useState<"week" | "month">("week");
   const weeklyRevenue = [1800, 2100, 1950, 2400, 2200, 2650, 2100, 2400];
@@ -145,10 +200,8 @@ function RevenueTrendChart() {
 
   const linePoints = points.map((p) => `${p.x},${p.y}`).join(" ");
 
-  // Area path: line + close to bottom
   const areaPath = `M${points[0].x},${points[0].y} ${points.map((p) => `L${p.x},${p.y}`).join(" ")} L${points[points.length - 1].x},${padTop + plotH} L${points[0].x},${padTop + plotH} Z`;
 
-  // Grid lines at $1k, $2k, $3k
   const gridLines = [1000, 2000, 3000].map((val) => {
     const y = padTop + plotH - ((val - minVal) / (maxVal - minVal)) * plotH;
     return { val, y };
@@ -159,7 +212,6 @@ function RevenueTrendChart() {
   return (
     <div className="mb-6">
       <Card padding="md">
-        {/* Header */}
         <div className="flex items-center justify-between mb-3">
           <div>
             <h3 className="text-[15px] font-semibold text-text-primary">Revenue Trend</h3>
@@ -189,7 +241,6 @@ function RevenueTrendChart() {
           </div>
         </div>
 
-        {/* SVG Chart */}
         <svg
           viewBox={`0 0 ${chartW} ${chartH}`}
           className="w-full"
@@ -203,7 +254,6 @@ function RevenueTrendChart() {
             </linearGradient>
           </defs>
 
-          {/* Grid lines */}
           {gridLines.map((g) => (
             <line
               key={g.val}
@@ -219,10 +269,8 @@ function RevenueTrendChart() {
             />
           ))}
 
-          {/* Area fill */}
           <path d={areaPath} fill="url(#revGradient)" />
 
-          {/* Line */}
           <polyline
             points={linePoints}
             fill="none"
@@ -232,11 +280,9 @@ function RevenueTrendChart() {
             strokeLinejoin="round"
           />
 
-          {/* Latest data point dot */}
           <circle cx={lastPoint.x} cy={lastPoint.y} r={3.5} fill="#2563EB" />
           <circle cx={lastPoint.x} cy={lastPoint.y} r={6} fill="#2563EB" opacity={0.15} />
 
-          {/* X-axis labels */}
           {weeklyRevenue.map((_, i) => {
             const x = padLeft + (i / (weeklyRevenue.length - 1)) * plotW;
             return (
@@ -255,7 +301,6 @@ function RevenueTrendChart() {
           })}
         </svg>
 
-        {/* Summary stats */}
         <div className="mt-3 flex items-center gap-4 flex-wrap">
           <div>
             <span className="text-[13px] font-bold text-primary">This Week: $2,400</span>
@@ -274,7 +319,126 @@ function RevenueTrendChart() {
   );
 }
 
+function formatHours(h: number) {
+  if (!h) return "0";
+  return h % 1 === 0 ? String(h) : h.toFixed(1);
+}
+
+function formatRevenue(n: number) {
+  if (n >= 1000) return `$${(n / 1000).toFixed(1)}k`;
+  return `$${Math.round(n)}`;
+}
+
+function formatTime(iso: string) {
+  return new Date(iso).toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit" });
+}
+
+function formatDuration(mins: number | null) {
+  if (!mins) return "";
+  if (mins < 60) return `${mins} min`;
+  const h = mins / 60;
+  return h % 1 === 0 ? `${h}h` : `${h.toFixed(1)}h`;
+}
+
+function isValidStatus(s: string): s is ScheduleItem["status"] {
+  return ["confirmed", "pending", "completed", "in-progress", "needs-parts", "scheduled", "cancelled"].includes(s);
+}
+
 export default function AdminDashboard() {
+  const [stats, setStats] = useState<StatsResponse | null>(null);
+  const [loading, setLoading] = useState(true);
+
+  const { isDemo, mounted } = useDemoMode();
+
+  useEffect(() => {
+    if (!mounted) return;
+    if (isDemo) {
+      setLoading(false);
+      return;
+    }
+    fetch("/api/admin/stats")
+      .then((r) => r.json())
+      .then((data) => setStats(data))
+      .catch(() => setStats(null))
+      .finally(() => setLoading(false));
+  }, [isDemo, mounted]);
+
+  const todaySchedule: ScheduleItem[] = isDemo
+    ? demoTodaySchedule
+    : (stats?.today.schedule ?? []).map((b) => {
+        const addressParts = [b.home?.address, b.home?.city].filter(Boolean);
+        return {
+          id: b.id,
+          time: formatTime(b.scheduledTime),
+          duration: formatDuration(b.durationMinutes),
+          client: b.customer?.name ?? "Unknown",
+          address: addressParts.join(", "),
+          tasks: b.tasks.map((t) => t.label),
+          status: isValidStatus(b.status) ? b.status : "pending",
+          partsNeeded: (b.parts?.length ?? 0) > 0,
+        };
+      });
+
+  const kpis = isDemo
+    ? demoKpis
+    : {
+        jobs: String(stats?.today.jobs ?? 0),
+        hours: formatHours(stats?.today.hours ?? 0),
+        partsToBuy: String(stats?.today.partsToBuy ?? 0),
+        weekRevenue: formatRevenue(stats?.week.revenue ?? 0),
+      };
+
+  const monthlyMetrics: MonthlyMetric[] = isDemo
+    ? demoMonthlyMetrics
+    : [
+        {
+          label: "Tasks / Visit",
+          value: (stats?.month.tasksPerVisit ?? 0).toFixed(1),
+          trend: "—",
+          positive: true,
+          icon: Wrench,
+          sparkline: [2.8, 3.0, 2.9, 3.1, stats?.month.tasksPerVisit ?? 0],
+        },
+        {
+          label: "Avg Rating",
+          value: (stats?.month.avgRating ?? 0).toFixed(1),
+          trend: `${stats?.month.reviewCount ?? 0} reviews`,
+          positive: true,
+          icon: Star,
+          sparkline: [4.8, 4.8, 4.9, 4.9, stats?.month.avgRating ?? 0],
+        },
+        {
+          label: "Revenue",
+          value: formatRevenue(stats?.month.revenue ?? 0),
+          trend: "—",
+          positive: true,
+          icon: TrendingUp,
+          sparkline: [6800, 7200, 7500, 7800, stats?.month.revenue ?? 0],
+        },
+        {
+          label: "Total Visits",
+          value: String(stats?.month.completed ?? 0),
+          trend: `${stats?.month.jobs ?? 0} booked`,
+          positive: true,
+          icon: Calendar,
+          sparkline: [14, 15, 16, 17, stats?.month.completed ?? 0],
+        },
+      ];
+
+  const partsAlert = isDemo
+    ? { item: "Broan 688 fan motor", count: 2 }
+    : stats?.partsNeeded?.[0]
+      ? { item: stats.partsNeeded[0].item, count: stats.partsNeeded.length }
+      : null;
+
+  if (loading) {
+    return (
+      <div className="px-5 pt-14 lg:pt-8 pb-24 flex items-center justify-center min-h-[60vh]">
+        <div className="h-8 w-8 border-2 border-primary border-t-transparent rounded-full animate-spin" />
+      </div>
+    );
+  }
+
   return (
     <div className="px-5 pt-14 lg:pt-8 pb-24">
 
@@ -307,10 +471,10 @@ export default function AdminDashboard() {
       {/* ── KPI Cards ── */}
       <div className="mb-6 grid grid-cols-4 gap-2.5">
         {[
-          { label: "Today's Jobs", value: "4", sub: "jobs", icon: Calendar, iconBg: "bg-primary-50", iconColor: "text-primary" },
-          { label: "Hours", value: "7.5", sub: "booked", icon: Clock, iconBg: "bg-[#EFF9FF]", iconColor: "text-info" },
-          { label: "Parts", value: "2", sub: "to buy", icon: ShoppingCart, iconBg: "bg-warning-light", iconColor: "text-warning" },
-          { label: "This Week", value: "$2.4k", sub: "earned", icon: DollarSign, iconBg: "bg-success-light", iconColor: "text-success" },
+          { label: "Today's Jobs", value: kpis.jobs, sub: "jobs", icon: Calendar, iconBg: "bg-primary-50", iconColor: "text-primary" },
+          { label: "Hours", value: kpis.hours, sub: "booked", icon: Clock, iconBg: "bg-[#EFF9FF]", iconColor: "text-info" },
+          { label: "Parts", value: kpis.partsToBuy, sub: "to buy", icon: ShoppingCart, iconBg: "bg-warning-light", iconColor: "text-warning" },
+          { label: "This Week", value: kpis.weekRevenue, sub: "earned", icon: DollarSign, iconBg: "bg-success-light", iconColor: "text-success" },
         ].map((stat) => (
           <Card key={stat.label} padding="sm" className="flex flex-col items-center text-center gap-1.5">
             <div className={`flex h-8 w-8 items-center justify-center rounded-full ${stat.iconBg}`}>
@@ -326,21 +490,23 @@ export default function AdminDashboard() {
       <RevenueTrendChart />
 
       {/* ── Alert Banner ── */}
-      <div className="mb-6">
-        <div className="flex items-center gap-3 rounded-xl border border-warning/25 bg-warning-light px-4 py-3 shadow-[0_1px_4px_rgba(0,0,0,0.06)]">
-          <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-warning/15">
-            <AlertTriangle size={15} className="text-warning" />
+      {partsAlert && (
+        <div className="mb-6">
+          <div className="flex items-center gap-3 rounded-xl border border-warning/25 bg-warning-light px-4 py-3 shadow-[0_1px_4px_rgba(0,0,0,0.06)]">
+            <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-warning/15">
+              <AlertTriangle size={15} className="text-warning" />
+            </div>
+            <div className="flex-1 min-w-0">
+              <p className="text-[13px] font-semibold text-text-primary">Parts needed before 9 AM</p>
+              <p className="text-[11px] text-text-secondary truncate">{partsAlert.item} · Home Depot Plano</p>
+            </div>
+            <button className="flex items-center gap-1 rounded-lg bg-warning px-2.5 py-1.5 text-[11px] font-semibold text-white shrink-0 active:opacity-80 transition-opacity">
+              <Navigation size={11} />
+              Go
+            </button>
           </div>
-          <div className="flex-1 min-w-0">
-            <p className="text-[13px] font-semibold text-text-primary">Parts needed before 9 AM</p>
-            <p className="text-[11px] text-text-secondary truncate">Broan 688 fan motor · Home Depot Plano</p>
-          </div>
-          <button className="flex items-center gap-1 rounded-lg bg-warning px-2.5 py-1.5 text-[11px] font-semibold text-white shrink-0 active:opacity-80 transition-opacity">
-            <Navigation size={11} />
-            Go
-          </button>
         </div>
-      </div>
+      )}
 
       {/* ── Today's Schedule ── */}
       <div className="mb-7">

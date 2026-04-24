@@ -6,6 +6,7 @@ import { useSession } from "next-auth/react";
 import Card from "@/components/Card";
 import StatusBadge from "@/components/StatusBadge";
 import { ChevronLeft, Download, ChevronRight, Wrench, DollarSign, FileText, CheckCircle } from "lucide-react";
+import { useDemoMode } from "@/lib/useDemoMode";
 
 interface Receipt {
   id: string;
@@ -50,12 +51,13 @@ const DEMO_RECEIPTS: Receipt[] = [
 
 export default function ReceiptsPage() {
   const { data: session } = useSession();
-  const isDemo = typeof document !== "undefined" && document.cookie.includes("demo_mode=true");
+  const { isDemo, mounted } = useDemoMode();
 
   const [receipts, setReceipts] = useState<Receipt[]>([]);
   const [expanded, setExpanded] = useState<string | null>(null);
 
   useEffect(() => {
+    if (!mounted) return;
     if (isDemo) {
       setReceipts(DEMO_RECEIPTS);
       return;
@@ -89,7 +91,7 @@ export default function ReceiptsPage() {
         setReceipts(completed);
       })
       .catch(() => setReceipts([]));
-  }, [isDemo, session]);
+  }, [isDemo, session, mounted]);
 
   const total = receipts.reduce((sum, r) => sum + r.total, 0);
   const thisYear = new Date().getFullYear();

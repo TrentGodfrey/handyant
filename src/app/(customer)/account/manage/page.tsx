@@ -9,6 +9,7 @@ import {
   ChevronLeft, User, Mail, Phone, MapPin, CreditCard,
   Bell, Shield, ChevronRight, Check, Pencil, Trash2, LogOut, Loader2,
 } from "lucide-react";
+import { useDemoMode } from "@/lib/useDemoMode";
 
 const DEMO_USER = {
   name: "Sarah Mitchell",
@@ -19,8 +20,7 @@ const DEMO_USER = {
 export default function AccountManagePage() {
   const { data: session } = useSession();
 
-  const isDemo =
-    typeof document !== "undefined" && document.cookie.includes("demo_mode=true");
+  const { isDemo, mounted } = useDemoMode();
 
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
@@ -38,6 +38,7 @@ export default function AccountManagePage() {
 
   // Fetch user profile on mount
   useEffect(() => {
+    if (!mounted) return;
     if (isDemo) {
       setName(DEMO_USER.name);
       setEmail(DEMO_USER.email);
@@ -62,7 +63,7 @@ export default function AccountManagePage() {
     }
 
     fetchProfile();
-  }, [isDemo]);
+  }, [isDemo, mounted]);
 
   async function handleSave() {
     if (isDemo) {

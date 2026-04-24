@@ -9,6 +9,7 @@ import {
   Calendar, Clock, Camera, ChevronLeft, ChevronRight,
   Upload, X, Check, Repeat, Zap, Info, Sun, Sunset,
 } from "lucide-react";
+import { useDemoMode } from "@/lib/useDemoMode";
 
 // ─── All calendar data (6 weeks) ────────────────────────────────────────────
 
@@ -117,8 +118,7 @@ function BookingPageInner() {
   const searchParams = useSearchParams();
   useSession(); // ensure session is available (used server-side by the API)
 
-  const isDemo =
-    typeof document !== "undefined" && document.cookie.includes("demo_mode=true");
+  const { isDemo } = useDemoMode();
 
   const [step, setStep] = useState(1);
   const [selectedDay, setSelectedDay] = useState<number | null>(null);

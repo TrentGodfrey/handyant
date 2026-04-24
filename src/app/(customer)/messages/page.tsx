@@ -1,8 +1,9 @@
 "use client";
 
-import { useState, useRef, useEffect } from "react";
+import { useState, useRef, useEffect, useCallback } from "react";
 import { useSession } from "next-auth/react";
 import { Send, Camera, Paperclip, ArrowLeft, Phone, MoreVertical, MessageSquare } from "lucide-react";
+import { useDemoMode } from "@/lib/useDemoMode";
 
 interface Message {
   id: string;
@@ -13,7 +14,8 @@ interface Message {
 }
 
 interface Thread {
-  id: string;
+  id: string;                 // conversation id (or "new:<techUserId>" placeholder)
+  techUserId?: string;        // for lazy-creating a conversation
   name: string;
   role: string;
   initials: string;
@@ -25,6 +27,40 @@ interface Thread {
   address: string;
   phone: string;
   messages: Message[];
+}
+
+interface ApiMessage {
+  id: string;
+  text: string;
+  type: string | null;
+  createdAt: string | null;
+  senderId: string;
+  sender?: { id: string; name: string | null };
+}
+
+interface ApiConversationUser {
+  id: string;
+  name: string | null;
+  avatarUrl?: string | null;
+}
+
+interface ApiConversation {
+  id: string;
+  customerId: string;
+  techId: string;
+  customer: ApiConversationUser;
+  tech: ApiConversationUser;
+  messages: Array<ApiMessage & { sender?: { id: string; name: string | null } }>;
+}
+
+interface ApiBookingLite {
+  id: string;
+  scheduledDate: string;
+  scheduledTime: string;
+  status: string;
+  techId: string | null;
+  tech: { id: string; name: string | null; phone: string | null } | null;
+  home: { address: string | null; city: string | null } | null;
 }
 
 const DEMO_THREADS: Thread[] = [
@@ -67,99 +103,286 @@ const DEMO_THREADS: Thread[] = [
   },
 ];
 
+function fmtTime(iso: string | null): string {
+  if (!iso) return "";
+  const d = new Date(iso);
+  const now = new Date();
+  const sameDay = d.toDateString() === now.toDateString();
+  if (sameDay) {
+    return d.toLocaleTimeString([], { hour: "numeric", minute: "2-digit" });
+  }
+  return d.toLocaleDateString([], { month: "short", day: "numeric" });
+}
+
+function fmtMessageTime(iso: string | null): string {
+  if (!iso) return "Just now";
+  const d = new Date(iso);
+  return `${d.toLocaleDateString([], { month: "short", day: "numeric" })}, ${d.toLocaleTimeString([], { hour: "numeric", minute: "2-digit" })}`;
+}
+
+function adaptMessage(m: ApiMessage, customerUserId: string): Message {
+  const isCustomer = m.senderId === customerUserId;
+  const t = (m.type ?? "text") as Message["type"];
+  return {
+    id: m.id,
+    text: m.text,
+    sender: isCustomer ? "customer" : "tech",
+    timestamp: fmtMessageTime(m.createdAt),
+    type: t === "photo" || t === "system" ? t : "text",
+  };
+}
+
 export default function MessagesPage() {
   const { data: session } = useSession();
-  const isDemo = typeof document !== "undefined" && document.cookie.includes("demo_mode=true");
+  const { isDemo, mounted } = useDemoMode();
 
   const [threads, setThreads] = useState<Thread[]>([]);
   const [loading, setLoading] = useState(true);
   const [activeThread, setActiveThread] = useState<Thread | null>(null);
   const [messagesByThread, setMessagesByThread] = useState<Record<string, Message[]>>({});
   const [input, setInput] = useState("");
+  const [sending, setSending] = useState(false);
 
   const userId = (session?.user as Record<string, unknown> | undefined)?.id as string | undefined;
 
-  useEffect(() => {
+  const loadThreads = useCallback(async () => {
     if (isDemo) {
       setThreads(DEMO_THREADS);
       setMessagesByThread(Object.fromEntries(DEMO_THREADS.map((t) => [t.id, t.messages])));
       setLoading(false);
       return;
     }
+    if (!userId) return;
 
-    fetch("/api/messages")
-      .then((r) => r.json())
-      .then((convos) => {
-        if (!Array.isArray(convos) || convos.length === 0) {
-          setThreads([]);
-          setLoading(false);
-          return;
+    try {
+      const [convoRes, bookingsRes] = await Promise.all([
+        fetch("/api/messages").then((r) => r.json()),
+        fetch("/api/bookings").then((r) => r.json()).catch(() => []),
+      ]);
+
+      const conversations: ApiConversation[] = Array.isArray(convoRes) ? convoRes : [];
+      const bookings: ApiBookingLite[] = Array.isArray(bookingsRes) ? bookingsRes : [];
+
+      // Build a map of techId → upcoming visit info
+      const visitsByTech = new Map<string, ApiBookingLite>();
+      for (const b of bookings) {
+        if (!b.techId) continue;
+        if (!["pending", "confirmed", "in_progress"].includes(b.status)) continue;
+        const existing = visitsByTech.get(b.techId);
+        if (!existing || b.scheduledDate < existing.scheduledDate) {
+          visitsByTech.set(b.techId, b);
         }
-        const mapped: Thread[] = convos.map((c: Record<string, unknown>) => {
-          const other = (c as { customerId: string }).customerId === userId
-            ? (c as { tech: { name: string; avatarUrl?: string } }).tech
-            : (c as { customer: { name: string; avatarUrl?: string } }).customer;
-          const msgs = (c as { messages: Array<{ text: string; sender: { id: string; name: string }; createdAt: string }> }).messages;
-          const lastMsg = msgs?.[0];
-          return {
-            id: (c as { id: string }).id,
-            name: other?.name || "Unknown",
-            role: "Handyman",
-            initials: other?.name?.[0]?.toUpperCase() || "?",
-            lastMessage: lastMsg?.text || "",
-            time: lastMsg?.createdAt ? new Date(lastMsg.createdAt as string).toLocaleTimeString([], { hour: "numeric", minute: "2-digit" }) : "",
+      }
+
+      const mapped: Thread[] = conversations.map((c) => {
+        const other = c.customerId === userId ? c.tech : c.customer;
+        const lastMsg = c.messages?.[0];
+        const visit = visitsByTech.get(other.id);
+        return {
+          id: c.id,
+          techUserId: c.techId,
+          name: other?.name ?? "Unknown",
+          role: "Your Handyman",
+          initials: (other?.name?.[0] ?? "?").toUpperCase(),
+          lastMessage: lastMsg?.text ?? "",
+          time: fmtTime(lastMsg?.createdAt ?? null),
+          unread: 0,
+          online: false,
+          nextVisit: visit
+            ? `${new Date(visit.scheduledDate).toLocaleDateString([], { weekday: "short", month: "short", day: "numeric" })}`
+            : "",
+          address: visit?.home?.address ?? "",
+          phone: "",
+          messages: [],
+        };
+      });
+
+      // If the customer has no conversation yet but has a booking with a tech,
+      // surface a placeholder so they can start one.
+      if (mapped.length === 0 && bookings.length > 0) {
+        const bookingWithTech = bookings.find((b) => b.tech);
+        if (bookingWithTech?.tech) {
+          const t = bookingWithTech.tech;
+          mapped.push({
+            id: `new:${t.id}`,
+            techUserId: t.id,
+            name: t.name ?? "Your Handyman",
+            role: "Your Handyman",
+            initials: (t.name?.[0] ?? "?").toUpperCase(),
+            lastMessage: "Start a conversation",
+            time: "",
             unread: 0,
             online: false,
-            nextVisit: "",
-            address: "",
+            nextVisit: bookingWithTech.scheduledDate
+              ? new Date(bookingWithTech.scheduledDate).toLocaleDateString([], { weekday: "short", month: "short", day: "numeric" })
+              : "",
+            address: bookingWithTech.home?.address ?? "",
             phone: "",
             messages: [],
-          };
-        });
-        setThreads(mapped);
-        setMessagesByThread(Object.fromEntries(mapped.map((t) => [t.id, []])));
-        setLoading(false);
-      })
-      .catch(() => {
-        setThreads([]);
-        setLoading(false);
+          });
+        }
+      }
+
+      setThreads(mapped);
+      setMessagesByThread((prev) => {
+        const next = { ...prev };
+        for (const t of mapped) if (!next[t.id]) next[t.id] = [];
+        return next;
       });
+    } catch {
+      setThreads([]);
+    } finally {
+      setLoading(false);
+    }
   }, [isDemo, userId]);
+
+  useEffect(() => {
+    if (!mounted) return;
+    loadThreads();
+  }, [loadThreads, mounted]);
+
   const bottomRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [activeThread, messagesByThread]);
 
-  function sendMessage() {
-    if (!input.trim() || !activeThread) return;
-    const msg: Message = {
-      id: Date.now().toString(),
-      text: input.trim(),
-      sender: "customer",
-      timestamp: "Just now",
-      type: "text",
-    };
-    setMessagesByThread((prev) => ({
-      ...prev,
-      [activeThread.id]: [...(prev[activeThread.id] || []), msg],
-    }));
+  // Load messages whenever a thread is opened (real mode only).
+  useEffect(() => {
+    if (!activeThread || isDemo) return;
+    if (activeThread.id.startsWith("new:")) return; // nothing to fetch yet
+    if (!userId) return;
+    let cancelled = false;
+    fetch(`/api/messages?conversationId=${activeThread.id}`)
+      .then((r) => r.json())
+      .then((data) => {
+        if (cancelled || !Array.isArray(data)) return;
+        setMessagesByThread((prev) => ({
+          ...prev,
+          [activeThread.id]: data.map((m: ApiMessage) => adaptMessage(m, userId)),
+        }));
+      })
+      .catch(() => {});
+    return () => { cancelled = true; };
+  }, [activeThread, isDemo, userId]);
+
+  async function sendMessage() {
+    if (!input.trim() || !activeThread || sending) return;
+    const text = input.trim();
     setInput("");
 
-    setTimeout(() => {
+    if (isDemo) {
+      const msg: Message = {
+        id: Date.now().toString(),
+        text,
+        sender: "customer",
+        timestamp: "Just now",
+        type: "text",
+      };
       setMessagesByThread((prev) => ({
         ...prev,
-        [activeThread.id]: [...(prev[activeThread.id] || []), {
-          id: (Date.now() + 1).toString(),
-          text: activeThread.id === "support"
-            ? "Thanks for reaching out! Someone from our team will follow up shortly."
-            : "Got it, thanks for the heads up! See you Tuesday 👍",
-          sender: "tech",
-          timestamp: "Just now",
-          type: "text",
-        }],
+        [activeThread.id]: [...(prev[activeThread.id] || []), msg],
       }));
-    }, 1500);
+      // Echo back a faux reply for the demo experience.
+      setTimeout(() => {
+        setMessagesByThread((prev) => ({
+          ...prev,
+          [activeThread.id]: [...(prev[activeThread.id] || []), {
+            id: (Date.now() + 1).toString(),
+            text: activeThread.id === "support"
+              ? "Thanks for reaching out! Someone from our team will follow up shortly."
+              : "Got it, thanks for the heads up! See you Tuesday 👍",
+            sender: "tech",
+            timestamp: "Just now",
+            type: "text",
+          }],
+        }));
+      }, 1500);
+      return;
+    }
+
+    setSending(true);
+    try {
+      let conversationId = activeThread.id;
+
+      // Lazy-create the conversation if this is a placeholder.
+      if (conversationId.startsWith("new:")) {
+        if (!activeThread.techUserId) throw new Error("No tech to message");
+        const createRes = await fetch("/api/conversations", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            otherUserId: activeThread.techUserId,
+            firstMessage: text,
+          }),
+        });
+        const created = await createRes.json();
+        if (!createRes.ok || !created?.id) throw new Error(created?.error ?? "Create failed");
+        conversationId = created.id;
+
+        // Replace the placeholder thread with the real one and re-point activeThread.
+        const upgraded: Thread = { ...activeThread, id: conversationId };
+        setThreads((prev) => prev.map((t) => (t.id === activeThread.id ? upgraded : t)));
+        setActiveThread(upgraded);
+        setMessagesByThread((prev) => {
+          const next = { ...prev };
+          next[conversationId] = next[activeThread.id] ?? [];
+          delete next[activeThread.id];
+          return next;
+        });
+
+        // Refetch the canonical message list (includes the firstMessage).
+        const msgs = await fetch(`/api/messages?conversationId=${conversationId}`).then((r) => r.json());
+        if (Array.isArray(msgs) && userId) {
+          setMessagesByThread((prev) => ({
+            ...prev,
+            [conversationId]: msgs.map((m: ApiMessage) => adaptMessage(m, userId)),
+          }));
+        }
+        return;
+      }
+
+      // Optimistic append.
+      const tempId = `tmp-${Date.now()}`;
+      const optimistic: Message = {
+        id: tempId,
+        text,
+        sender: "customer",
+        timestamp: "Just now",
+        type: "text",
+      };
+      setMessagesByThread((prev) => ({
+        ...prev,
+        [conversationId]: [...(prev[conversationId] || []), optimistic],
+      }));
+
+      const res = await fetch("/api/messages", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ conversationId, text }),
+      });
+      const created: ApiMessage | { error: string } = await res.json();
+
+      if (!res.ok || !("id" in created) || !userId) {
+        // Roll back the optimistic message on failure.
+        setMessagesByThread((prev) => ({
+          ...prev,
+          [conversationId]: (prev[conversationId] || []).filter((m) => m.id !== tempId),
+        }));
+        return;
+      }
+
+      setMessagesByThread((prev) => ({
+        ...prev,
+        [conversationId]: (prev[conversationId] || []).map((m) =>
+          m.id === tempId ? adaptMessage(created, userId) : m
+        ),
+      }));
+    } catch {
+      // Best-effort: silent on error in this UI layer.
+    } finally {
+      setSending(false);
+    }
   }
 
   // ── Thread view ──────────────────────────────────────────────────────────────
@@ -264,9 +487,9 @@ export default function MessagesPage() {
             </div>
             <button
               onClick={sendMessage}
-              disabled={!input.trim()}
+              disabled={!input.trim() || sending}
               className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-full transition-all ${
-                input.trim() ? "bg-primary text-white shadow-sm" : "bg-surface-secondary text-text-tertiary"
+                input.trim() && !sending ? "bg-primary text-white shadow-sm" : "bg-surface-secondary text-text-tertiary"
               }`}
             >
               <Send size={18} />

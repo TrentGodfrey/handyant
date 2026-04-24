@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import Card from "@/components/Card";
 import Button from "@/components/Button";
 import {
@@ -18,6 +19,7 @@ import {
   Mail,
   Star,
 } from "lucide-react";
+import { useDemoMode } from "@/lib/useDemoMode";
 
 type HomeType = "Single Family" | "Townhouse" | "Condo";
 type Plan = "Basic" | "Pro" | "Premium";
@@ -48,8 +50,13 @@ const plans: { name: Plan; price: string; features: string[] }[] = [
 const yearOptions = Array.from({ length: 25 }, (_, i) => String(2024 - i));
 
 export default function AddNewClientPage() {
+  const router = useRouter();
   const [step, setStep] = useState(1);
   const [submitted, setSubmitted] = useState(false);
+  const [submitting, setSubmitting] = useState(false);
+  const [submitError, setSubmitError] = useState<string | null>(null);
+
+  const { isDemo } = useDemoMode();
 
   const [form, setForm] = useState<FormData>({
     firstName: "",
@@ -70,6 +77,43 @@ export default function AddNewClientPage() {
 
   function set<K extends keyof FormData>(key: K, value: FormData[K]) {
     setForm((prev) => ({ ...prev, [key]: value }));
+  }
+
+  async function handleCreate() {
+    setSubmitError(null);
+    if (isDemo) {
+      setSubmitted(true);
+      return;
+    }
+    setSubmitting(true);
+    try {
+      const fullName = `${form.firstName} ${form.lastName}`.trim();
+      const res = await fetch("/api/admin/clients", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          name: fullName,
+          email: form.email || null,
+          phone: form.phone || null,
+          address: form.street,
+          city: form.city || null,
+          state: "TX",
+          zip: form.zip || null,
+          notes: form.specialNotes || null,
+        }),
+      });
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({}));
+        throw new Error(data?.error || "Failed to create client");
+      }
+      await res.json();
+      setSubmitted(true);
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : "Failed to create client";
+      setSubmitError(msg);
+    } finally {
+      setSubmitting(false);
+    }
   }
 
   const inputCls =
@@ -100,16 +144,14 @@ export default function AddNewClientPage() {
             </div>
           )}
           <div className="mt-8 space-y-3">
-            <Link href="/homes/1">
-              <Button variant="primary" size="lg" fullWidth>
-                View Profile
-              </Button>
-            </Link>
-            <Link href="/homes">
-              <Button variant="outline" size="lg" fullWidth>
-                Back to Homes
-              </Button>
-            </Link>
+            <Button
+              variant="primary"
+              size="lg"
+              fullWidth
+              onClick={() => router.push("/homes")}
+            >
+              Back to Homes
+            </Button>
           </div>
         </div>
       </div>
@@ -546,8 +588,14 @@ export default function AddNewClientPage() {
               )}
             </Card>
 
+            {submitError && (
+              <div className="rounded-xl border border-error/30 bg-error-light px-4 py-3 text-[12px] font-medium text-error">
+                {submitError}
+              </div>
+            )}
+
             <div className="flex gap-3 pt-2">
-              <Button variant="outline" size="lg" onClick={() => setStep(2)}>
+              <Button variant="outline" size="lg" onClick={() => setStep(2)} disabled={submitting}>
                 Back
               </Button>
               <Button
@@ -555,9 +603,10 @@ export default function AddNewClientPage() {
                 size="lg"
                 className="flex-1"
                 icon={<Check size={17} />}
-                onClick={() => setSubmitted(true)}
+                onClick={handleCreate}
+                disabled={submitting}
               >
-                Create Client Profile
+                {submitting ? "Creating…" : "Create Client Profile"}
               </Button>
             </div>
           </div>

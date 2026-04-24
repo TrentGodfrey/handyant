@@ -20,6 +20,7 @@ import {
   ChevronDown,
   GripVertical,
 } from "lucide-react";
+import { useDemoMode } from "@/lib/useDemoMode";
 
 // ── Types ────────────────────────────────────────────────────────────────────
 
@@ -37,6 +38,72 @@ interface Job {
   partsNeeded: boolean;
   photos: number;
   estimate: string;
+}
+
+// API booking shape (subset used here)
+interface ApiBooking {
+  id: string;
+  status: string;
+  scheduledDate: string;
+  scheduledTime: string;
+  estimatedCost: string | number | null;
+  finalCost: string | number | null;
+  customer: { id: string; name: string } | null;
+  home: { address: string; city: string | null } | null;
+  tasks: { id: string; label: string; done: boolean | null }[];
+  parts: { id: string; status: string | null }[];
+  photos: { id: string }[];
+}
+
+// API status (snake_case) → UI status (kebab-case)
+function apiStatusToUi(status: string): JobStatus {
+  if (status === "in_progress") return "in-progress";
+  if (status === "needs_parts") return "needs-parts";
+  return status as JobStatus;
+}
+
+// UI status (kebab-case) → API status (snake_case)
+function uiStatusToApi(status: PipelineStage): string {
+  if (status === "in-progress") return "in_progress";
+  return status;
+}
+
+function bucketDate(date: Date): "today" | "this-week" | "future" | "past" {
+  const now = new Date();
+  const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+  const target = new Date(date.getFullYear(), date.getMonth(), date.getDate());
+  const diffDays = Math.round((target.getTime() - today.getTime()) / 86400000);
+  if (diffDays === 0) return "today";
+  if (diffDays > 0 && diffDays <= 7) return "this-week";
+  if (diffDays > 7) return "future";
+  return "past";
+}
+
+function formatJobDate(dateIso: string, timeIso: string): string {
+  const d = new Date(dateIso);
+  const t = new Date(timeIso);
+  const now = new Date();
+  const isToday = d.toDateString() === now.toDateString();
+  const timeStr = t.toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit" });
+  if (isToday) return `Today, ${timeStr}`;
+  return `${d.toLocaleDateString("en-US", { month: "short", day: "numeric" })}, ${timeStr}`;
+}
+
+function bookingToJob(b: ApiBooking): Job {
+  const cost = b.finalCost ?? b.estimatedCost;
+  const numCost = cost == null ? 0 : Number(cost);
+  return {
+    id: b.id,
+    client: b.customer?.name ?? "Customer",
+    address: b.home ? `${b.home.address}${b.home.city ? `, ${b.home.city}` : ""}` : "—",
+    date: formatJobDate(b.scheduledDate, b.scheduledTime),
+    dateGroup: bucketDate(new Date(b.scheduledDate)),
+    tasks: b.tasks.map((t) => t.label),
+    status: apiStatusToUi(b.status),
+    partsNeeded: (b.parts ?? []).some((p) => p.status === "needed" || p.status === "ordered"),
+    photos: (b.photos ?? []).length,
+    estimate: numCost > 0 ? `$${numCost.toFixed(0)}` : "$0",
+  };
 }
 
 // ── Stage config ─────────────────────────────────────────────────────────────
@@ -59,9 +126,9 @@ function parseDollars(s: string): number {
   return Number(s.replace(/[^0-9.]/g, "")) || 0;
 }
 
-// ── Job data ─────────────────────────────────────────────────────────────────
+// ── Demo data (used only when demo_mode cookie is set) ──────────────────────
 
-const jobs: Job[] = [
+const DEMO_JOBS: Job[] = [
   {
     id: "1",
     client: "Sarah Mitchell",
@@ -536,7 +603,10 @@ export default function JobsPage() {
   const [search, setSearch] = useState("");
   const [activeStage, setActiveStage] = useState<PipelineStage | "all">("all");
   const [view, setView] = useState<"list" | "board">("list");
-  const [jobData, setJobData] = useState<Job[]>(jobs);
+  const [jobData, setJobData] = useState<Job[]>([]);
+  const [loading, setLoading] = useState(true);
+
+  const { isDemo, mounted } = useDemoMode();
 
   // Default to board on desktop
   useEffect(() => {
@@ -547,7 +617,33 @@ export default function JobsPage() {
     return () => mql.removeEventListener("change", handler);
   }, []);
 
-  // Move handler
+  // Fetch bookings (or load demo data)
+  useEffect(() => {
+    if (!mounted) return;
+    if (isDemo) {
+      setJobData(DEMO_JOBS);
+      setLoading(false);
+      return;
+    }
+    setLoading(true);
+    const url =
+      activeStage === "all"
+        ? "/api/admin/bookings"
+        : `/api/admin/bookings?status=${uiStatusToApi(activeStage)}`;
+    fetch(url)
+      .then((r) => r.json())
+      .then((data) => {
+        if (Array.isArray(data)) {
+          setJobData(data.map(bookingToJob));
+        } else {
+          setJobData([]);
+        }
+      })
+      .catch(() => setJobData([]))
+      .finally(() => setLoading(false));
+  }, [isDemo, activeStage, mounted]);
+
+  // Move handler — optimistic update + PATCH
   const handleMove = (jobId: string, newStage: PipelineStage) => {
     setJobData((prev) =>
       prev.map((j) =>
@@ -556,6 +652,12 @@ export default function JobsPage() {
           : j
       )
     );
+    if (isDemo) return;
+    fetch(`/api/bookings/${jobId}`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ status: uiStatusToApi(newStage) }),
+    }).catch(() => {});
   };
 
   // Compute stage counts & revenue from full data (before search filter)
@@ -671,8 +773,15 @@ export default function JobsPage() {
         </p>
       )}
 
+      {/* ── Loading state ─────────────────────────────────────────────────────── */}
+      {loading && (
+        <div className="flex items-center justify-center py-16">
+          <div className="h-6 w-6 border-2 border-primary border-t-transparent rounded-full animate-spin" />
+        </div>
+      )}
+
       {/* ── List view ─────────────────────────────────────────────────────────── */}
-      {view === "list" && (
+      {!loading && view === "list" && (
         <div className="space-y-3">
           {showEmpty ? (
             <JobsEmptyState hasSearch={search.trim() !== "" || activeStage !== "all"} searchQuery={search} />
@@ -683,7 +792,7 @@ export default function JobsPage() {
       )}
 
       {/* ── Board view ────────────────────────────────────────────────────────── */}
-      {view === "board" && (
+      {!loading && view === "board" && (
         <>
           {showEmpty && activeStage !== "all" ? (
             <JobsEmptyState hasSearch={true} searchQuery={search} />

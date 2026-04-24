@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import Card from "@/components/Card";
 import StatusBadge from "@/components/StatusBadge";
 import Button from "@/components/Button";
@@ -17,8 +17,9 @@ import {
   CalendarPlus,
   Sun,
 } from "lucide-react";
+import { useDemoMode } from "@/lib/useDemoMode";
 
-const weekDays = [
+const demoWeekDays = [
   { day: "Mon", date: 30, month: "Mar", jobs: 4, hours: 7.5 },
   { day: "Tue", date: 31, month: "Mar", jobs: 3, hours: 6 },
   { day: "Wed", date: 1, month: "Apr", jobs: 5, hours: 8 },
@@ -39,10 +40,11 @@ interface ScheduleItem {
   status?: JobStatus;
   tasks?: number;
   details?: string;
-  homeId?: number;
+  homeId?: number | string;
+  bookingId?: string;
 }
 
-const scheduleByDay: Record<number, ScheduleItem[]> = {
+const demoScheduleByDay: Record<number, ScheduleItem[]> = {
   30: [
     { time: "8:00 AM", label: "Part Shopping", type: "block", duration: "45 min", details: "Home Depot — Broan fan motor, caulk" },
     { time: "9:00 AM", label: "Sarah Mitchell", type: "job", duration: "2h", address: "4821 Oak Hollow Dr, Plano", status: "confirmed", tasks: 2, homeId: 1 },
@@ -77,6 +79,69 @@ const scheduleByDay: Record<number, ScheduleItem[]> = {
 };
 
 const emptyDay: ScheduleItem[] = [];
+
+interface ApiBooking {
+  id: string;
+  status: string;
+  scheduledDate: string;
+  scheduledTime: string;
+  durationMinutes: number | null;
+  description: string | null;
+  customer: { id: string; name: string } | null;
+  home: { id: string; address: string; city: string | null } | null;
+  tasks: { id: string }[];
+}
+
+const STATUS_MAP: Record<string, JobStatus> = {
+  confirmed: "confirmed",
+  pending: "pending",
+  in_progress: "in-progress",
+  needs_parts: "needs-parts",
+  scheduled: "scheduled",
+  completed: "completed",
+  cancelled: "cancelled",
+};
+
+function startOfWeekMonday(d: Date): Date {
+  const out = new Date(d);
+  out.setHours(0, 0, 0, 0);
+  const dow = out.getDay(); // 0=Sun
+  const diff = dow === 0 ? -6 : 1 - dow;
+  out.setDate(out.getDate() + diff);
+  return out;
+}
+
+function isoDate(d: Date): string {
+  const y = d.getFullYear();
+  const m = String(d.getMonth() + 1).padStart(2, "0");
+  const day = String(d.getDate()).padStart(2, "0");
+  return `${y}-${m}-${day}`;
+}
+
+function formatRange(weekStart: Date): string {
+  const end = new Date(weekStart);
+  end.setDate(end.getDate() + 6);
+  const startStr = weekStart.toLocaleDateString("en-US", { month: "long", day: "numeric" });
+  const endStr = end.toLocaleDateString("en-US", { month: "long", day: "numeric", year: "numeric" });
+  return `${startStr} – ${endStr}`;
+}
+
+function formatTime(scheduledTime: string): string {
+  // API returns ISO datetime like "1970-01-01T09:00:00.000Z" — extract HH:mm
+  const d = new Date(scheduledTime);
+  const h = d.getUTCHours();
+  const m = d.getUTCMinutes();
+  const ampm = h >= 12 ? "PM" : "AM";
+  const h12 = h % 12 === 0 ? 12 : h % 12;
+  return m === 0 ? `${h12}:00 ${ampm}` : `${h12}:${String(m).padStart(2, "0")} ${ampm}`;
+}
+
+function formatDuration(mins: number | null): string {
+  const m = mins ?? 120;
+  if (m < 60) return `${m} min`;
+  const h = m / 60;
+  return Number.isInteger(h) ? `${h}h` : `${h}h`;
+}
 
 // ── Schedule Empty State ──────────────────────────────────────────────────────
 
@@ -127,11 +192,91 @@ function DayEmptyState({ dayLabel }: { dayLabel: string }) {
 // ─── Page ─────────────────────────────────────────────────────────────────────
 
 export default function SchedulePage() {
-  const [selectedDay, setSelectedDay] = useState(30);
+  const { isDemo, mounted } = useDemoMode();
 
-  const selectedData = weekDays.find((d) => d.date === selectedDay);
+  // In demo mode, anchor to Mar 30, 2026 to keep mock alignment.
+  const initialAnchor = isDemo ? new Date(2026, 2, 30) : new Date();
+  const [weekStart, setWeekStart] = useState<Date>(() => startOfWeekMonday(initialAnchor));
+  const [bookings, setBookings] = useState<ApiBooking[]>([]);
+  const [loading, setLoading] = useState(!isDemo);
+
+  // Build week-day metadata for the header strip from weekStart.
+  const weekDays = useMemo(() => {
+    if (isDemo) return demoWeekDays;
+    return Array.from({ length: 7 }, (_, i) => {
+      const d = new Date(weekStart);
+      d.setDate(weekStart.getDate() + i);
+      const iso = isoDate(d);
+      const dayBookings = bookings.filter((b) => b.scheduledDate.slice(0, 10) === iso);
+      const hours =
+        dayBookings.reduce((sum, b) => sum + (b.durationMinutes ?? 120), 0) / 60;
+      return {
+        day: d.toLocaleDateString("en-US", { weekday: "short" }),
+        date: d.getDate(),
+        month: d.toLocaleDateString("en-US", { month: "short" }),
+        jobs: dayBookings.length,
+        hours: Math.round(hours * 10) / 10,
+      };
+    });
+  }, [isDemo, weekStart, bookings]);
+
+  // Track which weekday is selected by index (0..6) so that switching weeks
+  // keeps the UI on the same day-of-week without needing an effect to reset.
+  const [selectedIndex, setSelectedIndex] = useState<number>(0);
+  const selectedDay = weekDays[selectedIndex]?.date ?? weekDays[0].date;
+
+  // Fetch bookings for the visible week (skip in demo mode).
+  useEffect(() => {
+    if (!mounted) return;
+    if (isDemo) return;
+    const from = isoDate(weekStart);
+    const end = new Date(weekStart);
+    end.setDate(end.getDate() + 7);
+    const to = isoDate(end);
+    setLoading(true);
+    fetch(`/api/admin/bookings?from=${from}&to=${to}`)
+      .then((r) => (r.ok ? r.json() : []))
+      .then((data) => {
+        setBookings(Array.isArray(data) ? data : []);
+      })
+      .catch(() => setBookings([]))
+      .finally(() => setLoading(false));
+  }, [isDemo, weekStart, mounted]);
+
+  // Compute schedule items for the selected day.
+  const items: ScheduleItem[] = useMemo(() => {
+    if (isDemo) return demoScheduleByDay[selectedDay] ?? emptyDay;
+    const target = new Date(weekStart);
+    target.setDate(weekStart.getDate() + selectedIndex);
+    const targetIso = isoDate(target);
+    return bookings
+      .filter((b) => b.scheduledDate.slice(0, 10) === targetIso)
+      .map<ScheduleItem>((b) => ({
+        time: formatTime(b.scheduledTime),
+        label: b.customer?.name ?? "Booking",
+        type: "job",
+        duration: formatDuration(b.durationMinutes),
+        address: b.home
+          ? `${b.home.address}${b.home.city ? `, ${b.home.city}` : ""}`
+          : undefined,
+        status: STATUS_MAP[b.status] ?? "scheduled",
+        tasks: b.tasks?.length ?? 0,
+        homeId: b.home?.id,
+        bookingId: b.id,
+      }));
+  }, [isDemo, selectedDay, selectedIndex, weekStart, bookings]);
+
+  const selectedData = weekDays[selectedIndex];
   const selectedDayLabel = selectedData?.day ?? "";
-  const items = scheduleByDay[selectedDay] ?? emptyDay;
+
+  function shiftWeek(deltaDays: number) {
+    if (isDemo) return;
+    const next = new Date(weekStart);
+    next.setDate(weekStart.getDate() + deltaDays);
+    setWeekStart(next);
+  }
+
+  const headerLabel = isDemo ? "March 30 – April 5, 2026" : formatRange(weekStart);
 
   return (
     <div className="px-5 pt-14 lg:pt-8 pb-24">
@@ -158,27 +303,33 @@ export default function SchedulePage() {
 
       {/* ── Week Navigation ── */}
       <div className="mb-3 flex items-center justify-between">
-        <button className="flex h-8 w-8 items-center justify-center rounded-full bg-surface border border-border shadow-[0_1px_2px_rgba(0,0,0,0.06)] active:bg-surface-secondary transition-colors">
+        <button
+          onClick={() => shiftWeek(-7)}
+          className="flex h-8 w-8 items-center justify-center rounded-full bg-surface border border-border shadow-[0_1px_2px_rgba(0,0,0,0.06)] active:bg-surface-secondary transition-colors"
+        >
           <ChevronLeft size={16} className="text-text-secondary" />
         </button>
         <div className="flex items-center gap-1.5">
           <CalendarDays size={13} className="text-text-tertiary" />
-          <span className="text-[13px] font-semibold text-text-primary">March 30 – April 5, 2026</span>
+          <span className="text-[13px] font-semibold text-text-primary">{headerLabel}</span>
         </div>
-        <button className="flex h-8 w-8 items-center justify-center rounded-full bg-surface border border-border shadow-[0_1px_2px_rgba(0,0,0,0.06)] active:bg-surface-secondary transition-colors">
+        <button
+          onClick={() => shiftWeek(7)}
+          className="flex h-8 w-8 items-center justify-center rounded-full bg-surface border border-border shadow-[0_1px_2px_rgba(0,0,0,0.06)] active:bg-surface-secondary transition-colors"
+        >
           <ChevronRight size={16} className="text-text-secondary" />
         </button>
       </div>
 
       {/* ── Week Strip ── */}
       <div className="mb-5 flex gap-1.5">
-        {weekDays.map((d) => {
-          const isSelected = selectedDay === d.date;
+        {weekDays.map((d, idx) => {
+          const isSelected = selectedIndex === idx;
           const hasJobs = d.jobs > 0;
           return (
             <button
-              key={d.date}
-              onClick={() => setSelectedDay(d.date)}
+              key={`${d.month}-${d.date}`}
+              onClick={() => setSelectedIndex(idx)}
               className={`flex flex-1 flex-col items-center gap-0.5 rounded-xl py-2.5 transition-all duration-150 ${
                 isSelected
                   ? "bg-primary shadow-[0_2px_8px_rgba(37,99,235,0.30)]"
@@ -239,13 +390,20 @@ export default function SchedulePage() {
         </div>
       )}
 
+      {/* ── Loading State ── */}
+      {!isDemo && loading && (
+        <div className="flex items-center justify-center py-12">
+          <div className="h-6 w-6 border-2 border-primary border-t-transparent rounded-full animate-spin" />
+        </div>
+      )}
+
       {/* ── Empty Day State ── */}
-      {items.length === 0 && (
+      {!loading && items.length === 0 && (
         <DayEmptyState dayLabel={selectedDayLabel} />
       )}
 
       {/* ── Timeline ── */}
-      {items.length > 0 && (
+      {!loading && items.length > 0 && (
         <div className="space-y-0">
           {items.map((item, i) => (
             <div key={i} className="flex gap-3">
@@ -277,8 +435,8 @@ export default function SchedulePage() {
 
               {/* Card */}
               <div className="flex-1 pb-2 pt-2.5">
-                {item.type === "job" && item.homeId ? (
-                  <Link href={`/homes/${item.homeId}`}>
+                {item.type === "job" && (item.bookingId || item.homeId) ? (
+                  <Link href={item.bookingId ? `/jobs/${item.bookingId}` : `/homes/${item.homeId}`}>
                     <Card
                       padding="sm"
                       className="transition-all active:scale-[0.985] hover:shadow-[0_4px_12px_rgba(0,0,0,0.10)]"

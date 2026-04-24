@@ -34,11 +34,16 @@ export async function POST(req: NextRequest) {
   }
 
   const userId = (session.user as Record<string, unknown>).id as string;
+  const role = (session.user as Record<string, unknown>).role as string;
   const body = await req.json();
+
+  const isTechCreating = role === "tech" && typeof body.customerId === "string" && body.customerId.length > 0;
+  const customerId = isTechCreating ? (body.customerId as string) : userId;
 
   const booking = await prisma.booking.create({
     data: {
-      customerId: userId,
+      customerId,
+      techId: isTechCreating ? userId : null,
       homeId: body.homeId ?? null,
       scheduledDate: new Date(body.scheduledDate),
       scheduledTime: new Date(`1970-01-01T${body.scheduledTime}`),
@@ -46,6 +51,7 @@ export async function POST(req: NextRequest) {
       customerNotes: body.customerNotes ?? null,
       durationMinutes: body.durationMinutes ?? 120,
       serviceType: body.serviceType ?? "one_time",
+      status: isTechCreating ? "confirmed" : "pending",
       categories: body.categoryIds?.length
         ? {
             create: body.categoryIds.map((categoryId: string) => ({

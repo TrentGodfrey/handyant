@@ -1,7 +1,8 @@
 "use client";
 
-import { useState, useRef, useEffect } from "react";
+import { useState, useRef, useEffect, useCallback } from "react";
 import { Send, Camera, Paperclip, ArrowLeft, MoreVertical, Search } from "lucide-react";
+import { useDemoMode } from "@/lib/useDemoMode";
 
 interface Message {
   id: string;
@@ -24,7 +25,9 @@ interface Conversation {
   messages: Message[];
 }
 
-const conversations: Conversation[] = [
+// ─── Demo Data ─────────────────────────────────────────────────────────────
+
+const demoConversations: Conversation[] = [
   {
     id: "c1",
     client: "Sarah Mitchell",
@@ -92,46 +95,228 @@ const conversations: Conversation[] = [
   },
 ];
 
+// ─── Helpers ────────────────────────────────────────────────────────────────
+
+function initialsOf(name?: string | null): string {
+  if (!name) return "?";
+  return name
+    .split(" ")
+    .map((n) => n[0])
+    .filter(Boolean)
+    .join("")
+    .toUpperCase()
+    .slice(0, 2);
+}
+
+function formatRelative(iso: string | null | undefined): string {
+  if (!iso) return "";
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return "";
+  const now = new Date();
+  const sameDay =
+    d.getFullYear() === now.getFullYear() &&
+    d.getMonth() === now.getMonth() &&
+    d.getDate() === now.getDate();
+  if (sameDay) {
+    return d.toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit" });
+  }
+  const yest = new Date(now);
+  yest.setDate(yest.getDate() - 1);
+  const isYesterday =
+    d.getFullYear() === yest.getFullYear() &&
+    d.getMonth() === yest.getMonth() &&
+    d.getDate() === yest.getDate();
+  if (isYesterday) return "Yesterday";
+  return d.toLocaleDateString("en-US", { month: "short", day: "numeric" });
+}
+
+function formatTimestamp(iso: string): string {
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return "";
+  return d.toLocaleString("en-US", {
+    month: "short",
+    day: "numeric",
+    hour: "numeric",
+    minute: "2-digit",
+  });
+}
+
+// ─── API shapes ─────────────────────────────────────────────────────────────
+
+type ApiConvo = {
+  id: string;
+  customer: { id: string; name: string | null; avatarUrl?: string | null } | null;
+  tech: { id: string; name: string | null; avatarUrl?: string | null } | null;
+  lastMessage: { id: string; text: string; createdAt: string; senderId: string } | null;
+  lastMessageAt: string | null;
+  unreadCount: number;
+};
+
+type ApiMessage = {
+  id: string;
+  text: string;
+  type: string | null;
+  createdAt: string;
+  senderId: string;
+  sender?: { id: string; name: string | null };
+};
+
+// ─── Component ──────────────────────────────────────────────────────────────
+
 export default function AdminMessagesPage() {
+  const { isDemo, mounted } = useDemoMode();
+
+  const [conversations, setConversations] = useState<Conversation[]>([]);
   const [activeConvo, setActiveConvo] = useState<Conversation | null>(null);
-  const [messagesByConvo, setMessagesByConvo] = useState<Record<string, Message[]>>(
-    Object.fromEntries(conversations.map((c) => [c.id, c.messages]))
-  );
+  const [messagesByConvo, setMessagesByConvo] = useState<Record<string, Message[]>>({});
   const [input, setInput] = useState("");
   const [search, setSearch] = useState("");
+  const [loadingList, setLoadingList] = useState(true);
+  const [loadingThread, setLoadingThread] = useState(false);
+  const [currentUserId, setCurrentUserId] = useState<string | null>(null);
   const bottomRef = useRef<HTMLDivElement>(null);
+
+  // ── Initial load ────────────────────────────────────────────────────────
+  useEffect(() => {
+    if (!mounted) return;
+    if (isDemo) {
+      setConversations(demoConversations);
+      setMessagesByConvo(
+        Object.fromEntries(demoConversations.map((c) => [c.id, c.messages]))
+      );
+      setLoadingList(false);
+      return;
+    }
+
+    Promise.all([
+      fetch("/api/me").then((r) => (r.ok ? r.json() : null)),
+      fetch("/api/conversations").then((r) => (r.ok ? r.json() : [])),
+    ])
+      .then(([me, convos]: [{ id: string } | null, ApiConvo[]]) => {
+        if (me) setCurrentUserId(me.id);
+        const mapped: Conversation[] = (Array.isArray(convos) ? convos : []).map((c) => {
+          const clientName = c.customer?.name ?? "Unknown";
+          return {
+            id: c.id,
+            client: clientName,
+            initials: initialsOf(clientName),
+            lastMessage: c.lastMessage?.text ?? "",
+            time: formatRelative(c.lastMessageAt),
+            unread: c.unreadCount ?? 0,
+            // TODO: surface next booking + address per convo via API.
+            nextVisit: "",
+            address: "",
+            online: false,
+            messages: [],
+          };
+        });
+        setConversations(mapped);
+      })
+      .catch(() => setConversations([]))
+      .finally(() => setLoadingList(false));
+  }, [isDemo, mounted]);
+
+  // ── Load thread when a convo opens ──────────────────────────────────────
+  const loadThread = useCallback(
+    async (convoId: string) => {
+      if (isDemo) return;
+      if (messagesByConvo[convoId]) return; // cache hit
+      setLoadingThread(true);
+      try {
+        const r = await fetch(`/api/messages?conversationId=${convoId}`);
+        if (!r.ok) throw new Error("fetch failed");
+        const raw: ApiMessage[] = await r.json();
+        const mapped: Message[] = raw.map((m) => ({
+          id: m.id,
+          text: m.text,
+          sender: m.senderId === currentUserId ? "tech" : "customer",
+          timestamp: formatTimestamp(m.createdAt),
+          type: (m.type === "system" || m.type === "photo" ? m.type : "text") as Message["type"],
+        }));
+        setMessagesByConvo((prev) => ({ ...prev, [convoId]: mapped }));
+        // Mark this convo as read locally now that we've fetched (server marked them too).
+        setConversations((prev) =>
+          prev.map((c) => (c.id === convoId ? { ...c, unread: 0 } : c))
+        );
+      } catch {
+        setMessagesByConvo((prev) => ({ ...prev, [convoId]: [] }));
+      } finally {
+        setLoadingThread(false);
+      }
+    },
+    [isDemo, currentUserId, messagesByConvo]
+  );
+
+  useEffect(() => {
+    if (activeConvo) loadThread(activeConvo.id);
+  }, [activeConvo, loadThread]);
 
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [activeConvo, messagesByConvo]);
 
-  function sendMessage() {
+  async function sendMessage() {
     if (!input.trim() || !activeConvo) return;
-    const msg: Message = {
-      id: Date.now().toString(),
-      text: input.trim(),
+    const text = input.trim();
+    const optimistic: Message = {
+      id: `tmp-${Date.now()}`,
+      text,
       sender: "tech",
       timestamp: "Just now",
       type: "text",
     };
     setMessagesByConvo((prev) => ({
       ...prev,
-      [activeConvo.id]: [...(prev[activeConvo.id] || []), msg],
+      [activeConvo.id]: [...(prev[activeConvo.id] || []), optimistic],
     }));
     setInput("");
 
-    setTimeout(() => {
-      setMessagesByConvo((prev) => ({
-        ...prev,
-        [activeConvo.id]: [...(prev[activeConvo.id] || []), {
-          id: (Date.now() + 1).toString(),
-          text: "Got it, thanks for the update! 👍",
-          sender: "customer",
-          timestamp: "Just now",
-          type: "text",
-        }],
-      }));
-    }, 1500);
+    if (isDemo) {
+      // Old demo behavior: simulate a customer reply.
+      setTimeout(() => {
+        setMessagesByConvo((prev) => ({
+          ...prev,
+          [activeConvo.id]: [
+            ...(prev[activeConvo.id] || []),
+            {
+              id: (Date.now() + 1).toString(),
+              text: "Got it, thanks for the update! 👍",
+              sender: "customer",
+              timestamp: "Just now",
+              type: "text",
+            },
+          ],
+        }));
+      }, 1500);
+      return;
+    }
+
+    try {
+      const r = await fetch("/api/messages", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ conversationId: activeConvo.id, text }),
+      });
+      if (r.ok) {
+        const saved: ApiMessage = await r.json();
+        setMessagesByConvo((prev) => ({
+          ...prev,
+          [activeConvo.id]: (prev[activeConvo.id] || []).map((m) =>
+            m.id === optimistic.id
+              ? {
+                  id: saved.id,
+                  text: saved.text,
+                  sender: "tech",
+                  timestamp: formatTimestamp(saved.createdAt),
+                  type: "text",
+                }
+              : m
+          ),
+        }));
+      }
+    } catch {
+      /* keep optimistic message */
+    }
   }
 
   const filtered = conversations.filter((c) =>
@@ -173,40 +358,50 @@ export default function AdminMessagesPage() {
         </div>
 
         {/* Pinned Context */}
-        <div className="bg-primary-50 border-b border-primary-100 px-4 py-2 flex items-center justify-between shrink-0">
-          <div className="flex items-center gap-2">
-            <div className="h-1.5 w-1.5 rounded-full bg-primary" />
-            <span className="text-[11px] font-semibold text-primary">Next: {activeConvo.nextVisit}</span>
+        {(activeConvo.nextVisit || activeConvo.address) && (
+          <div className="bg-primary-50 border-b border-primary-100 px-4 py-2 flex items-center justify-between shrink-0">
+            <div className="flex items-center gap-2">
+              <div className="h-1.5 w-1.5 rounded-full bg-primary" />
+              <span className="text-[11px] font-semibold text-primary">
+                {activeConvo.nextVisit ? `Next: ${activeConvo.nextVisit}` : ""}
+              </span>
+            </div>
+            <span className="text-[11px] text-text-tertiary">{activeConvo.address}</span>
           </div>
-          <span className="text-[11px] text-text-tertiary">{activeConvo.address}</span>
-        </div>
+        )}
 
         {/* Messages */}
         <div className="flex-1 overflow-y-auto px-4 py-4 space-y-3">
-          {messages.map((msg) => {
-            if (msg.type === "system") {
+          {loadingThread && messages.length === 0 ? (
+            <div className="flex items-center justify-center pt-12">
+              <div className="h-6 w-6 border-2 border-primary border-t-transparent rounded-full animate-spin" />
+            </div>
+          ) : (
+            messages.map((msg) => {
+              if (msg.type === "system") {
+                return (
+                  <div key={msg.id} className="flex justify-center">
+                    <span className="rounded-full bg-surface-secondary px-4 py-1.5 text-[11px] font-medium text-text-tertiary">
+                      {msg.text}
+                    </span>
+                  </div>
+                );
+              }
+              const isTech = msg.sender === "tech";
               return (
-                <div key={msg.id} className="flex justify-center">
-                  <span className="rounded-full bg-surface-secondary px-4 py-1.5 text-[11px] font-medium text-text-tertiary">
-                    {msg.text}
-                  </span>
+                <div key={msg.id} className={`flex ${isTech ? "justify-end" : "justify-start"}`}>
+                  <div className={`max-w-[80%] rounded-2xl px-4 py-2.5 ${
+                    isTech
+                      ? "bg-primary text-white rounded-br-md"
+                      : "bg-white border border-border text-text-primary rounded-bl-md shadow-[0_1px_2px_rgba(0,0,0,0.04)]"
+                  }`}>
+                    <p className="text-[14px] leading-relaxed">{msg.text}</p>
+                    <p className={`text-[10px] mt-1 ${isTech ? "text-white/50" : "text-text-tertiary"}`}>{msg.timestamp}</p>
+                  </div>
                 </div>
               );
-            }
-            const isTech = msg.sender === "tech";
-            return (
-              <div key={msg.id} className={`flex ${isTech ? "justify-end" : "justify-start"}`}>
-                <div className={`max-w-[80%] rounded-2xl px-4 py-2.5 ${
-                  isTech
-                    ? "bg-primary text-white rounded-br-md"
-                    : "bg-white border border-border text-text-primary rounded-bl-md shadow-[0_1px_2px_rgba(0,0,0,0.04)]"
-                }`}>
-                  <p className="text-[14px] leading-relaxed">{msg.text}</p>
-                  <p className={`text-[10px] mt-1 ${isTech ? "text-white/50" : "text-text-tertiary"}`}>{msg.timestamp}</p>
-                </div>
-              </div>
-            );
-          })}
+            })
+          )}
           <div ref={bottomRef} />
         </div>
 
@@ -245,11 +440,13 @@ export default function AdminMessagesPage() {
   }
 
   // Conversation list
+  const unreadCount = conversations.filter((c) => c.unread > 0).length;
+
   return (
     <div className="min-h-screen bg-background pb-28">
       <div className="bg-white border-b border-border px-5 pt-14 pb-4">
         <h1 className="text-[26px] font-bold text-text-primary">Messages</h1>
-        <p className="mt-0.5 text-[13px] text-text-secondary">{conversations.filter((c) => c.unread > 0).length} unread</p>
+        <p className="mt-0.5 text-[13px] text-text-secondary">{unreadCount} unread</p>
       </div>
 
       {/* Search */}
@@ -268,35 +465,47 @@ export default function AdminMessagesPage() {
 
       {/* Conversation list */}
       <div className="px-5 py-2 space-y-1">
-        {filtered.map((convo) => (
-          <button
-            key={convo.id}
-            className="flex w-full items-center gap-3.5 rounded-xl bg-white border border-border px-4 py-3.5 text-left hover:bg-surface-secondary transition-colors"
-            onClick={() => setActiveConvo(convo)}
-          >
-            <div className="relative shrink-0">
-              <div className="h-12 w-12 rounded-full bg-primary flex items-center justify-center">
-                <span className="text-[14px] font-bold text-white">{convo.initials}</span>
+        {loadingList ? (
+          <div className="flex items-center justify-center py-10">
+            <div className="h-6 w-6 border-2 border-primary border-t-transparent rounded-full animate-spin" />
+          </div>
+        ) : filtered.length === 0 ? (
+          <div className="text-center py-10">
+            <p className="text-[14px] text-text-secondary">No conversations yet</p>
+          </div>
+        ) : (
+          filtered.map((convo) => (
+            <button
+              key={convo.id}
+              className="flex w-full items-center gap-3.5 rounded-xl bg-white border border-border px-4 py-3.5 text-left hover:bg-surface-secondary transition-colors"
+              onClick={() => setActiveConvo(convo)}
+            >
+              <div className="relative shrink-0">
+                <div className="h-12 w-12 rounded-full bg-primary flex items-center justify-center">
+                  <span className="text-[14px] font-bold text-white">{convo.initials}</span>
+                </div>
+                {convo.online && (
+                  <div className="absolute -bottom-0.5 -right-0.5 h-3.5 w-3.5 rounded-full border-2 border-white bg-success" />
+                )}
               </div>
-              {convo.online && (
-                <div className="absolute -bottom-0.5 -right-0.5 h-3.5 w-3.5 rounded-full border-2 border-white bg-success" />
+              <div className="flex-1 min-w-0">
+                <div className="flex items-center justify-between mb-0.5">
+                  <p className="text-[14px] font-semibold text-text-primary">{convo.client}</p>
+                  <span className="text-[11px] text-text-tertiary shrink-0">{convo.time}</span>
+                </div>
+                <p className="text-[12px] text-text-secondary truncate">{convo.lastMessage}</p>
+                {convo.nextVisit && (
+                  <p className="text-[10px] text-text-tertiary mt-0.5">{convo.nextVisit}</p>
+                )}
+              </div>
+              {convo.unread > 0 && (
+                <div className="flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-primary">
+                  <span className="text-[10px] font-bold text-white">{convo.unread}</span>
+                </div>
               )}
-            </div>
-            <div className="flex-1 min-w-0">
-              <div className="flex items-center justify-between mb-0.5">
-                <p className="text-[14px] font-semibold text-text-primary">{convo.client}</p>
-                <span className="text-[11px] text-text-tertiary shrink-0">{convo.time}</span>
-              </div>
-              <p className="text-[12px] text-text-secondary truncate">{convo.lastMessage}</p>
-              <p className="text-[10px] text-text-tertiary mt-0.5">{convo.nextVisit}</p>
-            </div>
-            {convo.unread > 0 && (
-              <div className="flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-primary">
-                <span className="text-[10px] font-bold text-white">{convo.unread}</span>
-              </div>
-            )}
-          </button>
-        ))}
+            </button>
+          ))
+        )}
       </div>
     </div>
   );

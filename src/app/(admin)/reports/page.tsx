@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import Card from "@/components/Card";
 import Link from "next/link";
 import {
@@ -13,12 +13,15 @@ import {
   MapPin,
   Calendar,
 } from "lucide-react";
+import { useDemoMode } from "@/lib/useDemoMode";
 
-/* ── Static Data ── */
+/* ── Static / Demo Data ── */
 
+// TODO: stats API doesn't return time-series; keep demo data until /api/admin/stats?timeline=monthly is added.
 const revenueData = [5200, 6100, 6800, 7200, 7500, 8200];
 const revenueLabels = ["Oct", "Nov", "Dec", "Jan", "Feb", "Mar"];
 
+// TODO: backend doesn't yet aggregate revenue by category; demo only.
 const serviceCategories = [
   { name: "Plumbing", value: 2400, pct: 29, color: "#3B82F6" },
   { name: "Electrical", value: 1900, pct: 23, color: "#8B5CF6" },
@@ -28,6 +31,7 @@ const serviceCategories = [
   { name: "Carpentry", value: 400, pct: 5, color: "#6366F1" },
 ];
 
+// TODO: top clients aggregation not exposed by stats API; demo only.
 const topClients = [
   { name: "Sarah Mitchell", visits: 4, total: 1340, rating: 5.0 },
   { name: "Robert Chen", visits: 3, total: 840, rating: 4.9 },
@@ -35,6 +39,7 @@ const topClients = [
   { name: "James Wilson", visits: 2, total: 560, rating: 4.8 },
 ];
 
+// TODO: per-area job counts not yet aggregated; demo only.
 const serviceAreas = [
   { city: "Plano", jobs: 6 },
   { city: "Frisco", jobs: 4 },
@@ -44,6 +49,7 @@ const serviceAreas = [
   { city: "Celina", jobs: 1 },
 ];
 
+// TODO: weekly day-by-day revenue not yet aggregated; demo only.
 const weeklyBreakdown = [
   { day: "Mon", jobs: 4, revenue: 680 },
   { day: "Tue", jobs: 3, revenue: 520 },
@@ -52,6 +58,22 @@ const weeklyBreakdown = [
   { day: "Fri", jobs: 3, revenue: 540 },
   { day: "Sat", jobs: 1, revenue: 210 },
 ];
+
+/* ── Types for stats endpoint ── */
+
+type StatsResponse = {
+  today: { jobs: number; hours: number; partsToBuy: number };
+  week: { jobs: number; hours: number; revenue: number };
+  month: {
+    jobs: number;
+    completed: number;
+    revenue: number;
+    tasksPerVisit: number;
+    avgRating: number;
+    reviewCount: number;
+  };
+  partsNeeded: { id: string; item: string; qty: number; bookingId: string; client: string }[];
+};
 
 /* ── Revenue Area Chart (SVG) ── */
 
@@ -159,13 +181,109 @@ function RevenueChart() {
   );
 }
 
+/* ── Helpers ── */
+
+function formatCurrency(n: number) {
+  return `$${Math.round(n).toLocaleString()}`;
+}
+
 /* ── Page Component ── */
 
 export default function ReportsPage() {
   const [period, setPeriod] = useState<"week" | "month" | "quarter">("month");
+  const [stats, setStats] = useState<StatsResponse | null>(null);
+  const [loading, setLoading] = useState(true);
+
+  const { isDemo, mounted } = useDemoMode();
+
+  useEffect(() => {
+    if (!mounted) return;
+    if (isDemo) {
+      setLoading(false);
+      return;
+    }
+    fetch("/api/admin/stats")
+      .then((r) => r.json())
+      .then((data) => setStats(data))
+      .catch(() => setStats(null))
+      .finally(() => setLoading(false));
+  }, [isDemo, mounted]);
 
   const maxServiceValue = serviceCategories[0].value;
   const maxAreaJobs = serviceAreas[0].jobs;
+
+  // Pick the active period's data for revenue and job counts.
+  // The stats API exposes today/week/month aggregates; "quarter" falls back to month while we await richer data. TODO.
+  const periodRevenue = isDemo
+    ? 8200
+    : period === "week"
+      ? stats?.week.revenue ?? 0
+      : stats?.month.revenue ?? 0;
+
+  const periodJobs = isDemo
+    ? 18
+    : period === "week"
+      ? stats?.week.jobs ?? 0
+      : period === "month"
+        ? stats?.month.completed ?? 0
+        : stats?.month.completed ?? 0;
+
+  const avgJobValue = isDemo
+    ? 456
+    : periodJobs > 0
+      ? Math.round(periodRevenue / periodJobs)
+      : 0;
+
+  const rating = isDemo ? 4.9 : stats?.month.avgRating ?? 0;
+  const reviewCount = isDemo ? null : stats?.month.reviewCount ?? 0;
+
+  const kpiCards = [
+    {
+      label: "Revenue",
+      value: formatCurrency(periodRevenue),
+      trend: isDemo ? "+12% vs last month" : `${period === "week" ? "this week" : "this month"}`,
+      positive: true,
+      icon: DollarSign,
+      iconBg: "bg-success-light",
+      iconColor: "text-success",
+    },
+    {
+      label: "Jobs Completed",
+      value: String(periodJobs),
+      trend: isDemo ? "+3 vs last month" : `${period === "week" ? "this week" : "this month"}`,
+      positive: true,
+      icon: Briefcase,
+      iconBg: "bg-primary-50",
+      iconColor: "text-primary",
+    },
+    {
+      label: "Avg Job Value",
+      value: avgJobValue ? `$${avgJobValue}` : "$0",
+      trend: isDemo ? "+$32 vs last month" : "per completed job",
+      positive: true,
+      icon: TrendingUp,
+      iconBg: "bg-[#EFF9FF]",
+      iconColor: "text-info",
+    },
+    {
+      label: "Client Satisfaction",
+      value: `${rating ? rating.toFixed(1) : "—"}/5.0`,
+      trend: "stars" as const,
+      positive: true,
+      icon: Star,
+      iconBg: "bg-warning-light",
+      iconColor: "text-warning",
+      reviewCount,
+    },
+  ];
+
+  if (loading) {
+    return (
+      <div className="px-5 pt-14 lg:pt-8 pb-28 flex items-center justify-center min-h-[60vh]">
+        <div className="h-8 w-8 border-2 border-primary border-t-transparent rounded-full animate-spin" />
+      </div>
+    );
+  }
 
   return (
     <div className="px-5 pt-14 lg:pt-8 pb-28">
@@ -215,44 +333,7 @@ export default function ReportsPage() {
 
       {/* ── KPI Row ── */}
       <div className="mb-6 grid grid-cols-2 lg:grid-cols-4 gap-2.5">
-        {[
-          {
-            label: "Revenue",
-            value: "$8,200",
-            trend: "+12% vs last month",
-            positive: true,
-            icon: DollarSign,
-            iconBg: "bg-success-light",
-            iconColor: "text-success",
-          },
-          {
-            label: "Jobs Completed",
-            value: "18",
-            trend: "+3 vs last month",
-            positive: true,
-            icon: Briefcase,
-            iconBg: "bg-primary-50",
-            iconColor: "text-primary",
-          },
-          {
-            label: "Avg Job Value",
-            value: "$456",
-            trend: "+$32 vs last month",
-            positive: true,
-            icon: TrendingUp,
-            iconBg: "bg-[#EFF9FF]",
-            iconColor: "text-info",
-          },
-          {
-            label: "Client Satisfaction",
-            value: "4.9/5.0",
-            trend: "stars",
-            positive: true,
-            icon: Star,
-            iconBg: "bg-warning-light",
-            iconColor: "text-warning",
-          },
-        ].map((stat) => (
+        {kpiCards.map((stat) => (
           <Card key={stat.label} padding="sm" className="flex flex-col gap-2">
             <div className="flex items-center gap-2">
               <div
@@ -273,9 +354,18 @@ export default function ReportsPage() {
                   <Star
                     key={s}
                     size={12}
-                    className="text-warning fill-warning"
+                    className={
+                      s <= Math.round(rating)
+                        ? "text-warning fill-warning"
+                        : "text-warning/30"
+                    }
                   />
                 ))}
+                {stat.reviewCount != null && stat.reviewCount > 0 && (
+                  <span className="text-[10px] font-semibold text-text-tertiary ml-1">
+                    {stat.reviewCount} reviews
+                  </span>
+                )}
               </div>
             ) : (
               <p className="text-[11px] font-semibold text-success">

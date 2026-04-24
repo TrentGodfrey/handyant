@@ -1,11 +1,12 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import Link from "next/link";
 import {
   ChevronLeft, Calendar, MessageCircle, Package, CheckCircle2,
   DollarSign, CreditCard, Bell, BellOff,
 } from "lucide-react";
+import { useDemoMode } from "@/lib/useDemoMode";
 
 type NotifType = "appointment" | "message" | "parts" | "completed" | "invoice" | "billing";
 type FilterType = "all" | "unread" | "appointments" | "messages" | "updates";
@@ -19,7 +20,16 @@ interface Notification {
   read: boolean;
 }
 
-const initialNotifications: Notification[] = [
+interface ApiNotification {
+  id: string;
+  title: string;
+  body: string | null;
+  type: string | null;
+  read: boolean | null;
+  createdAt: string | null;
+}
+
+const DEMO_NOTIFICATIONS: Notification[] = [
   {
     id: "1",
     type: "appointment",
@@ -123,6 +133,42 @@ const filters: { id: FilterType; label: string }[] = [
   { id: "updates", label: "Updates" },
 ];
 
+const ALLOWED_TYPES = new Set<NotifType>([
+  "appointment", "message", "parts", "completed", "invoice", "billing",
+]);
+
+function normalizeType(type: string | null): NotifType {
+  if (type && ALLOWED_TYPES.has(type as NotifType)) return type as NotifType;
+  return "appointment";
+}
+
+function relativeTime(iso: string | null): string {
+  if (!iso) return "";
+  const then = new Date(iso).getTime();
+  const now = Date.now();
+  const diff = Math.max(0, now - then);
+  const m = Math.floor(diff / 60000);
+  if (m < 1) return "just now";
+  if (m < 60) return `${m}m ago`;
+  const h = Math.floor(m / 60);
+  if (h < 24) return `${h}h ago`;
+  const d = Math.floor(h / 24);
+  if (d < 30) return `${d}d ago`;
+  const mo = Math.floor(d / 30);
+  return `${mo}mo ago`;
+}
+
+function adapt(api: ApiNotification): Notification {
+  return {
+    id: api.id,
+    type: normalizeType(api.type),
+    title: api.title,
+    description: api.body ?? "",
+    time: relativeTime(api.createdAt),
+    read: !!api.read,
+  };
+}
+
 function matchesFilter(n: Notification, filter: FilterType): boolean {
   if (filter === "all") return true;
   if (filter === "unread") return !n.read;
@@ -133,19 +179,53 @@ function matchesFilter(n: Notification, filter: FilterType): boolean {
 }
 
 export default function NotificationsPage() {
-  const [notifications, setNotifications] = useState<Notification[]>(initialNotifications);
+  const { isDemo, mounted } = useDemoMode();
+  const [notifications, setNotifications] = useState<Notification[]>([]);
   const [activeFilter, setActiveFilter] = useState<FilterType>("all");
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    if (!mounted) return;
+    if (isDemo) {
+      setNotifications(DEMO_NOTIFICATIONS);
+      setLoading(false);
+      return;
+    }
+    fetch("/api/notifications")
+      .then((r) => r.json())
+      .then((data) => {
+        if (Array.isArray(data)) {
+          setNotifications(data.map(adapt));
+        } else {
+          setNotifications([]);
+        }
+      })
+      .catch(() => setNotifications([]))
+      .finally(() => setLoading(false));
+  }, [isDemo, mounted]);
 
   const unreadCount = notifications.filter((n) => !n.read).length;
 
   function markAllRead() {
     setNotifications((prev) => prev.map((n) => ({ ...n, read: true })));
+    if (isDemo) return;
+    fetch("/api/notifications", {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ markAllRead: true }),
+    }).catch(() => {});
   }
 
   function markRead(id: string) {
     setNotifications((prev) =>
       prev.map((n) => (n.id === id ? { ...n, read: true } : n))
     );
+    if (isDemo) return;
+    fetch("/api/notifications", {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ id, read: true }),
+    }).catch(() => {});
   }
 
   const filtered = notifications.filter((n) => matchesFilter(n, activeFilter));
@@ -212,7 +292,11 @@ export default function NotificationsPage() {
       </div>
 
       <div className="py-2">
-        {filtered.length === 0 ? (
+        {loading ? (
+          <div className="flex items-center justify-center py-20">
+            <div className="h-6 w-6 border-2 border-primary border-t-transparent rounded-full animate-spin" />
+          </div>
+        ) : filtered.length === 0 ? (
           <div className="flex flex-col items-center justify-center px-8 py-20 text-center">
             <div className="flex h-16 w-16 items-center justify-center rounded-full bg-surface-secondary mb-4">
               <Bell size={28} className="text-text-tertiary" />

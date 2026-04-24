@@ -37,7 +37,7 @@ export async function PATCH(req: NextRequest) {
   const userId = (session.user as Record<string, unknown>).id as string;
   const body = await req.json();
 
-  const allowedFields = ["name", "phone", "avatarUrl"];
+  const allowedFields = ["name", "phone", "email", "avatarUrl"];
   const data: Record<string, string> = {};
   for (const key of allowedFields) {
     if (body[key] !== undefined) data[key] = body[key];

@@ -22,7 +22,7 @@ export default function RoleSwitcher() {
       style={{ boxShadow: "0 4px 20px rgba(0,0,0,0.15)", top: "max(12px, env(safe-area-inset-top, 12px))" }}
     >
       <a
-        href="/"
+        href="/home"
         className={`flex items-center gap-1.5 rounded-full px-4 py-2 text-[12px] font-semibold transition-all no-underline ${
           !isAdmin
             ? "bg-primary text-white shadow-sm"

@@ -1,7 +1,8 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import Card from "@/components/Card";
 import Button from "@/components/Button";
 import {
@@ -18,15 +19,29 @@ import {
   Clock,
   CalendarDays,
 } from "lucide-react";
+import { useDemoMode } from "@/lib/useDemoMode";
 
 type Mode = "job" | "block";
 
-const CLIENTS = [
-  { id: "1", name: "Sarah Mitchell", address: "4821 Oak Hollow Dr, Plano", initials: "SM" },
-  { id: "2", name: "Robert Chen", address: "1205 Elm Creek Ct, Frisco", initials: "RC" },
-  { id: "3", name: "Maria Garcia", address: "890 Sunset Ridge, Roanoke", initials: "MG" },
-  { id: "4", name: "James Wilson", address: "2200 Heritage Trail, McKinney", initials: "JW" },
-  { id: "5", name: "Angela Torres", address: "1100 Prairie Creek, Waxahachie", initials: "AT" },
+interface Client {
+  id: string;
+  name: string;
+  email: string | null;
+  phone: string | null;
+  primaryHome: { id: string; address: string; city: string | null } | null;
+}
+
+interface ClientView extends Client {
+  address: string;
+  initials: string;
+}
+
+const DEMO_CLIENTS: ClientView[] = [
+  { id: "1", name: "Sarah Mitchell", email: null, phone: null, primaryHome: null, address: "4821 Oak Hollow Dr, Plano", initials: "SM" },
+  { id: "2", name: "Robert Chen", email: null, phone: null, primaryHome: null, address: "1205 Elm Creek Ct, Frisco", initials: "RC" },
+  { id: "3", name: "Maria Garcia", email: null, phone: null, primaryHome: null, address: "890 Sunset Ridge, Roanoke", initials: "MG" },
+  { id: "4", name: "James Wilson", email: null, phone: null, primaryHome: null, address: "2200 Heritage Trail, McKinney", initials: "JW" },
+  { id: "5", name: "Angela Torres", email: null, phone: null, primaryHome: null, address: "1100 Prairie Creek, Waxahachie", initials: "AT" },
 ];
 
 const DURATIONS = ["1h", "1.5h", "2h", "2.5h", "3h", "4h+"];
@@ -60,13 +75,54 @@ const inputCls =
   "w-full rounded-xl border border-border bg-surface px-4 py-3 text-[15px] text-text-primary placeholder:text-text-tertiary focus:outline-none focus:border-primary focus:ring-2 focus:ring-primary/10 transition-all";
 const labelCls = "block text-[12px] font-semibold uppercase tracking-wider text-text-secondary mb-1.5";
 
+function initialsOf(name: string): string {
+  return name
+    .split(" ")
+    .map((n) => n[0])
+    .filter(Boolean)
+    .join("")
+    .toUpperCase()
+    .slice(0, 2);
+}
+
+function durationToMinutes(d: string): number {
+  if (d === "4h+") return 240;
+  if (d.endsWith("h")) {
+    return Math.round(parseFloat(d.slice(0, -1)) * 60);
+  }
+  return 120;
+}
+
+function timeToHHMM(slot: string): string {
+  // "9:00 AM" -> "09:00"
+  const [time, ampm] = slot.split(" ");
+  const [hStr, mStr] = time.split(":");
+  let h = parseInt(hStr, 10);
+  if (ampm === "PM" && h !== 12) h += 12;
+  if (ampm === "AM" && h === 12) h = 0;
+  return `${String(h).padStart(2, "0")}:${mStr}`;
+}
+
+function dateToISODate(d: Date): string {
+  const y = d.getFullYear();
+  const m = String(d.getMonth() + 1).padStart(2, "0");
+  const day = String(d.getDate()).padStart(2, "0");
+  return `${y}-${m}-${day}`;
+}
+
 export default function ScheduleNewPage() {
+  const router = useRouter();
+  const { isDemo, mounted } = useDemoMode();
+
   const [mode, setMode] = useState<Mode>("job");
   const [submitted, setSubmitted] = useState(false);
+  const [submitting, setSubmitting] = useState(false);
+  const [submitError, setSubmitError] = useState<string | null>(null);
 
   // Job mode
+  const [clients, setClients] = useState<ClientView[]>([]);
   const [clientSearch, setClientSearch] = useState("");
-  const [selectedClient, setSelectedClient] = useState<(typeof CLIENTS)[0] | null>(null);
+  const [selectedClient, setSelectedClient] = useState<ClientView | null>(null);
   const [showClientDropdown, setShowClientDropdown] = useState(false);
   const [selectedDate, setSelectedDate] = useState<Date | null>(null);
   const [timeSlot, setTimeSlot] = useState("9:00 AM");
@@ -86,16 +142,80 @@ export default function ScheduleNewPage() {
   const [blockReason, setBlockReason] = useState<string | null>(null);
   const [blockNotes, setBlockNotes] = useState("");
 
+  // Fetch clients on mount (skip in demo).
+  useEffect(() => {
+    if (!mounted) return;
+    if (isDemo) {
+      setClients(DEMO_CLIENTS);
+      return;
+    }
+    fetch("/api/admin/clients")
+      .then((r) => (r.ok ? r.json() : []))
+      .then((data: Client[]) => {
+        if (!Array.isArray(data)) return;
+        setClients(
+          data.map((c) => ({
+            ...c,
+            address: c.primaryHome
+              ? `${c.primaryHome.address}${c.primaryHome.city ? `, ${c.primaryHome.city}` : ""}`
+              : "No address on file",
+            initials: initialsOf(c.name),
+          }))
+        );
+      })
+      .catch(() => {
+        // leave empty list
+      });
+  }, [isDemo, mounted]);
+
   const filteredClients = clientSearch.trim()
-    ? CLIENTS.filter(
+    ? clients.filter(
         (c) =>
           c.name.toLowerCase().includes(clientSearch.toLowerCase()) ||
           c.address.toLowerCase().includes(clientSearch.toLowerCase())
       )
-    : CLIENTS;
+    : clients;
 
   function formatDate(d: Date) {
     return d.toLocaleDateString("en-US", { weekday: "short", month: "short", day: "numeric" });
+  }
+
+  async function handleSubmitJob() {
+    if (!selectedClient || !selectedDate) {
+      setSubmitError("Please pick a client and a date.");
+      return;
+    }
+    if (isDemo) {
+      setSubmitted(true);
+      return;
+    }
+    setSubmitting(true);
+    setSubmitError(null);
+    try {
+      const res = await fetch("/api/bookings", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          customerId: selectedClient.id,
+          homeId: selectedClient.primaryHome?.id ?? null,
+          scheduledDate: dateToISODate(selectedDate),
+          scheduledTime: timeToHHMM(timeSlot),
+          description: description || null,
+          durationMinutes: durationToMinutes(duration),
+          categoryIds: [],
+          customerNotes: jobNotes || null,
+        }),
+      });
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({}));
+        throw new Error(data?.error ?? `Request failed (${res.status})`);
+      }
+      const created = await res.json();
+      router.push(`/jobs/${created.id}`);
+    } catch (err) {
+      setSubmitError(err instanceof Error ? err.message : "Could not create booking.");
+      setSubmitting(false);
+    }
   }
 
   if (submitted) {
@@ -421,14 +541,19 @@ export default function ScheduleNewPage() {
               />
             </div>
 
+            {submitError && (
+              <p className="text-[13px] font-medium text-error">{submitError}</p>
+            )}
+
             <Button
               variant="primary"
               size="lg"
               fullWidth
               icon={<CalendarDays size={17} />}
-              onClick={() => setSubmitted(true)}
+              onClick={handleSubmitJob}
+              disabled={submitting}
             >
-              Add to Schedule
+              {submitting ? "Adding..." : "Add to Schedule"}
             </Button>
           </>
         )}

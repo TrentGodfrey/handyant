@@ -9,7 +9,7 @@ import {
 } from "lucide-react";
 
 const customerTabs = [
-  { href: "/", icon: Home, label: "Home" },
+  { href: "/home", icon: Home, label: "Home" },
   { href: "/services", icon: Wrench, label: "Services" },
   { href: "/book", icon: CalendarPlus, label: "Book" },
   { href: "/messages", icon: MessageCircle, label: "Messages" },
@@ -85,7 +85,7 @@ export default function BottomNav({ variant = "customer" }: { variant?: "custome
           {isTech && (
             <div className="flex rounded-full bg-gray-100 p-1">
               <a
-                href="/"
+                href="/home"
                 className={`flex flex-1 items-center justify-center gap-1.5 rounded-full px-3 py-1.5 text-[12px] font-semibold transition-all no-underline ${
                   !isAdmin
                     ? "bg-white text-primary shadow-sm"

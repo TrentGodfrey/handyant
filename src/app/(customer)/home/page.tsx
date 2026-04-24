@@ -5,6 +5,7 @@ import { useSession } from "next-auth/react";
 import Link from "next/link";
 import Card from "@/components/Card";
 import StatusBadge from "@/components/StatusBadge";
+import { useDemoMode } from "@/lib/useDemoMode";
 import {
   Search, MapPin, Clock, Star, ArrowRight, Camera,
   MessageCircle, Phone, CheckCircle2,
@@ -52,19 +53,23 @@ export default function CustomerHome() {
   const { data: session } = useSession();
   const [nextBooking, setNextBooking] = useState<BookingData | null>(null);
   const [loading, setLoading] = useState(true);
+  const { isDemo, mounted } = useDemoMode();
 
-  const isDemo = typeof document !== "undefined" && document.cookie.includes("demo_mode=true");
-
-  const userName = isDemo
-    ? "Sarah"
-    : session?.user?.name?.split(" ")[0] || "there";
-  const userInitials = isDemo
-    ? "SH"
-    : session?.user?.name
-      ? session.user.name.split(" ").map((n) => n[0]).join("").toUpperCase().slice(0, 2)
-      : "?";
+  const userName = !mounted
+    ? "there"
+    : isDemo
+      ? "Sarah"
+      : session?.user?.name?.split(" ")[0] || "there";
+  const userInitials = !mounted
+    ? "?"
+    : isDemo
+      ? "SH"
+      : session?.user?.name
+        ? session.user.name.split(" ").map((n) => n[0]).join("").toUpperCase().slice(0, 2)
+        : "?";
 
   useEffect(() => {
+    if (!mounted) return;
     if (isDemo) {
       setNextBooking(DEMO_BOOKING);
       setLoading(false);
@@ -80,7 +85,7 @@ export default function CustomerHome() {
       })
       .catch(() => setNextBooking(null))
       .finally(() => setLoading(false));
-  }, [isDemo]);
+  }, [isDemo, mounted]);
 
   const formatDate = (dateStr: string) => {
     const d = new Date(dateStr);

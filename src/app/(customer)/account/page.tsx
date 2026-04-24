@@ -9,6 +9,7 @@ import {
   Home, ChevronRight, FileText, CreditCard, Bell, Settings, LogOut,
   Calendar, Clock, Wrench, MessageCircle, Star, Shield, Edit2,
 } from "lucide-react";
+import { useDemoMode } from "@/lib/useDemoMode";
 
 interface PastJob {
   date: string;
@@ -34,15 +35,16 @@ const menuItems = [
 
 export default function AccountPage() {
   const { data: session } = useSession();
-  const isDemo = typeof document !== "undefined" && document.cookie.includes("demo_mode=true");
+  const { isDemo, mounted } = useDemoMode();
 
   const [pastJobs, setPastJobs] = useState<PastJob[]>([]);
   const [showAllJobs, setShowAllJobs] = useState(false);
 
-  const userName = isDemo ? "Sarah Mitchell" : session?.user?.name || "User";
+  const userName = !mounted ? "User" : isDemo ? "Sarah Mitchell" : session?.user?.name || "User";
   const userInitials = userName.split(" ").map((n) => n[0]).join("").toUpperCase().slice(0, 2);
 
   useEffect(() => {
+    if (!mounted) return;
     if (isDemo) {
       setPastJobs(DEMO_JOBS);
       return;
@@ -64,7 +66,7 @@ export default function AccountPage() {
         setPastJobs(completed);
       })
       .catch(() => setPastJobs([]));
-  }, [isDemo]);
+  }, [isDemo, mounted]);
 
   const displayedJobs = showAllJobs ? pastJobs : pastJobs.slice(0, 2);
 
@@ -103,9 +105,9 @@ export default function AccountPage() {
         {/* Quick stats */}
         <div className="grid grid-cols-3 gap-2">
           {[
-            { label: "Total Visits", value: isDemo ? "12" : String(pastJobs.length), icon: Calendar, color: "text-primary", bg: "bg-primary-50" },
-            { label: "Hours Used", value: isDemo ? "24h" : `${pastJobs.reduce((acc, j) => acc + parseFloat(j.hours), 0)}h`, icon: Clock, color: "text-accent-teal", bg: "bg-[#F0FDFA]" },
-            { label: "Tasks Done", value: isDemo ? "31" : "-", icon: Wrench, color: "text-accent-amber", bg: "bg-warning-light" },
+            { label: "Total Visits", value: !mounted ? "-" : isDemo ? "12" : String(pastJobs.length), icon: Calendar, color: "text-primary", bg: "bg-primary-50" },
+            { label: "Hours Used", value: !mounted ? "-" : isDemo ? "24h" : `${pastJobs.reduce((acc, j) => acc + parseFloat(j.hours), 0)}h`, icon: Clock, color: "text-accent-teal", bg: "bg-[#F0FDFA]" },
+            { label: "Tasks Done", value: !mounted ? "-" : isDemo ? "31" : "-", icon: Wrench, color: "text-accent-amber", bg: "bg-warning-light" },
           ].map((stat) => (
             <div key={stat.label} className="rounded-xl bg-surface-secondary p-3.5 text-center">
               <div className={`mx-auto mb-2 flex h-8 w-8 items-center justify-center rounded-lg ${stat.bg}`}>

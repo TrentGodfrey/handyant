@@ -1,24 +1,47 @@
 "use client";
 
-import { useState, use } from "react";
+import { useState, useEffect, use } from "react";
 import Link from "next/link";
 import Button from "@/components/Button";
 import Card from "@/components/Card";
 import StatusBadge from "@/components/StatusBadge";
 import {
   ChevronLeft, MapPin, Clock, Phone, MessageCircle, Navigation,
-  CheckSquare, Square, ShoppingCart, Camera, FileText, DollarSign,
-  ChevronRight, Plus, AlertTriangle, Check, Package, Star,
+  CheckSquare, Square, Camera,
+  Plus, AlertTriangle, Check, Package, Star,
 } from "lucide-react";
+import { useDemoMode } from "@/lib/useDemoMode";
 
-const jobData: Record<string, {
-  id: string; client: string; address: string; phone: string; date: string; time: string;
-  status: "confirmed" | "pending" | "needs-parts" | "in-progress" | "scheduled";
-  estimate: string; tasks: { id: string; label: string; done: boolean; notes?: string }[];
+// ── Types ────────────────────────────────────────────────────────────────────
+
+type UiStatus = "confirmed" | "pending" | "needs-parts" | "in-progress" | "scheduled" | "completed" | "cancelled";
+
+interface JobDetail {
+  id: string;
+  client: string;
+  address: string;
+  phone: string;
+  date: string;
+  time: string;
+  status: UiStatus;
+  estimate: string;
+  tasks: { id: string; label: string; done: boolean; notes?: string }[];
   parts: { item: string; qty: number; status: "purchased" | "needed" | "ordered" }[];
   photos: { id: string; label: string }[];
-  techNotes: string; customerNotes: string; rating?: number;
-}> = {
+  techNotes: string;
+  customerNotes: string;
+  rating?: number;
+}
+
+function apiStatusToUi(s: string): UiStatus {
+  if (s === "in_progress") return "in-progress";
+  if (s === "needs_parts") return "needs-parts";
+  return s as UiStatus;
+}
+
+// ── Demo data ────────────────────────────────────────────────────────────────
+
+const DEMO_JOBS: Record<string, JobDetail> = {
   "1": {
     id: "1", client: "Sarah Mitchell", address: "4821 Oak Hollow Dr, Plano TX 75024",
     phone: "(972) 555-0142", date: "Today", time: "9:00 AM", status: "confirmed",
@@ -71,27 +94,171 @@ const jobData: Record<string, {
   },
 };
 
+// ── API booking → JobDetail ──────────────────────────────────────────────────
+
+interface ApiBooking {
+  id: string;
+  status: string;
+  scheduledDate: string;
+  scheduledTime: string;
+  estimatedCost: string | number | null;
+  finalCost: string | number | null;
+  description: string | null;
+  customerNotes: string | null;
+  techNotes: string | null;
+  customer: { id: string; name: string; phone: string | null } | null;
+  home: { address: string; city: string | null; state: string | null; zip: string | null } | null;
+  tasks: { id: string; label: string; done: boolean | null; notes: string | null }[];
+  parts: { id: string; item: string; qty: number | null; status: string | null }[];
+  photos: { id: string; label: string | null; url: string }[];
+}
+
+function bookingToDetail(b: ApiBooking): JobDetail {
+  const cost = b.finalCost ?? b.estimatedCost;
+  const numCost = cost == null ? 0 : Number(cost);
+  const dateObj = new Date(b.scheduledDate);
+  const timeObj = new Date(b.scheduledTime);
+  const today = new Date();
+  const isToday = dateObj.toDateString() === today.toDateString();
+  const dateLabel = isToday
+    ? "Today"
+    : dateObj.toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" });
+  const timeLabel = timeObj.toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit" });
+
+  const homeStr = b.home
+    ? `${b.home.address}${b.home.city ? `, ${b.home.city}` : ""}${b.home.state ? ` ${b.home.state}` : ""}${b.home.zip ? ` ${b.home.zip}` : ""}`
+    : "—";
+
+  return {
+    id: b.id,
+    client: b.customer?.name ?? "Customer",
+    address: homeStr,
+    phone: b.customer?.phone ?? "",
+    date: dateLabel,
+    time: timeLabel,
+    status: apiStatusToUi(b.status),
+    estimate: numCost > 0 ? `$${numCost.toFixed(0)}` : "$0",
+    tasks: b.tasks.map((t) => ({
+      id: t.id,
+      label: t.label,
+      done: !!t.done,
+      notes: t.notes ?? undefined,
+    })),
+    parts: (b.parts ?? []).map((p) => ({
+      item: p.item,
+      qty: p.qty ?? 1,
+      status: ((p.status ?? "needed") as "purchased" | "needed" | "ordered"),
+    })),
+    photos: (b.photos ?? []).map((p) => ({ id: p.id, label: p.label ?? "photo" })),
+    techNotes: b.techNotes ?? "",
+    customerNotes: b.customerNotes ?? b.description ?? "",
+  };
+}
+
+// ── Page ─────────────────────────────────────────────────────────────────────
+
 export default function JobDetailPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = use(params);
-  const job = jobData[id] ?? jobData["1"];
-  const [tasks, setTasks] = useState(job.tasks);
+  const { isDemo, mounted } = useDemoMode();
+
+  const [job, setJob] = useState<JobDetail | null>(null);
+  const [tasks, setTasks] = useState<JobDetail["tasks"]>([]);
+  const [notes, setNotes] = useState("");
   const [noteInput, setNoteInput] = useState("");
-  const [notes, setNotes] = useState(job.techNotes);
   const [showNoteInput, setShowNoteInput] = useState(false);
   const [showCompleteModal, setShowCompleteModal] = useState(false);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    if (!mounted) return;
+    if (isDemo) {
+      const demo = DEMO_JOBS[id] ?? DEMO_JOBS["1"];
+      setJob(demo);
+      setTasks(demo.tasks);
+      setNotes(demo.techNotes);
+      setLoading(false);
+      return;
+    }
+    setLoading(true);
+    fetch(`/api/bookings/${id}`)
+      .then((r) => r.ok ? r.json() : null)
+      .then((data) => {
+        if (!data) {
+          setJob(null);
+          return;
+        }
+        const detail = bookingToDetail(data as ApiBooking);
+        setJob(detail);
+        setTasks(detail.tasks);
+        setNotes(detail.techNotes);
+      })
+      .catch(() => setJob(null))
+      .finally(() => setLoading(false));
+  }, [id, isDemo, mounted]);
 
   const completedCount = tasks.filter((t) => t.done).length;
-  const progress = Math.round((completedCount / tasks.length) * 100);
+  const progress = tasks.length > 0 ? Math.round((completedCount / tasks.length) * 100) : 0;
 
-  function toggleTask(id: string) {
-    setTasks((prev) => prev.map((t) => t.id === id ? { ...t, done: !t.done } : t));
+  function toggleTask(taskId: string) {
+    const target = tasks.find((t) => t.id === taskId);
+    if (!target) return;
+    const newDone = !target.done;
+    setTasks((prev) => prev.map((t) => t.id === taskId ? { ...t, done: newDone } : t));
+    if (isDemo) return;
+    fetch(`/api/tasks/${taskId}`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ done: newDone }),
+    }).catch(() => {
+      // revert on failure
+      setTasks((prev) => prev.map((t) => t.id === taskId ? { ...t, done: !newDone } : t));
+    });
   }
 
   function addNote() {
     if (!noteInput.trim()) return;
-    setNotes((prev) => prev + (prev ? "\n\n" : "") + noteInput.trim());
+    const updated = notes + (notes ? "\n\n" : "") + noteInput.trim();
+    setNotes(updated);
     setNoteInput("");
     setShowNoteInput(false);
+    if (isDemo) return;
+    fetch(`/api/bookings/${id}`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ techNotes: updated }),
+    }).catch(() => {});
+  }
+
+  function completeJob() {
+    setShowCompleteModal(false);
+    if (isDemo) return;
+    fetch(`/api/bookings/${id}`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ status: "completed" }),
+    })
+      .then(() => {
+        setJob((prev) => prev ? { ...prev, status: "completed" } : prev);
+      })
+      .catch(() => {});
+  }
+
+  if (loading) {
+    return (
+      <div className="min-h-screen bg-background flex items-center justify-center">
+        <div className="h-6 w-6 border-2 border-primary border-t-transparent rounded-full animate-spin" />
+      </div>
+    );
+  }
+
+  if (!job) {
+    return (
+      <div className="min-h-screen bg-background flex flex-col items-center justify-center px-5 text-center">
+        <p className="text-[16px] font-bold text-text-primary">Job not found</p>
+        <p className="mt-2 text-[13px] text-text-secondary">This booking may have been removed.</p>
+        <Link href="/jobs" className="mt-4 text-[13px] font-semibold text-primary">Back to Jobs</Link>
+      </div>
+    );
   }
 
   return (
@@ -160,6 +327,9 @@ export default function JobDetailPage({ params }: { params: Promise<{ id: string
         <div>
           <p className="mb-2 text-sm font-semibold uppercase tracking-wider text-text-secondary">Checklist</p>
           <Card className="divide-y divide-border-light">
+            {tasks.length === 0 && (
+              <p className="py-3 text-[13px] text-text-tertiary text-center">No tasks for this job.</p>
+            )}
             {tasks.map((task) => (
               <button
                 key={task.id}
@@ -183,15 +353,17 @@ export default function JobDetailPage({ params }: { params: Promise<{ id: string
         </div>
 
         {/* Customer Notes */}
-        <div>
-          <p className="mb-2 text-sm font-semibold uppercase tracking-wider text-text-secondary">Customer Notes</p>
-          <Card className="bg-warning-light border-warning/20">
-            <div className="flex gap-2.5">
-              <AlertTriangle size={15} className="text-accent-amber shrink-0 mt-0.5" />
-              <p className="text-[13px] text-text-primary leading-relaxed">{job.customerNotes}</p>
-            </div>
-          </Card>
-        </div>
+        {job.customerNotes && (
+          <div>
+            <p className="mb-2 text-sm font-semibold uppercase tracking-wider text-text-secondary">Customer Notes</p>
+            <Card className="bg-warning-light border-warning/20">
+              <div className="flex gap-2.5">
+                <AlertTriangle size={15} className="text-accent-amber shrink-0 mt-0.5" />
+                <p className="text-[13px] text-text-primary leading-relaxed">{job.customerNotes}</p>
+              </div>
+            </Card>
+          </div>
+        )}
 
         {/* Parts */}
         {job.parts.length > 0 && (
@@ -257,7 +429,7 @@ export default function JobDetailPage({ params }: { params: Promise<{ id: string
             </button>
           </div>
           <Card>
-            <p className="text-[13px] text-text-primary leading-relaxed whitespace-pre-line">{notes}</p>
+            <p className="text-[13px] text-text-primary leading-relaxed whitespace-pre-line">{notes || "No notes yet."}</p>
             {showNoteInput && (
               <div className="mt-3 border-t border-border pt-3">
                 <textarea
@@ -282,15 +454,6 @@ export default function JobDetailPage({ params }: { params: Promise<{ id: string
           <p className="mb-2 text-sm font-semibold uppercase tracking-wider text-text-secondary">Estimate</p>
           <Card>
             <div className="space-y-2">
-              <div className="flex justify-between text-[13px]">
-                <span className="text-text-secondary">Labor (est. 3h)</span>
-                <span className="font-medium text-text-primary">$240</span>
-              </div>
-              <div className="flex justify-between text-[13px]">
-                <span className="text-text-secondary">Materials</span>
-                <span className="font-medium text-text-primary">$100</span>
-              </div>
-              <div className="h-px bg-border my-1" />
               <div className="flex justify-between">
                 <span className="text-[14px] font-semibold text-text-primary">Total</span>
                 <span className="text-[16px] font-bold text-primary">{job.estimate}</span>
@@ -300,7 +463,7 @@ export default function JobDetailPage({ params }: { params: Promise<{ id: string
         </div>
 
         {/* Complete Job CTA */}
-        {completedCount === tasks.length ? (
+        {tasks.length > 0 && completedCount === tasks.length ? (
           <Button
             variant="primary"
             size="lg"
@@ -340,7 +503,7 @@ export default function JobDetailPage({ params }: { params: Promise<{ id: string
               </div>
               <p className="mt-1.5 text-center text-[11px] text-text-tertiary">A 5-star review request will be sent via text</p>
             </div>
-            <Button variant="primary" size="lg" fullWidth onClick={() => setShowCompleteModal(false)}>
+            <Button variant="primary" size="lg" fullWidth onClick={completeJob}>
               Confirm &amp; Send Invoice
             </Button>
             <button className="mt-3 w-full text-center text-[13px] text-text-tertiary" onClick={() => setShowCompleteModal(false)}>

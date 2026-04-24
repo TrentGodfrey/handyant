@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import Link from "next/link";
 import Card from "@/components/Card";
 import Button from "@/components/Button";
@@ -22,6 +22,7 @@ import {
   ToggleRight,
   ChevronRight,
 } from "lucide-react";
+import { useDemoMode } from "@/lib/useDemoMode";
 
 // ── DFW City Zones (x, y within 420x310 SVG viewport) ──
 // Geographically accurate layout — min 42px between any two city centers (r=20)
@@ -62,62 +63,154 @@ const END_TIMES   = ["4:00 PM", "4:30 PM", "5:00 PM", "5:30 PM", "6:00 PM", "6:3
 
 type EditableField = "name" | "owner" | "phone" | "email" | null;
 
+// Map DFW city display names to lookup ids — used to hydrate active set from server response.
+const cityNameToId = new Map(DFW_CITIES.map((c) => [c.name.toLowerCase(), c.id]));
+
 export default function SettingsPage() {
-  // Business info
+  const { isDemo, mounted } = useDemoMode();
+
+  // Business info — bizName is UI-only (not on User model). TODO: add a Business model or extend User.
   const [bizName, setBizName]   = useState("HandyAnt");
-  const [owner, setOwner]       = useState("Anthony Morales");
-  const [phone, setPhone]       = useState("(214) 555-0199");
-  const [email, setEmail]       = useState("anthony@handyant.com");
+  const [owner, setOwner]       = useState("");
+  const [phone, setPhone]       = useState("");
+  const [email, setEmail]       = useState("");
   const [editing, setEditing]   = useState<EditableField>(null);
   const [draft, setDraft]       = useState("");
   const [savedField, setSavedField] = useState<EditableField>(null);
+  const [loading, setLoading]   = useState(true);
 
   // Service area
-  const [activeCities, setActiveCities] = useState<Set<string>>(new Set(DEFAULT_ACTIVE));
+  const [activeCities, setActiveCities] = useState<Set<string>>(new Set());
   const [showMapTooltip, setShowMapTooltip] = useState(false);
 
-  // Availability
+  // Availability — UI-only state (no backing schema yet). TODO.
   const [activeDays, setActiveDays] = useState<Set<string>>(
     new Set(["mon", "tue", "wed", "thu", "fri", "sat"])
   );
   const [startTime, setStartTime] = useState("8:00 AM");
   const [endTime, setEndTime]     = useState("6:00 PM");
 
-  // Notifications
+  // Notifications — UI-only state. TODO: add prefs schema.
   const [notifSMS, setNotifSMS]         = useState(true);
   const [notifEmail, setNotifEmail]     = useState(true);
   const [notifNewBook, setNotifNewBook] = useState(true);
+
+  useEffect(() => {
+    if (!mounted) return;
+    if (isDemo) {
+      setOwner("Anthony Morales");
+      setPhone("(214) 555-0199");
+      setEmail("anthony@handyant.com");
+      setActiveCities(new Set(DEFAULT_ACTIVE));
+      setLoading(false);
+      return;
+    }
+
+    Promise.all([
+      fetch("/api/me").then((r) => (r.ok ? r.json() : null)),
+      fetch("/api/admin/service-areas").then((r) => (r.ok ? r.json() : [])),
+    ])
+      .then(([me, areas]) => {
+        if (me) {
+          setOwner(me.name ?? "");
+          setPhone(me.phone ?? "");
+          setEmail(me.email ?? "");
+        }
+        if (Array.isArray(areas)) {
+          const ids = new Set<string>();
+          for (const a of areas) {
+            if (!a.active) continue;
+            const id = cityNameToId.get(String(a.city ?? "").toLowerCase());
+            if (id) ids.add(id);
+          }
+          setActiveCities(ids);
+        }
+      })
+      .catch(() => {
+        /* leave defaults blank */
+      })
+      .finally(() => setLoading(false));
+  }, [isDemo, mounted]);
 
   function startEdit(field: EditableField, current: string) {
     setEditing(field);
     setDraft(current);
   }
 
-  function saveEdit() {
-    if (editing === "name")  setBizName(draft);
-    if (editing === "owner") setOwner(draft);
-    if (editing === "phone") setPhone(draft);
-    if (editing === "email") setEmail(draft);
-    setSavedField(editing);
+  async function saveEdit() {
+    const field = editing;
+    const value = draft;
+    if (!field) return;
+
+    // Optimistic update
+    if (field === "name")  setBizName(value);
+    if (field === "owner") setOwner(value);
+    if (field === "phone") setPhone(value);
+    if (field === "email") setEmail(value);
     setEditing(null);
+
+    if (!isDemo && field !== "name") {
+      // Map editor field to User column
+      const patchKey = field === "owner" ? "name" : field; // phone/email pass through
+      try {
+        await fetch("/api/me", {
+          method: "PATCH",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ [patchKey]: value }),
+        });
+      } catch {
+        /* swallow — UI keeps optimistic value */
+      }
+    }
+
+    setSavedField(field);
     setTimeout(() => setSavedField(null), 1800);
   }
 
-  function toggleCity(id: string) {
+  async function toggleCity(id: string) {
+    const cityName = DFW_CITIES.find((c) => c.id === id)?.name;
+    const wasActive = activeCities.has(id);
+
     setActiveCities((prev) => {
       const next = new Set(prev);
       if (next.has(id)) next.delete(id);
       else next.add(id);
       return next;
     });
+
+    if (isDemo || !cityName) return;
+    try {
+      if (wasActive) {
+        await fetch(`/api/admin/service-areas?city=${encodeURIComponent(cityName)}`, {
+          method: "DELETE",
+        });
+      } else {
+        await fetch("/api/admin/service-areas", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ city: cityName }),
+        });
+      }
+    } catch {
+      /* keep optimistic state */
+    }
   }
 
-  function removeCity(id: string) {
+  async function removeCity(id: string) {
+    const cityName = DFW_CITIES.find((c) => c.id === id)?.name;
     setActiveCities((prev) => {
       const next = new Set(prev);
       next.delete(id);
       return next;
     });
+    if (isDemo || !cityName) return;
+    try {
+      await fetch(`/api/admin/service-areas?city=${encodeURIComponent(cityName)}`, {
+        method: "DELETE",
+      });
+    } catch {
+      /* keep optimistic state */
+    }
   }
 
   function toggleDay(key: string) {
@@ -131,6 +224,14 @@ export default function SettingsPage() {
 
   const labelCls = "block text-[12px] font-semibold uppercase tracking-wider text-text-secondary mb-1.5";
   const activeCityList = DFW_CITIES.filter((c) => activeCities.has(c.id));
+
+  if (loading) {
+    return (
+      <div className="min-h-screen bg-background flex items-center justify-center">
+        <div className="h-8 w-8 border-2 border-primary border-t-transparent rounded-full animate-spin" />
+      </div>
+    );
+  }
 
   return (
     <div className="min-h-screen bg-background pb-28">
@@ -190,7 +291,7 @@ export default function SettingsPage() {
                     </div>
                     <div className="flex-1 min-w-0">
                       <p className="text-[11px] text-text-tertiary">{label}</p>
-                      <p className="text-[14px] font-semibold text-text-primary truncate">{value}</p>
+                      <p className="text-[14px] font-semibold text-text-primary truncate">{value || "—"}</p>
                     </div>
                     <button
                       onClick={() => startEdit(field, value)}
@@ -330,6 +431,7 @@ export default function SettingsPage() {
         </section>
 
         {/* ── SECTION: Availability ── */}
+        {/* TODO: persist working days/hours — no schema yet for tech availability. */}
         <section>
           <div className="flex items-center gap-2 mb-3">
             <Clock size={15} className="text-text-tertiary" />
@@ -396,6 +498,7 @@ export default function SettingsPage() {
         </section>
 
         {/* ── SECTION: Notifications ── */}
+        {/* TODO: persist notification prefs — no schema yet. */}
         <section>
           <div className="flex items-center gap-2 mb-3">
             <Bell size={15} className="text-text-tertiary" />
@@ -443,6 +546,7 @@ export default function SettingsPage() {
         </section>
 
         {/* ── SECTION: Subscription / Billing ── */}
+        {/* TODO: read from /api/me subscriptions[0] once billing UI is wired. */}
         <section>
           <div className="flex items-center gap-2 mb-3">
             <CreditCard size={15} className="text-text-tertiary" />

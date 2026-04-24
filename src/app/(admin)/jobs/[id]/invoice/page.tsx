@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, use } from "react";
+import { useState, useEffect, use } from "react";
 import Link from "next/link";
 import Card from "@/components/Card";
 import Button from "@/components/Button";
@@ -18,8 +18,19 @@ import {
   CreditCard,
   Smartphone,
 } from "lucide-react";
+import { useDemoMode } from "@/lib/useDemoMode";
 
-const INVOICE = {
+const TAX_RATE = 8.25;
+
+const PAYMENT_METHODS = [
+  { name: "Venmo", handle: "@AnthonyHandyAnt", icon: Smartphone, color: "text-[#3D95CE] bg-[#E8F4FC]" },
+  { name: "Zelle", handle: "(214) 555-0199", icon: DollarSign, color: "text-[#6D1ED4] bg-[#F3EAFD]" },
+  { name: "Card", handle: "Via secure link", icon: CreditCard, color: "text-success bg-success-light" },
+];
+
+// ── Demo data ────────────────────────────────────────────────────────────────
+
+const DEMO_INVOICE = {
   number: "INV-2026-031",
   date: "Mar 29, 2026",
   dueDate: "Apr 5, 2026",
@@ -36,24 +47,149 @@ const INVOICE = {
     { description: "Materials — Garage door sensor mounting bracket", detail: "Universal fit", amount: 25 },
   ],
   subtotal: 340,
-  taxRate: 8.25,
+  taxRate: TAX_RATE,
   tax: 28.05,
   total: 368.05,
-  paymentMethods: [
-    { name: "Venmo", handle: "@AnthonyHandyAnt", icon: Smartphone, color: "text-[#3D95CE] bg-[#E8F4FC]" },
-    { name: "Zelle", handle: "(214) 555-0199", icon: DollarSign, color: "text-[#6D1ED4] bg-[#F3EAFD]" },
-    { name: "Card", handle: "Via secure link", icon: CreditCard, color: "text-success bg-success-light" },
-  ],
 };
 
+// ── Types ────────────────────────────────────────────────────────────────────
+
+interface ApiBooking {
+  id: string;
+  durationMinutes: number | null;
+  estimatedCost: string | number | null;
+  finalCost: string | number | null;
+  customer: { id: string; name: string; email: string | null; phone: string | null } | null;
+  home: { address: string; city: string | null; state: string | null; zip: string | null } | null;
+  tasks: { id: string; label: string }[];
+  parts: { id: string; item: string; qty: number | null; cost: string | number | null }[];
+  invoices: ApiInvoice[];
+}
+
+interface ApiInvoice {
+  id: string;
+  number: string;
+  subtotal: string | number;
+  tax: string | number | null;
+  total: string | number;
+  status: string | null;
+  sentAt: string | null;
+  createdAt: string | null;
+}
+
+interface InvoiceView {
+  number: string;
+  date: string;
+  dueDate: string;
+  client: { name: string; address: string; city: string; phone: string; email: string };
+  lineItems: { description: string; detail: string; amount: number }[];
+  subtotal: number;
+  taxRate: number;
+  tax: number;
+  total: number;
+  exists: boolean;
+}
+
+function buildView(b: ApiBooking, invoice?: ApiInvoice): InvoiceView {
+  const durationMins = b.durationMinutes ?? 120;
+  const hours = durationMins / 60;
+  const laborRate = 80;
+  const labor = Math.round(hours * laborRate);
+  const partsItems = (b.parts ?? []).map((p) => {
+    const cost = p.cost == null ? 0 : Number(p.cost);
+    return {
+      description: `Materials — ${p.item}`,
+      detail: `Qty ${p.qty ?? 1}`,
+      amount: cost,
+    };
+  });
+  const labels = b.tasks.map((t) => t.label).join(" + ");
+  const lineItems = [
+    {
+      description: `Labor — ${labels || "Service visit"}`,
+      detail: `${hours} hrs @ $${laborRate}/hr`,
+      amount: labor,
+    },
+    ...partsItems,
+  ];
+
+  const computedSubtotal = lineItems.reduce((s, li) => s + li.amount, 0);
+  const subtotal = invoice ? Number(invoice.subtotal) : computedSubtotal;
+  const tax = invoice ? Number(invoice.tax ?? 0) : Number((subtotal * (TAX_RATE / 100)).toFixed(2));
+  const total = invoice ? Number(invoice.total) : Number((subtotal + tax).toFixed(2));
+
+  const sourceDate = invoice?.sentAt ?? invoice?.createdAt ?? new Date().toISOString();
+  const dateObj = new Date(sourceDate);
+  const dueObj = new Date(dateObj.getTime() + 7 * 86400000);
+  const fmt = (d: Date) => d.toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" });
+
+  const home = b.home;
+  const cityLine = home
+    ? `${home.city ?? ""}${home.state ? `, ${home.state}` : ""}${home.zip ? ` ${home.zip}` : ""}`.trim()
+    : "";
+
+  return {
+    number: invoice?.number ?? "DRAFT",
+    date: fmt(dateObj),
+    dueDate: fmt(dueObj),
+    client: {
+      name: b.customer?.name ?? "Customer",
+      address: home?.address ?? "—",
+      city: cityLine || "—",
+      phone: b.customer?.phone ?? "",
+      email: b.customer?.email ?? "",
+    },
+    lineItems,
+    subtotal,
+    taxRate: TAX_RATE,
+    tax,
+    total,
+    exists: !!invoice,
+  };
+}
+
+// ── Page ─────────────────────────────────────────────────────────────────────
+
 export default function InvoicePage({ params }: { params: Promise<{ id: string }> }) {
-  const { id: _id } = use(params); // unwrap async params
+  const { id: jobId } = use(params);
+  const { isDemo, mounted } = useDemoMode();
+
+  const [view, setView] = useState<InvoiceView | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [generating, setGenerating] = useState(false);
   const [includePaymentLink, setIncludePaymentLink] = useState(true);
   const [message, setMessage] = useState(
-    "Hi Sarah! It was a pleasure working on your home today. Here's your invoice for today's service. Please let me know if you have any questions!"
+    "Hi! It was a pleasure working on your home today. Here's your invoice for today's service. Please let me know if you have any questions!"
   );
   const [sent, setSent] = useState<"text" | "email" | null>(null);
   const [copied, setCopied] = useState(false);
+
+  function loadInvoice() {
+    if (isDemo) {
+      setView({ ...DEMO_INVOICE, exists: true });
+      setLoading(false);
+      return;
+    }
+    setLoading(true);
+    fetch(`/api/bookings/${jobId}`)
+      .then((r) => r.ok ? r.json() : null)
+      .then((booking: ApiBooking | null) => {
+        if (!booking) {
+          setView(null);
+          return;
+        }
+        const invoice = booking.invoices?.[0];
+        setView(buildView(booking, invoice));
+      })
+      .catch(() => setView(null))
+      .finally(() => setLoading(false));
+  }
+
+  useEffect(() => {
+    if (!mounted) return;
+    loadInvoice();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [jobId, isDemo, mounted]);
 
   function handleSend(method: "text" | "email") {
     setSent(method);
@@ -65,7 +201,41 @@ export default function InvoicePage({ params }: { params: Promise<{ id: string }
     setTimeout(() => setCopied(false), 2000);
   }
 
-  const jobId = _id ?? "1";
+  function generateInvoice() {
+    if (!view || isDemo) return;
+    setGenerating(true);
+    fetch("/api/invoices", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        bookingId: jobId,
+        subtotal: view.subtotal,
+        tax: view.tax,
+        total: view.total,
+      }),
+    })
+      .then((r) => r.ok ? r.json() : null)
+      .then(() => loadInvoice())
+      .catch(() => {})
+      .finally(() => setGenerating(false));
+  }
+
+  if (loading) {
+    return (
+      <div className="min-h-screen bg-background flex items-center justify-center">
+        <div className="h-6 w-6 border-2 border-primary border-t-transparent rounded-full animate-spin" />
+      </div>
+    );
+  }
+
+  if (!view) {
+    return (
+      <div className="min-h-screen bg-background flex flex-col items-center justify-center px-5 text-center">
+        <p className="text-[16px] font-bold text-text-primary">Booking not found</p>
+        <Link href={`/jobs/${jobId}`} className="mt-4 text-[13px] font-semibold text-primary">Back to Job</Link>
+      </div>
+    );
+  }
 
   return (
     <div className="min-h-screen bg-background pb-28">
@@ -76,12 +246,12 @@ export default function InvoicePage({ params }: { params: Promise<{ id: string }
           className="mb-3 inline-flex items-center gap-1.5 text-[13px] font-medium text-text-secondary hover:text-text-primary transition-colors"
         >
           <ChevronLeft size={16} />
-          Job #{jobId}
+          Job #{jobId.slice(0, 8)}
         </Link>
         <div className="flex items-center justify-between">
           <div>
-            <h1 className="text-[22px] font-bold text-text-primary">Send Invoice</h1>
-            <p className="mt-0.5 text-[13px] text-text-secondary">{INVOICE.client.name} · {INVOICE.number}</p>
+            <h1 className="text-[22px] font-bold text-text-primary">{view.exists ? "Send Invoice" : "Generate Invoice"}</h1>
+            <p className="mt-0.5 text-[13px] text-text-secondary">{view.client.name} · {view.number}</p>
           </div>
           <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-primary-50">
             <Send size={20} className="text-primary" />
@@ -90,6 +260,26 @@ export default function InvoicePage({ params }: { params: Promise<{ id: string }
       </div>
 
       <div className="px-5 py-5 space-y-5">
+
+        {/* ── Generate prompt if no invoice yet ── */}
+        {!view.exists && !isDemo && (
+          <Card padding="md" className="border border-warning/30 bg-warning-light">
+            <p className="text-[14px] font-semibold text-text-primary">No invoice yet</p>
+            <p className="mt-1 text-[12px] text-text-secondary">
+              An invoice hasn&apos;t been generated for this job. Review the totals below and tap Generate to create one.
+            </p>
+            <Button
+              variant="primary"
+              size="md"
+              fullWidth
+              icon={<Send size={15} />}
+              onClick={generateInvoice}
+              disabled={generating}
+            >
+              {generating ? "Generating…" : `Generate Invoice · $${view.total.toFixed(2)}`}
+            </Button>
+          </Card>
+        )}
 
         {/* ── Invoice Preview Card ── */}
         <Card padding="lg">
@@ -106,9 +296,9 @@ export default function InvoicePage({ params }: { params: Promise<{ id: string }
               <p className="text-[11px] text-text-tertiary">DFW Metro Area, TX</p>
             </div>
             <div className="text-right">
-              <p className="text-[18px] font-bold text-primary">{INVOICE.number}</p>
-              <p className="text-[11px] text-text-tertiary mt-1">Date: {INVOICE.date}</p>
-              <p className="text-[11px] text-text-tertiary">Due: {INVOICE.dueDate}</p>
+              <p className="text-[18px] font-bold text-primary">{view.number}</p>
+              <p className="text-[11px] text-text-tertiary mt-1">Date: {view.date}</p>
+              <p className="text-[11px] text-text-tertiary">Due: {view.dueDate}</p>
               <span className="mt-2 inline-flex items-center rounded-full bg-warning-light px-2.5 py-0.5 text-[10px] font-semibold text-accent-amber">
                 Due in 7 days
               </span>
@@ -118,10 +308,12 @@ export default function InvoicePage({ params }: { params: Promise<{ id: string }
           {/* Bill to */}
           <div className="mb-5">
             <p className="text-[10px] font-bold uppercase tracking-widest text-text-tertiary mb-1.5">Bill To</p>
-            <p className="text-[14px] font-semibold text-text-primary">{INVOICE.client.name}</p>
-            <p className="text-[12px] text-text-secondary">{INVOICE.client.address}</p>
-            <p className="text-[12px] text-text-secondary">{INVOICE.client.city}</p>
-            <p className="text-[12px] text-text-tertiary mt-1">{INVOICE.client.phone}</p>
+            <p className="text-[14px] font-semibold text-text-primary">{view.client.name}</p>
+            <p className="text-[12px] text-text-secondary">{view.client.address}</p>
+            <p className="text-[12px] text-text-secondary">{view.client.city}</p>
+            {view.client.phone && (
+              <p className="text-[12px] text-text-tertiary mt-1">{view.client.phone}</p>
+            )}
           </div>
 
           {/* Line items */}
@@ -131,7 +323,7 @@ export default function InvoicePage({ params }: { params: Promise<{ id: string }
               <p className="text-[10px] font-bold uppercase tracking-widest text-text-tertiary text-right">Amount</p>
             </div>
             <div className="space-y-3">
-              {INVOICE.lineItems.map((item, i) => (
+              {view.lineItems.map((item, i) => (
                 <div key={i} className="grid grid-cols-[1fr_auto] gap-x-3 items-start">
                   <div>
                     <p className="text-[13px] font-medium text-text-primary leading-snug">{item.description}</p>
@@ -149,15 +341,15 @@ export default function InvoicePage({ params }: { params: Promise<{ id: string }
           <div className="border-t border-border pt-3 space-y-1.5">
             <div className="flex justify-between text-[13px]">
               <span className="text-text-secondary">Subtotal</span>
-              <span className="font-medium text-text-primary">${INVOICE.subtotal.toFixed(2)}</span>
+              <span className="font-medium text-text-primary">${view.subtotal.toFixed(2)}</span>
             </div>
             <div className="flex justify-between text-[13px]">
-              <span className="text-text-secondary">Tax ({INVOICE.taxRate}%)</span>
-              <span className="font-medium text-text-primary">${INVOICE.tax.toFixed(2)}</span>
+              <span className="text-text-secondary">Tax ({view.taxRate}%)</span>
+              <span className="font-medium text-text-primary">${view.tax.toFixed(2)}</span>
             </div>
             <div className="flex justify-between pt-2 border-t border-border mt-2">
               <span className="text-[15px] font-bold text-text-primary">Total Due</span>
-              <span className="text-[20px] font-bold text-primary">${INVOICE.total.toFixed(2)}</span>
+              <span className="text-[20px] font-bold text-primary">${view.total.toFixed(2)}</span>
             </div>
           </div>
 
@@ -167,7 +359,7 @@ export default function InvoicePage({ params }: { params: Promise<{ id: string }
               Payment Accepted Via
             </p>
             <div className="flex gap-2">
-              {INVOICE.paymentMethods.map((method) => (
+              {PAYMENT_METHODS.map((method) => (
                 <div
                   key={method.name}
                   className={`flex flex-1 flex-col items-center gap-1 rounded-xl p-2.5 ${method.color}`}
@@ -201,7 +393,7 @@ export default function InvoicePage({ params }: { params: Promise<{ id: string }
             <div>
               <p className="text-[14px] font-semibold text-text-primary">Include Payment Link</p>
               <p className="text-[12px] text-text-secondary mt-0.5">
-                Adds a secure "Pay Now" button to the invoice
+                Adds a secure &quot;Pay Now&quot; button to the invoice
               </p>
             </div>
             <button
@@ -225,10 +417,11 @@ export default function InvoicePage({ params }: { params: Promise<{ id: string }
           <div className="grid grid-cols-2 gap-3">
             <button
               onClick={() => handleSend("text")}
+              disabled={!view.exists}
               className={`relative flex flex-col items-center gap-2.5 rounded-2xl border-2 px-4 py-4 transition-all duration-150 ${
                 sent === "text"
                   ? "border-success bg-success-light"
-                  : "border-border bg-surface hover:border-primary/40 active:scale-[0.97]"
+                  : "border-border bg-surface hover:border-primary/40 active:scale-[0.97] disabled:opacity-50"
               }`}
             >
               {sent === "text" ? (
@@ -245,7 +438,7 @@ export default function InvoicePage({ params }: { params: Promise<{ id: string }
                   </div>
                   <div className="text-center">
                     <p className="text-[13px] font-bold text-text-primary">Text Message</p>
-                    <p className="text-[11px] text-text-tertiary">{INVOICE.client.phone}</p>
+                    <p className="text-[11px] text-text-tertiary">{view.client.phone || "—"}</p>
                   </div>
                 </>
               )}
@@ -253,10 +446,11 @@ export default function InvoicePage({ params }: { params: Promise<{ id: string }
 
             <button
               onClick={() => handleSend("email")}
+              disabled={!view.exists}
               className={`relative flex flex-col items-center gap-2.5 rounded-2xl border-2 px-4 py-4 transition-all duration-150 ${
                 sent === "email"
                   ? "border-success bg-success-light"
-                  : "border-border bg-surface hover:border-primary/40 active:scale-[0.97]"
+                  : "border-border bg-surface hover:border-primary/40 active:scale-[0.97] disabled:opacity-50"
               }`}
             >
               {sent === "email" ? (
@@ -274,7 +468,7 @@ export default function InvoicePage({ params }: { params: Promise<{ id: string }
                   <div className="text-center">
                     <p className="text-[13px] font-bold text-text-primary">Email</p>
                     <p className="text-[11px] text-text-tertiary truncate max-w-[110px]">
-                      {INVOICE.client.email}
+                      {view.client.email || "—"}
                     </p>
                   </div>
                 </>
@@ -291,25 +485,38 @@ export default function InvoicePage({ params }: { params: Promise<{ id: string }
             </div>
             <div>
               <p className="text-[14px] font-bold text-success">
-                Invoice sent to {INVOICE.client.name}!
+                Invoice sent to {view.client.name}!
               </p>
               <p className="text-[12px] text-success/80 mt-0.5">
-                Via {sent === "text" ? "text message" : "email"} · {INVOICE.number}
+                Via {sent === "text" ? "text message" : "email"} · {view.number}
               </p>
             </div>
           </div>
         )}
 
         {/* ── Primary Send Button ── */}
-        <Button
-          variant="primary"
-          size="lg"
-          fullWidth
-          icon={<Send size={17} />}
-          onClick={() => handleSend("text")}
-        >
-          Send Invoice · ${INVOICE.total.toFixed(2)}
-        </Button>
+        {view.exists ? (
+          <Button
+            variant="primary"
+            size="lg"
+            fullWidth
+            icon={<Send size={17} />}
+            onClick={() => handleSend("text")}
+          >
+            Send Invoice · ${view.total.toFixed(2)}
+          </Button>
+        ) : (
+          <Button
+            variant="primary"
+            size="lg"
+            fullWidth
+            icon={<Send size={17} />}
+            onClick={generateInvoice}
+            disabled={generating || isDemo}
+          >
+            {generating ? "Generating…" : `Generate Invoice · $${view.total.toFixed(2)}`}
+          </Button>
+        )}
 
         {/* ── Secondary Actions ── */}
         <div className="grid grid-cols-2 gap-3">
@@ -332,7 +539,7 @@ export default function InvoicePage({ params }: { params: Promise<{ id: string }
         </div>
 
         <p className="text-center text-[11px] text-text-tertiary pb-2">
-          Invoice will be logged in {INVOICE.client.name}&apos;s job history
+          Invoice will be logged in {view.client.name}&apos;s job history
         </p>
       </div>
     </div>
