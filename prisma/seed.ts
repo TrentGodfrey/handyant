@@ -207,7 +207,7 @@ async function main() {
         estimatedCost: b.estimate,
         finalCost: b.finalCost ?? null,
         categories: { create: cats.map((c) => ({ categoryId: c.id })) },
-        tasks: { create: b.tasks.map((t, i) => ({ label: t.label, notes: t.notes ?? null, done: t.done ?? false, sortOrder: i })) },
+        tasks: { create: b.tasks.map((t, i) => { const tt = t as { label: string; notes?: string; done?: boolean }; return { label: tt.label, notes: tt.notes ?? null, done: tt.done ?? false, sortOrder: i }; }) },
         parts: { create: b.parts.map((p) => ({ item: p.item, qty: p.qty, status: p.status, cost: p.cost })) },
       },
     });
