@@ -19,7 +19,23 @@ export async function GET() {
   const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1);
   const endOfMonth = new Date(now.getFullYear(), now.getMonth() + 1, 1);
 
-  const [todayBookings, weekBookings, monthBookings, partsNeeded, allReviews] = await Promise.all([
+  const ninetyDaysAgo = new Date(startOfDay);
+  ninetyDaysAgo.setDate(ninetyDaysAgo.getDate() - 90);
+
+  // 8 week buckets ending in current week
+  const eightWeeksAgoStart = new Date(startOfWeek);
+  eightWeeksAgoStart.setDate(eightWeeksAgoStart.getDate() - 7 * 7);
+
+  const [
+    todayBookings,
+    weekBookings,
+    monthBookings,
+    partsNeeded,
+    allReviews,
+    completedForRevenue,
+    pendingOffers,
+    recentBookings,
+  ] = await Promise.all([
     prisma.booking.findMany({
       where: { scheduledDate: { gte: startOfDay, lt: endOfDay } },
       include: {
@@ -43,6 +59,36 @@ export async function GET() {
       include: { booking: { include: { customer: true } } },
     }),
     prisma.review.findMany({ select: { rating: true, createdAt: true } }),
+    prisma.booking.findMany({
+      where: {
+        techId: tech.id,
+        status: "completed",
+        scheduledDate: { gte: eightWeeksAgoStart, lt: endOfWeek },
+      },
+      select: { scheduledDate: true, finalCost: true, estimatedCost: true },
+    }),
+    prisma.booking.findMany({
+      where: {
+        status: "pending",
+        OR: [{ techId: null }, { techId: tech.id }],
+      },
+      include: {
+        customer: { select: { id: true, name: true, phone: true } },
+        home: { select: { address: true, city: true, state: true, zip: true } },
+        categories: { include: { category: true } },
+      },
+      orderBy: { scheduledDate: "asc" },
+    }),
+    prisma.booking.findMany({
+      where: {
+        techId: tech.id,
+        scheduledDate: { gte: ninetyDaysAgo },
+      },
+      include: {
+        customer: { select: { id: true, name: true, avatarUrl: true } },
+        categories: { include: { category: { select: { name: true } } } },
+      },
+    }),
   ]);
 
   const sumMinutes = (list: { durationMinutes: number | null }[]) =>
@@ -63,6 +109,71 @@ export async function GET() {
   const avgRating = recentReviews.length
     ? recentReviews.reduce((a, b) => a + b, 0) / recentReviews.length
     : 0;
+
+  // Build weekly revenue buckets (last 8 weeks, ascending)
+  const weeklyRevenue: { weekStart: string; revenue: number }[] = [];
+  for (let i = 7; i >= 0; i--) {
+    const wkStart = new Date(startOfWeek);
+    wkStart.setDate(wkStart.getDate() - 7 * i);
+    const wkEnd = new Date(wkStart);
+    wkEnd.setDate(wkEnd.getDate() + 7);
+    const revenue = completedForRevenue
+      .filter((b) => {
+        const d = new Date(b.scheduledDate);
+        return d >= wkStart && d < wkEnd;
+      })
+      .reduce((acc, b) => {
+        const cost = b.finalCost ?? b.estimatedCost;
+        return acc + (cost ? Number(cost.toString()) : 0);
+      }, 0);
+    weeklyRevenue.push({
+      weekStart: wkStart.toISOString().slice(0, 10),
+      revenue,
+    });
+  }
+
+  // Top clients (by booking count, last 90 days)
+  const clientCounts = new Map<
+    string,
+    { id: string; name: string; avatarUrl: string | null; count: number; revenue: number }
+  >();
+  for (const b of recentBookings) {
+    const c = b.customer;
+    const entry = clientCounts.get(c.id) ?? {
+      id: c.id,
+      name: c.name,
+      avatarUrl: c.avatarUrl,
+      count: 0,
+      revenue: 0,
+    };
+    entry.count += 1;
+    const cost = b.finalCost ?? b.estimatedCost;
+    entry.revenue += cost ? Number(cost.toString()) : 0;
+    clientCounts.set(c.id, entry);
+  }
+  const topClients = [...clientCounts.values()]
+    .sort((a, b) => b.count - a.count)
+    .slice(0, 5);
+
+  // Revenue by category, last 90 days
+  const categoryRevenue = new Map<string, number>();
+  for (const b of recentBookings) {
+    const cost = b.finalCost ?? b.estimatedCost;
+    const amount = cost ? Number(cost.toString()) : 0;
+    if (!amount) continue;
+    if (b.categories.length === 0) {
+      categoryRevenue.set("Uncategorized", (categoryRevenue.get("Uncategorized") ?? 0) + amount);
+      continue;
+    }
+    const split = amount / b.categories.length;
+    for (const c of b.categories) {
+      const name = c.category.name;
+      categoryRevenue.set(name, (categoryRevenue.get(name) ?? 0) + split);
+    }
+  }
+  const revenueByCategory = [...categoryRevenue.entries()]
+    .map(([category, revenue]) => ({ category, revenue }))
+    .sort((a, b) => b.revenue - a.revenue);
 
   return Response.json({
     today: {
@@ -91,5 +202,22 @@ export async function GET() {
       bookingId: p.bookingId,
       client: p.booking.customer.name,
     })),
+    weeklyRevenue,
+    pendingOffers: pendingOffers.map((b) => ({
+      id: b.id,
+      customerId: b.customerId,
+      customerName: b.customer.name,
+      customerPhone: b.customer.phone,
+      address: b.home
+        ? [b.home.address, b.home.city, b.home.state, b.home.zip].filter(Boolean).join(", ")
+        : null,
+      scheduledDate: b.scheduledDate,
+      scheduledTime: b.scheduledTime,
+      description: b.description,
+      estimatedCost: b.estimatedCost,
+      categories: b.categories.map((c) => c.category.name),
+    })),
+    topClients,
+    revenueByCategory,
   });
 }

@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useState, useMemo } from "react";
 import Card from "@/components/Card";
 import Link from "next/link";
 import {
@@ -15,14 +15,12 @@ import {
 } from "lucide-react";
 import { useDemoMode } from "@/lib/useDemoMode";
 
-/* ── Static / Demo Data ── */
+/* ── Demo data ── */
 
-// TODO: stats API doesn't return time-series; keep demo data until /api/admin/stats?timeline=monthly is added.
-const revenueData = [5200, 6100, 6800, 7200, 7500, 8200];
-const revenueLabels = ["Oct", "Nov", "Dec", "Jan", "Feb", "Mar"];
+const demoRevenueData = [5200, 6100, 6800, 7200, 7500, 8200];
+const demoRevenueLabels = ["Oct", "Nov", "Dec", "Jan", "Feb", "Mar"];
 
-// TODO: backend doesn't yet aggregate revenue by category; demo only.
-const serviceCategories = [
+const demoServiceCategories = [
   { name: "Plumbing", value: 2400, pct: 29, color: "#3B82F6" },
   { name: "Electrical", value: 1900, pct: 23, color: "#8B5CF6" },
   { name: "General Repair", value: 1500, pct: 18, color: "#F59E0B" },
@@ -31,16 +29,14 @@ const serviceCategories = [
   { name: "Carpentry", value: 400, pct: 5, color: "#6366F1" },
 ];
 
-// TODO: top clients aggregation not exposed by stats API; demo only.
-const topClients = [
+const demoTopClients = [
   { name: "Sarah Mitchell", visits: 4, total: 1340, rating: 5.0 },
   { name: "Robert Chen", visits: 3, total: 840, rating: 4.9 },
   { name: "Maria Garcia", visits: 2, total: 380, rating: 5.0 },
   { name: "James Wilson", visits: 2, total: 560, rating: 4.8 },
 ];
 
-// TODO: per-area job counts not yet aggregated; demo only.
-const serviceAreas = [
+const demoServiceAreas = [
   { city: "Plano", jobs: 6 },
   { city: "Frisco", jobs: 4 },
   { city: "Allen", jobs: 3 },
@@ -49,8 +45,7 @@ const serviceAreas = [
   { city: "Celina", jobs: 1 },
 ];
 
-// TODO: weekly day-by-day revenue not yet aggregated; demo only.
-const weeklyBreakdown = [
+const demoWeeklyBreakdown = [
   { day: "Mon", jobs: 4, revenue: 680 },
   { day: "Tue", jobs: 3, revenue: 520 },
   { day: "Wed", jobs: 5, revenue: 890 },
@@ -59,7 +54,9 @@ const weeklyBreakdown = [
   { day: "Sat", jobs: 1, revenue: 210 },
 ];
 
-/* ── Types for stats endpoint ── */
+const CATEGORY_COLORS = ["#3B82F6", "#8B5CF6", "#F59E0B", "#10B981", "#EC4899", "#6366F1", "#14B8A6", "#F43F5E"];
+
+/* ── Types ── */
 
 type StatsResponse = {
   today: { jobs: number; hours: number; partsToBuy: number };
@@ -73,11 +70,35 @@ type StatsResponse = {
     reviewCount: number;
   };
   partsNeeded: { id: string; item: string; qty: number; bookingId: string; client: string }[];
+  weeklyRevenue: { weekStart: string; revenue: number }[];
+  topClients: {
+    id: string;
+    name: string;
+    avatarUrl: string | null;
+    count: number;
+    revenue: number;
+  }[];
+  revenueByCategory: { category: string; revenue: number }[];
+};
+
+type AdminBooking = {
+  id: string;
+  status: string;
+  scheduledDate: string;
+  finalCost: string | null;
+  estimatedCost: string | null;
+  home: { city: string | null } | null;
 };
 
 /* ── Revenue Area Chart (SVG) ── */
 
-function RevenueChart() {
+function RevenueChart({
+  values,
+  labels,
+}: {
+  values: number[];
+  labels: string[];
+}) {
   const chartW = 360;
   const chartH = 200;
   const padLeft = 42;
@@ -87,19 +108,26 @@ function RevenueChart() {
   const plotW = chartW - padLeft - padRight;
   const plotH = chartH - padTop - padBottom;
 
-  const maxVal = 10000;
+  const safeValues = values.length > 0 ? values : [0];
+  const maxRaw = Math.max(...safeValues, 1);
+  const maxVal = Math.ceil(maxRaw / 1000) * 1000 || 1000;
   const minVal = 0;
 
-  const points = revenueData.map((v, i) => {
-    const x = padLeft + (i / (revenueData.length - 1)) * plotW;
+  const points = safeValues.map((v, i) => {
+    const x = padLeft + (i / Math.max(safeValues.length - 1, 1)) * plotW;
     const y = padTop + plotH - ((v - minVal) / (maxVal - minVal)) * plotH;
     return { x, y };
   });
 
   const linePoints = points.map((p) => `${p.x},${p.y}`).join(" ");
-  const areaPath = `M${points[0].x},${points[0].y} ${points.map((p) => `L${p.x},${p.y}`).join(" ")} L${points[points.length - 1].x},${padTop + plotH} L${points[0].x},${padTop + plotH} Z`;
+  const areaPath = `M${points[0].x},${points[0].y} ${points
+    .map((p) => `L${p.x},${p.y}`)
+    .join(" ")} L${points[points.length - 1].x},${padTop + plotH} L${points[0].x},${
+    padTop + plotH
+  } Z`;
 
-  const gridLines = [2000, 4000, 6000, 8000, 10000].map((val) => ({
+  const step = maxVal / 5;
+  const gridLines = [step, step * 2, step * 3, step * 4, step * 5].map((val) => ({
     val,
     y: padTop + plotH - ((val - minVal) / (maxVal - minVal)) * plotH,
   }));
@@ -137,7 +165,7 @@ function RevenueChart() {
             fontSize={9}
             fontWeight={500}
           >
-            ${g.val / 1000}k
+            ${Math.round(g.val / 1000)}k
           </text>
         </g>
       ))}
@@ -160,12 +188,12 @@ function RevenueChart() {
         <circle key={i} cx={p.x} cy={p.y} r={3} fill="#3B82F6" />
       ))}
 
-      {/* Month labels */}
-      {revenueLabels.map((label, i) => {
-        const x = padLeft + (i / (revenueLabels.length - 1)) * plotW;
+      {/* Labels */}
+      {labels.map((label, i) => {
+        const x = padLeft + (i / Math.max(labels.length - 1, 1)) * plotW;
         return (
           <text
-            key={label}
+            key={label + i}
             x={x}
             y={chartH - 6}
             textAnchor="middle"
@@ -187,11 +215,30 @@ function formatCurrency(n: number) {
   return `$${Math.round(n).toLocaleString()}`;
 }
 
+function shortMonth(iso: string) {
+  try {
+    return new Date(iso).toLocaleDateString("en-US", { month: "short" });
+  } catch {
+    return iso;
+  }
+}
+
+function shortDate(iso: string) {
+  try {
+    return new Date(iso).toLocaleDateString("en-US", { month: "numeric", day: "numeric" });
+  } catch {
+    return iso;
+  }
+}
+
+const WEEKDAYS = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
+
 /* ── Page Component ── */
 
 export default function ReportsPage() {
   const [period, setPeriod] = useState<"week" | "month" | "quarter">("month");
   const [stats, setStats] = useState<StatsResponse | null>(null);
+  const [bookings, setBookings] = useState<AdminBooking[]>([]);
   const [loading, setLoading] = useState(true);
 
   const { isDemo, mounted } = useDemoMode();
@@ -202,23 +249,138 @@ export default function ReportsPage() {
       setLoading(false);
       return;
     }
-    fetch("/api/admin/stats")
-      .then((r) => r.json())
-      .then((data) => setStats(data))
-      .catch(() => setStats(null))
+    Promise.all([
+      fetch("/api/admin/stats").then((r) => (r.ok ? r.json() : null)),
+      fetch("/api/admin/bookings").then((r) => (r.ok ? r.json() : [])),
+    ])
+      .then(([statsData, bookingsData]) => {
+        setStats(statsData);
+        if (Array.isArray(bookingsData)) setBookings(bookingsData);
+      })
+      .catch(() => {
+        setStats(null);
+        setBookings([]);
+      })
       .finally(() => setLoading(false));
   }, [isDemo, mounted]);
 
-  const maxServiceValue = serviceCategories[0].value;
-  const maxAreaJobs = serviceAreas[0].jobs;
+  /* ─ Time-series chart data based on period ─ */
+  const chartData = useMemo(() => {
+    if (isDemo) {
+      return { values: demoRevenueData, labels: demoRevenueLabels };
+    }
+    const weekly = stats?.weeklyRevenue ?? [];
+    if (period === "week") {
+      // Show the 8 weekly buckets
+      return {
+        values: weekly.map((w) => w.revenue),
+        labels: weekly.map((w) => shortDate(w.weekStart)),
+      };
+    }
+    if (period === "month") {
+      // Group 8 weeks into ~2 month buckets
+      const months = new Map<string, number>();
+      for (const w of weekly) {
+        const key = shortMonth(w.weekStart);
+        months.set(key, (months.get(key) ?? 0) + w.revenue);
+      }
+      return {
+        values: [...months.values()],
+        labels: [...months.keys()],
+      };
+    }
+    // quarter — group 8 weeks into ~3-month buckets
+    const quarters = new Map<string, number>();
+    for (const w of weekly) {
+      const date = new Date(w.weekStart);
+      const q = Math.floor(date.getMonth() / 3) + 1;
+      const key = `Q${q} ${date.getFullYear()}`;
+      quarters.set(key, (quarters.get(key) ?? 0) + w.revenue);
+    }
+    return {
+      values: [...quarters.values()],
+      labels: [...quarters.keys()],
+    };
+  }, [isDemo, period, stats]);
 
-  // Pick the active period's data for revenue and job counts.
-  // The stats API exposes today/week/month aggregates; "quarter" falls back to month while we await richer data. TODO.
+  /* ─ Service categories from real data ─ */
+  const serviceCategories = useMemo(() => {
+    if (isDemo) return demoServiceCategories;
+    const list = stats?.revenueByCategory ?? [];
+    if (list.length === 0) return [];
+    const total = list.reduce((acc, c) => acc + c.revenue, 0);
+    return list.map((c, i) => ({
+      name: c.category,
+      value: c.revenue,
+      pct: total > 0 ? Math.round((c.revenue / total) * 100) : 0,
+      color: CATEGORY_COLORS[i % CATEGORY_COLORS.length],
+    }));
+  }, [isDemo, stats]);
+
+  /* ─ Top clients from real data ─ */
+  const topClients = useMemo(() => {
+    if (isDemo) return demoTopClients;
+    return (stats?.topClients ?? []).map((c) => ({
+      name: c.name,
+      visits: c.count,
+      total: Math.round(c.revenue),
+      rating: 0,
+    }));
+  }, [isDemo, stats]);
+
+  /* ─ Service area aggregation from bookings ─ */
+  const serviceAreas = useMemo(() => {
+    if (isDemo) return demoServiceAreas;
+    const counts = new Map<string, number>();
+    for (const b of bookings) {
+      const city = b.home?.city?.trim();
+      if (!city) continue;
+      counts.set(city, (counts.get(city) ?? 0) + 1);
+    }
+    return [...counts.entries()]
+      .map(([city, jobs]) => ({ city, jobs }))
+      .sort((a, b) => b.jobs - a.jobs)
+      .slice(0, 8);
+  }, [isDemo, bookings]);
+
+  /* ─ Weekly breakdown (this week, by day, from bookings) ─ */
+  const weeklyBreakdown = useMemo(() => {
+    if (isDemo) return demoWeeklyBreakdown;
+    const now = new Date();
+    const startOfWeek = new Date(now);
+    startOfWeek.setHours(0, 0, 0, 0);
+    startOfWeek.setDate(startOfWeek.getDate() - startOfWeek.getDay());
+    const endOfWeek = new Date(startOfWeek);
+    endOfWeek.setDate(endOfWeek.getDate() + 7);
+
+    const buckets: { day: string; jobs: number; revenue: number }[] = WEEKDAYS.map((d) => ({
+      day: d,
+      jobs: 0,
+      revenue: 0,
+    }));
+
+    for (const b of bookings) {
+      const date = new Date(b.scheduledDate);
+      if (date < startOfWeek || date >= endOfWeek) continue;
+      const idx = date.getDay();
+      buckets[idx].jobs += 1;
+      const cost = b.finalCost ?? b.estimatedCost;
+      buckets[idx].revenue += cost ? Number(cost) : 0;
+    }
+    return buckets;
+  }, [isDemo, bookings]);
+
+  const maxServiceValue = serviceCategories[0]?.value ?? 1;
+  const maxAreaJobs = serviceAreas[0]?.jobs ?? 1;
+
+  /* ─ KPIs ─ */
   const periodRevenue = isDemo
     ? 8200
     : period === "week"
       ? stats?.week.revenue ?? 0
-      : stats?.month.revenue ?? 0;
+      : period === "month"
+        ? stats?.month.revenue ?? 0
+        : (stats?.weeklyRevenue ?? []).reduce((acc, w) => acc + w.revenue, 0);
 
   const periodJobs = isDemo
     ? 18
@@ -226,7 +388,7 @@ export default function ReportsPage() {
       ? stats?.week.jobs ?? 0
       : period === "month"
         ? stats?.month.completed ?? 0
-        : stats?.month.completed ?? 0;
+        : (stats?.weeklyRevenue ?? []).filter((w) => w.revenue > 0).length;
 
   const avgJobValue = isDemo
     ? 456
@@ -237,11 +399,14 @@ export default function ReportsPage() {
   const rating = isDemo ? 4.9 : stats?.month.avgRating ?? 0;
   const reviewCount = isDemo ? null : stats?.month.reviewCount ?? 0;
 
+  const periodLabel =
+    period === "week" ? "this week" : period === "month" ? "this month" : "this quarter";
+
   const kpiCards = [
     {
       label: "Revenue",
       value: formatCurrency(periodRevenue),
-      trend: isDemo ? "+12% vs last month" : `${period === "week" ? "this week" : "this month"}`,
+      trend: isDemo ? "+12% vs last month" : periodLabel,
       positive: true,
       icon: DollarSign,
       iconBg: "bg-success-light",
@@ -250,7 +415,7 @@ export default function ReportsPage() {
     {
       label: "Jobs Completed",
       value: String(periodJobs),
-      trend: isDemo ? "+3 vs last month" : `${period === "week" ? "this week" : "this month"}`,
+      trend: isDemo ? "+3 vs last month" : periodLabel,
       positive: true,
       icon: Briefcase,
       iconBg: "bg-primary-50",
@@ -277,7 +442,9 @@ export default function ReportsPage() {
     },
   ];
 
-  if (loading) {
+  const chartHasData = chartData.values.some((v) => v > 0);
+
+  if (!mounted || loading) {
     return (
       <div className="px-5 pt-14 lg:pt-8 pb-28 flex items-center justify-center min-h-[60vh]">
         <div className="h-8 w-8 border-2 border-primary border-t-transparent rounded-full animate-spin" />
@@ -384,10 +551,20 @@ export default function ReportsPage() {
               Revenue Trend
             </h3>
             <p className="text-[11px] text-text-tertiary">
-              Monthly revenue — last 6 months
+              {period === "week"
+                ? "Weekly revenue — last 8 weeks"
+                : period === "month"
+                  ? "Monthly revenue"
+                  : "Quarterly revenue"}
             </p>
           </div>
-          <RevenueChart />
+          {chartHasData ? (
+            <RevenueChart values={chartData.values} labels={chartData.labels} />
+          ) : (
+            <p className="text-[12px] text-text-tertiary text-center py-12">
+              No data yet — complete jobs to see reports
+            </p>
+          )}
         </Card>
       </div>
 
@@ -398,32 +575,38 @@ export default function ReportsPage() {
           <h3 className="text-[15px] font-semibold text-text-primary mb-3">
             Revenue by Service Category
           </h3>
-          <div className="space-y-3">
-            {serviceCategories.map((cat) => (
-              <div key={cat.name}>
-                <div className="flex items-center justify-between mb-1">
-                  <span className="text-[13px] font-medium text-text-primary">
-                    {cat.name}
-                  </span>
-                  <span className="text-[12px] font-semibold text-text-secondary">
-                    ${cat.value.toLocaleString()}
-                  </span>
+          {serviceCategories.length === 0 ? (
+            <p className="text-[12px] text-text-tertiary text-center py-6">
+              No data yet — complete jobs to see reports
+            </p>
+          ) : (
+            <div className="space-y-3">
+              {serviceCategories.map((cat) => (
+                <div key={cat.name}>
+                  <div className="flex items-center justify-between mb-1">
+                    <span className="text-[13px] font-medium text-text-primary">
+                      {cat.name}
+                    </span>
+                    <span className="text-[12px] font-semibold text-text-secondary">
+                      ${Math.round(cat.value).toLocaleString()}
+                    </span>
+                  </div>
+                  <div className="h-2.5 w-full rounded-full bg-surface-secondary overflow-hidden">
+                    <div
+                      className="h-full rounded-full transition-all"
+                      style={{
+                        width: `${(cat.value / maxServiceValue) * 100}%`,
+                        backgroundColor: cat.color,
+                      }}
+                    />
+                  </div>
+                  <p className="text-[10px] text-text-tertiary mt-0.5">
+                    {cat.pct}% of total
+                  </p>
                 </div>
-                <div className="h-2.5 w-full rounded-full bg-surface-secondary overflow-hidden">
-                  <div
-                    className="h-full rounded-full transition-all"
-                    style={{
-                      width: `${(cat.value / maxServiceValue) * 100}%`,
-                      backgroundColor: cat.color,
-                    }}
-                  />
-                </div>
-                <p className="text-[10px] text-text-tertiary mt-0.5">
-                  {cat.pct}% of total
-                </p>
-              </div>
-            ))}
-          </div>
+              ))}
+            </div>
+          )}
         </Card>
 
         {/* Top Clients */}
@@ -434,45 +617,50 @@ export default function ReportsPage() {
               Top Clients
             </h3>
           </div>
-          <div className="space-y-3">
-            {topClients.map((client, i) => (
-              <div
-                key={client.name}
-                className="flex items-center gap-3 py-2 border-b border-border-light last:border-0"
-              >
-                {/* Rank */}
-                <div className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-primary-50 text-[12px] font-bold text-primary">
-                  {i + 1}
-                </div>
+          {topClients.length === 0 ? (
+            <p className="text-[12px] text-text-tertiary text-center py-6">
+              No data yet — complete jobs to see reports
+            </p>
+          ) : (
+            <div className="space-y-3">
+              {topClients.map((client, i) => (
+                <div
+                  key={client.name + i}
+                  className="flex items-center gap-3 py-2 border-b border-border-light last:border-0"
+                >
+                  {/* Rank */}
+                  <div className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-primary-50 text-[12px] font-bold text-primary">
+                    {i + 1}
+                  </div>
 
-                {/* Info */}
-                <div className="flex-1 min-w-0">
-                  <p className="text-[13px] font-semibold text-text-primary truncate">
-                    {client.name}
-                  </p>
-                  <p className="text-[11px] text-text-tertiary">
-                    {client.visits} visits
-                  </p>
-                </div>
+                  {/* Info */}
+                  <div className="flex-1 min-w-0">
+                    <p className="text-[13px] font-semibold text-text-primary truncate">
+                      {client.name}
+                    </p>
+                    <p className="text-[11px] text-text-tertiary">
+                      {client.visits} {client.visits === 1 ? "visit" : "visits"}
+                    </p>
+                  </div>
 
-                {/* Total */}
-                <div className="text-right shrink-0">
-                  <p className="text-[13px] font-bold text-text-primary">
-                    ${client.total.toLocaleString()}
-                  </p>
-                  <div className="flex items-center gap-0.5 justify-end">
-                    <Star
-                      size={10}
-                      className="text-warning fill-warning"
-                    />
-                    <span className="text-[11px] font-semibold text-text-secondary">
-                      {client.rating}
-                    </span>
+                  {/* Total */}
+                  <div className="text-right shrink-0">
+                    <p className="text-[13px] font-bold text-text-primary">
+                      ${client.total.toLocaleString()}
+                    </p>
+                    {client.rating > 0 && (
+                      <div className="flex items-center gap-0.5 justify-end">
+                        <Star size={10} className="text-warning fill-warning" />
+                        <span className="text-[11px] font-semibold text-text-secondary">
+                          {client.rating}
+                        </span>
+                      </div>
+                    )}
                   </div>
                 </div>
-              </div>
-            ))}
-          </div>
+              ))}
+            </div>
+          )}
         </Card>
       </div>
 
@@ -486,29 +674,35 @@ export default function ReportsPage() {
               Service Area Heatmap
             </h3>
           </div>
-          <div className="space-y-2.5">
-            {serviceAreas.map((area) => (
-              <div key={area.city}>
-                <div className="flex items-center justify-between mb-1">
-                  <span className="text-[13px] font-medium text-text-primary">
-                    {area.city}
-                  </span>
-                  <span className="text-[11px] font-semibold text-text-secondary">
-                    {area.jobs} jobs
-                  </span>
+          {serviceAreas.length === 0 ? (
+            <p className="text-[12px] text-text-tertiary text-center py-6">
+              No data yet — complete jobs to see reports
+            </p>
+          ) : (
+            <div className="space-y-2.5">
+              {serviceAreas.map((area) => (
+                <div key={area.city}>
+                  <div className="flex items-center justify-between mb-1">
+                    <span className="text-[13px] font-medium text-text-primary">
+                      {area.city}
+                    </span>
+                    <span className="text-[11px] font-semibold text-text-secondary">
+                      {area.jobs} {area.jobs === 1 ? "job" : "jobs"}
+                    </span>
+                  </div>
+                  <div className="h-2 w-full rounded-full bg-surface-secondary overflow-hidden">
+                    <div
+                      className="h-full rounded-full bg-primary transition-all"
+                      style={{
+                        width: `${(area.jobs / maxAreaJobs) * 100}%`,
+                        opacity: 0.4 + (area.jobs / maxAreaJobs) * 0.6,
+                      }}
+                    />
+                  </div>
                 </div>
-                <div className="h-2 w-full rounded-full bg-surface-secondary overflow-hidden">
-                  <div
-                    className="h-full rounded-full bg-primary transition-all"
-                    style={{
-                      width: `${(area.jobs / maxAreaJobs) * 100}%`,
-                      opacity: 0.4 + (area.jobs / maxAreaJobs) * 0.6,
-                    }}
-                  />
-                </div>
-              </div>
-            ))}
-          </div>
+              ))}
+            </div>
+          )}
         </Card>
 
         {/* Weekly Breakdown */}
@@ -519,21 +713,27 @@ export default function ReportsPage() {
               Weekly Breakdown
             </h3>
           </div>
-          <div className="grid grid-cols-2 gap-2">
-            {weeklyBreakdown.map((day) => (
-              <div
-                key={day.day}
-                className="rounded-lg bg-surface-secondary px-3 py-2.5"
-              >
-                <p className="text-[13px] font-bold text-text-primary">
-                  {day.day}
-                </p>
-                <p className="text-[11px] text-text-secondary mt-0.5">
-                  {day.jobs} jobs &middot; ${day.revenue}
-                </p>
-              </div>
-            ))}
-          </div>
+          {weeklyBreakdown.every((d) => d.jobs === 0) && !isDemo ? (
+            <p className="text-[12px] text-text-tertiary text-center py-6">
+              No data yet — complete jobs to see reports
+            </p>
+          ) : (
+            <div className="grid grid-cols-2 gap-2">
+              {weeklyBreakdown.map((day) => (
+                <div
+                  key={day.day}
+                  className="rounded-lg bg-surface-secondary px-3 py-2.5"
+                >
+                  <p className="text-[13px] font-bold text-text-primary">
+                    {day.day}
+                  </p>
+                  <p className="text-[11px] text-text-secondary mt-0.5">
+                    {day.jobs} {day.jobs === 1 ? "job" : "jobs"} &middot; ${Math.round(day.revenue)}
+                  </p>
+                </div>
+              ))}
+            </div>
+          )}
         </Card>
       </div>
     </div>

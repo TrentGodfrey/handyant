@@ -11,6 +11,45 @@ import {
 } from "lucide-react";
 import { useDemoMode } from "@/lib/useDemoMode";
 
+function combineDateTime(scheduledDate: string, scheduledTime: string): Date | null {
+  // Date may be "YYYY-MM-DD" or full ISO; time may be "HH:mm[:ss]" or full ISO
+  const dateStr = scheduledDate.split("T")[0];
+  let h = 0;
+  let m = 0;
+  if (scheduledTime.includes("T")) {
+    const d = new Date(scheduledTime);
+    if (isNaN(d.getTime())) return null;
+    h = d.getHours();
+    m = d.getMinutes();
+  } else {
+    const [hh, mm] = scheduledTime.split(":");
+    h = parseInt(hh ?? "0", 10);
+    m = parseInt(mm ?? "0", 10);
+  }
+  const [yStr, moStr, dStr] = dateStr.split("-");
+  const y = parseInt(yStr, 10);
+  const mo = parseInt(moStr, 10) - 1;
+  const day = parseInt(dStr, 10);
+  if (!Number.isFinite(y) || !Number.isFinite(mo) || !Number.isFinite(day)) return null;
+  const out = new Date(y, mo, day, h, m, 0, 0);
+  return isNaN(out.getTime()) ? null : out;
+}
+
+function computeEtaLabel(scheduledDate: string, scheduledTime: string, status: string): { primary: string; secondary: string } {
+  if (status === "in_progress") return { primary: "On site", secondary: "Tech is working" };
+  const target = combineDateTime(scheduledDate, scheduledTime);
+  if (!target) return { primary: "Soon", secondary: "" };
+  const now = new Date();
+  const diffMin = Math.round((target.getTime() - now.getTime()) / 60000);
+  const arrivalTime = target.toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit" });
+  if (diffMin <= -5) return { primary: "Running late", secondary: `Was scheduled for ${arrivalTime}` };
+  if (diffMin <= 0) return { primary: "Arriving now", secondary: `Scheduled for ${arrivalTime}` };
+  if (diffMin < 60) return { primary: `Arriving in ${diffMin} min`, secondary: `Around ${arrivalTime}` };
+  const hours = Math.floor(diffMin / 60);
+  const mins = diffMin % 60;
+  return { primary: `Arriving at ${arrivalTime}`, secondary: hours > 0 ? `In ${hours}h ${mins}m` : "" };
+}
+
 // ─── Types & Data ──────────────────────────────────────────────────────────
 
 type Phase = 0 | 1 | 2 | 3;
@@ -310,6 +349,7 @@ export default function TrackPage() {
   const [loading, setLoading] = useState(true);
   const [phase, setPhase] = useState<Phase>(0);
   const [detailsOpen, setDetailsOpen] = useState(false);
+  const [shareToast, setShareToast] = useState<string | null>(null);
 
   useEffect(() => {
     if (!mounted) return;
@@ -340,6 +380,35 @@ export default function TrackPage() {
   }, [isDemo, mounted]);
 
   const advancePhase = () => setPhase((p) => (p < 3 ? ((p + 1) as Phase) : 0));
+
+  async function handleShareEta() {
+    if (!booking) return;
+    const eta = computeEtaLabel(booking.scheduledDate, booking.scheduledTime, booking.status);
+    const shareUrl = typeof window !== "undefined" ? window.location.href : "";
+    const text = `${booking.techName} — ${eta.primary}${eta.secondary ? ` (${eta.secondary})` : ""}`;
+    try {
+      if (typeof navigator !== "undefined" && navigator.share) {
+        await navigator.share({
+          title: "HandyAnt ETA",
+          text,
+          url: shareUrl,
+        });
+        return;
+      }
+    } catch {
+      // user cancelled or share failed — fall through to copy
+    }
+    try {
+      if (typeof navigator !== "undefined" && navigator.clipboard) {
+        await navigator.clipboard.writeText(shareUrl || text);
+        setShareToast("Copied");
+        setTimeout(() => setShareToast(null), 2000);
+      }
+    } catch {
+      setShareToast("Couldn't copy");
+      setTimeout(() => setShareToast(null), 2000);
+    }
+  }
 
   // ── Loading / empty states ───────────────────────────────────────────────
   if (loading) {
@@ -462,9 +531,10 @@ export default function TrackPage() {
 
         {/* ── Status Banner ───────────────────────────────────────────── */}
         <button
-          onClick={advancePhase}
+          onClick={isDemo ? advancePhase : undefined}
           className="w-full active:scale-[0.985] transition-all duration-200"
-          aria-label="Advance demo phase"
+          aria-label={isDemo ? "Advance demo phase" : "Status"}
+          disabled={!isDemo}
         >
           <div
             className={`relative overflow-hidden rounded-2xl ${status.color} p-5 ${
@@ -497,12 +567,14 @@ export default function TrackPage() {
               </div>
             </div>
 
-            {/* Demo hint */}
-            <div className="relative z-10 mt-3 flex items-center justify-center">
-              <span className="text-[10px] text-white/50 font-medium tracking-wide uppercase">
-                Demo: tap to advance
-              </span>
-            </div>
+            {/* Demo hint — only visible in demo mode */}
+            {isDemo && (
+              <div className="relative z-10 mt-3 flex items-center justify-center">
+                <span className="text-[10px] text-white/50 font-medium tracking-wide uppercase">
+                  Demo: tap to advance
+                </span>
+              </div>
+            )}
           </div>
         </button>
 
@@ -516,11 +588,13 @@ export default function TrackPage() {
             <div className="flex-1 min-w-0">
               <p className="text-[15px] font-semibold text-text-primary">{booking.techName}</p>
               <p className="text-[12px] text-text-secondary mt-0.5">Your Handyman</p>
-              <div className="flex items-center gap-1 mt-0.5">
-                <Star size={12} className="text-warning fill-warning" />
-                <span className="text-[12px] font-semibold text-text-primary">4.9</span>
-                <span className="text-[11px] text-text-tertiary">(127 reviews)</span>
-              </div>
+              {isDemo && (
+                <div className="flex items-center gap-1 mt-0.5">
+                  <Star size={12} className="text-warning fill-warning" />
+                  <span className="text-[12px] font-semibold text-text-primary">4.9</span>
+                  <span className="text-[11px] text-text-tertiary">(127 reviews)</span>
+                </div>
+              )}
             </div>
             {/* Action buttons */}
             <div className="flex gap-2 shrink-0">
@@ -557,20 +631,28 @@ export default function TrackPage() {
             <div className="flex items-center justify-between mb-1">
               <div>
                 <p className="text-[11px] font-semibold text-text-secondary uppercase tracking-wider">Estimated Arrival</p>
-                <div className="flex items-baseline gap-2 mt-1">
-                  <span className="text-[40px] font-extrabold text-primary leading-none tracking-tight">12</span>
-                  <span className="text-[16px] font-semibold text-primary">min</span>
-                </div>
+                {isDemo ? (
+                  <div className="flex items-baseline gap-2 mt-1">
+                    <span className="text-[40px] font-extrabold text-primary leading-none tracking-tight">12</span>
+                    <span className="text-[16px] font-semibold text-primary">min</span>
+                  </div>
+                ) : (
+                  <p className="mt-1 text-[24px] font-extrabold text-primary leading-tight">
+                    {computeEtaLabel(booking.scheduledDate, booking.scheduledTime, booking.status).primary}
+                  </p>
+                )}
               </div>
               <div className="text-right">
                 <div className="flex items-center gap-1.5 text-text-secondary">
                   <Clock size={13} />
                   <span className="text-[12px]">Arriving ~{timeLabel}</span>
                 </div>
-                <div className="flex items-center gap-1.5 text-text-secondary mt-1">
-                  <MapPin size={13} />
-                  <span className="text-[12px]">3.2 miles away</span>
-                </div>
+                {isDemo && (
+                  <div className="flex items-center gap-1.5 text-text-secondary mt-1">
+                    <MapPin size={13} />
+                    <span className="text-[12px]">3.2 miles away</span>
+                  </div>
+                )}
               </div>
             </div>
 
@@ -716,9 +798,11 @@ export default function TrackPage() {
           )}
 
           {phase === 1 && (
-            <Button variant="primary" fullWidth size="lg" icon={<Share2 size={16} />}>
-              Share ETA
-            </Button>
+            <div className="relative">
+              <Button variant="primary" fullWidth size="lg" icon={<Share2 size={16} />} onClick={handleShareEta}>
+                {shareToast ?? "Share ETA"}
+              </Button>
+            </div>
           )}
 
           {phase === 2 && (

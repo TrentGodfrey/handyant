@@ -142,6 +142,13 @@ export default function MessagesPage() {
   const [messagesByThread, setMessagesByThread] = useState<Record<string, Message[]>>({});
   const [input, setInput] = useState("");
   const [sending, setSending] = useState(false);
+  const [toast, setToast] = useState<string | null>(null);
+  const [menuOpen, setMenuOpen] = useState(false);
+
+  function showToast(msg: string) {
+    setToast(msg);
+    setTimeout(() => setToast(null), 2200);
+  }
 
   const userId = (session?.user as Record<string, unknown> | undefined)?.id as string | undefined;
 
@@ -192,7 +199,7 @@ export default function MessagesPage() {
             ? `${new Date(visit.scheduledDate).toLocaleDateString([], { weekday: "short", month: "short", day: "numeric" })}`
             : "",
           address: visit?.home?.address ?? "",
-          phone: "",
+          phone: visit?.tech?.phone ?? "",
           messages: [],
         };
       });
@@ -217,7 +224,7 @@ export default function MessagesPage() {
               ? new Date(bookingWithTech.scheduledDate).toLocaleDateString([], { weekday: "short", month: "short", day: "numeric" })
               : "",
             address: bookingWithTech.home?.address ?? "",
-            phone: "",
+            phone: t.phone ?? "",
             messages: [],
           });
         }
@@ -414,15 +421,52 @@ export default function MessagesPage() {
               </p>
             </div>
           </div>
-          <div className="flex items-center gap-1">
+          <div className="flex items-center gap-1 relative">
             {activeThread.phone && (
-              <a href={`tel:${activeThread.phone}`} className="flex h-9 w-9 items-center justify-center rounded-full hover:bg-surface-secondary transition-colors">
+              <a href={`tel:${activeThread.phone.replace(/[^+\d]/g, "")}`} className="flex h-9 w-9 items-center justify-center rounded-full hover:bg-surface-secondary transition-colors">
                 <Phone size={18} className="text-text-secondary" />
               </a>
             )}
-            <button className="flex h-9 w-9 items-center justify-center rounded-full hover:bg-surface-secondary transition-colors">
+            <button
+              onClick={() => setMenuOpen((v) => !v)}
+              className="flex h-9 w-9 items-center justify-center rounded-full hover:bg-surface-secondary transition-colors"
+            >
               <MoreVertical size={18} className="text-text-secondary" />
             </button>
+            {menuOpen && (
+              <>
+                <button
+                  aria-label="Close menu"
+                  className="fixed inset-0 z-10 cursor-default"
+                  onClick={() => setMenuOpen(false)}
+                />
+                <div className="absolute right-0 top-10 z-20 w-44 rounded-xl border border-border bg-white shadow-lg overflow-hidden">
+                  <button
+                    onClick={() => {
+                      setMenuOpen(false);
+                      // Mark all messages in this thread as read (no-op in demo).
+                      if (!isDemo && activeThread && !activeThread.id.startsWith("new:")) {
+                        fetch(`/api/messages?conversationId=${activeThread.id}`).catch(() => {});
+                      }
+                      setThreads((prev) => prev.map((t) => t.id === activeThread.id ? { ...t, unread: 0 } : t));
+                      showToast("Marked as read");
+                    }}
+                    className="w-full text-left px-4 py-2.5 text-[13px] text-text-primary hover:bg-surface-secondary transition-colors"
+                  >
+                    Mark as read
+                  </button>
+                  <button
+                    onClick={() => {
+                      setMenuOpen(false);
+                      showToast("Profile coming soon");
+                    }}
+                    className="w-full text-left px-4 py-2.5 text-[13px] text-text-primary hover:bg-surface-secondary transition-colors border-t border-border"
+                  >
+                    View profile
+                  </button>
+                </div>
+              </>
+            )}
           </div>
         </div>
 
@@ -469,10 +513,16 @@ export default function MessagesPage() {
         {/* Input */}
         <div className="bg-white border-t border-border px-4 py-3 shrink-0" style={{ paddingBottom: "calc(80px + env(safe-area-inset-bottom, 0px))" }}>
           <div className="flex items-end gap-2">
-            <button className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full hover:bg-surface-secondary transition-colors">
+            <button
+              onClick={() => showToast("Attachments coming soon")}
+              className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full hover:bg-surface-secondary transition-colors"
+            >
               <Paperclip size={20} className="text-text-tertiary" />
             </button>
-            <button className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full hover:bg-surface-secondary transition-colors">
+            <button
+              onClick={() => showToast("Photo upload coming soon")}
+              className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full hover:bg-surface-secondary transition-colors"
+            >
               <Camera size={20} className="text-text-tertiary" />
             </button>
             <div className="flex-1 flex items-end gap-2 rounded-2xl border border-border bg-surface-secondary px-4 py-2.5">
@@ -496,6 +546,11 @@ export default function MessagesPage() {
             </button>
           </div>
         </div>
+        {toast && (
+          <div className="fixed bottom-24 left-1/2 -translate-x-1/2 z-30 rounded-full bg-text-primary text-white text-[12px] font-medium px-4 py-2 shadow-lg">
+            {toast}
+          </div>
+        )}
       </div>
     );
   }

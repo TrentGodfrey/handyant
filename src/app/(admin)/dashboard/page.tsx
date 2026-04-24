@@ -5,6 +5,7 @@ import Card from "@/components/Card";
 import StatusBadge from "@/components/StatusBadge";
 import Button from "@/components/Button";
 import Link from "next/link";
+import { useSession } from "next-auth/react";
 import {
   Calendar,
   Clock,
@@ -44,6 +45,24 @@ type MonthlyMetric = {
   sparkline: number[];
 };
 
+type PendingOffer = {
+  id: string;
+  customerId: string;
+  customerName: string;
+  customerPhone: string | null;
+  address: string | null;
+  scheduledDate: string;
+  scheduledTime: string;
+  description: string | null;
+  estimatedCost: string | null;
+  categories: string[];
+};
+
+type WeeklyRevenuePoint = {
+  weekStart: string;
+  revenue: number;
+};
+
 type StatsResponse = {
   today: {
     jobs: number;
@@ -71,6 +90,8 @@ type StatsResponse = {
     reviewCount: number;
   };
   partsNeeded: { id: string; item: string; qty: number; bookingId: string; client: string }[];
+  weeklyRevenue: WeeklyRevenuePoint[];
+  pendingOffers: PendingOffer[];
 };
 
 const demoTodaySchedule: ScheduleItem[] = [
@@ -116,8 +137,9 @@ const demoTodaySchedule: ScheduleItem[] = [
   },
 ];
 
-const pendingOffers = [
+const demoPendingOffers = [
   {
+    id: "demo-1",
     client: "James Wilson",
     service: "Full bathroom wallpaper removal",
     date: "Apr 3",
@@ -125,6 +147,7 @@ const pendingOffers = [
     est: "$280",
   },
   {
+    id: "demo-2",
     client: "Lisa Park",
     service: "Ceiling fan install (3 fans)",
     date: "Apr 5",
@@ -146,6 +169,17 @@ const demoKpis = {
   partsToBuy: "2",
   weekRevenue: "$2.4k",
 };
+
+const demoWeeklyRevenue: WeeklyRevenuePoint[] = [
+  { weekStart: "w1", revenue: 1800 },
+  { weekStart: "w2", revenue: 2100 },
+  { weekStart: "w3", revenue: 1950 },
+  { weekStart: "w4", revenue: 2400 },
+  { weekStart: "w5", revenue: 2200 },
+  { weekStart: "w6", revenue: 2650 },
+  { weekStart: "w7", revenue: 2100 },
+  { weekStart: "w8", revenue: 2400 },
+];
 
 function MiniSparkline({ data, positive }: { data: number[]; positive: boolean }) {
   const min = Math.min(...data);
@@ -176,9 +210,35 @@ function MiniSparkline({ data, positive }: { data: number[]; positive: boolean }
   );
 }
 
-function RevenueTrendChart() {
+function RevenueTrendChart({
+  weeklyRevenue,
+  monthlyTotal,
+}: {
+  weeklyRevenue: WeeklyRevenuePoint[];
+  monthlyTotal: number;
+}) {
   const [period, setPeriod] = useState<"week" | "month">("week");
-  const weeklyRevenue = [1800, 2100, 1950, 2400, 2200, 2650, 2100, 2400];
+
+  const values = weeklyRevenue.map((w) => w.revenue);
+  const hasAny = values.some((v) => v > 0);
+
+  if (!hasAny) {
+    return (
+      <div className="mb-6">
+        <Card padding="md">
+          <div className="mb-3">
+            <h3 className="text-[15px] font-semibold text-text-primary">Revenue Trend</h3>
+            <p className="text-[11px] text-text-tertiary">Last 8 weeks</p>
+          </div>
+          <div className="flex items-center justify-center py-8 text-center">
+            <p className="text-[13px] text-text-tertiary max-w-[260px]">
+              No revenue data yet — complete a job to see trends
+            </p>
+          </div>
+        </Card>
+      </div>
+    );
+  }
 
   const chartW = 320;
   const chartH = 160;
@@ -189,25 +249,37 @@ function RevenueTrendChart() {
   const plotW = chartW - padLeft - padRight;
   const plotH = chartH - padTop - padBottom;
 
-  const maxVal = 3000;
+  const maxRaw = Math.max(...values, 1);
+  // Round up to a clean axis
+  const maxVal = Math.ceil(maxRaw / 500) * 500 || 500;
   const minVal = 0;
 
-  const points = weeklyRevenue.map((v, i) => {
-    const x = padLeft + (i / (weeklyRevenue.length - 1)) * plotW;
+  const points = values.map((v, i) => {
+    const x = padLeft + (i / Math.max(values.length - 1, 1)) * plotW;
     const y = padTop + plotH - ((v - minVal) / (maxVal - minVal)) * plotH;
     return { x, y };
   });
 
   const linePoints = points.map((p) => `${p.x},${p.y}`).join(" ");
 
-  const areaPath = `M${points[0].x},${points[0].y} ${points.map((p) => `L${p.x},${p.y}`).join(" ")} L${points[points.length - 1].x},${padTop + plotH} L${points[0].x},${padTop + plotH} Z`;
+  const areaPath = `M${points[0].x},${points[0].y} ${points
+    .map((p) => `L${p.x},${p.y}`)
+    .join(" ")} L${points[points.length - 1].x},${padTop + plotH} L${points[0].x},${
+    padTop + plotH
+  } Z`;
 
-  const gridLines = [1000, 2000, 3000].map((val) => {
+  const gridLines = [maxVal / 3, (maxVal / 3) * 2, maxVal].map((val) => {
     const y = padTop + plotH - ((val - minVal) / (maxVal - minVal)) * plotH;
     return { val, y };
   });
 
   const lastPoint = points[points.length - 1];
+
+  const thisWeek = values[values.length - 1] ?? 0;
+  const lastWeek = values[values.length - 2] ?? 0;
+  const delta = thisWeek - lastWeek;
+  const deltaPct = lastWeek > 0 ? Math.round((delta / lastWeek) * 100) : 0;
+  const positiveDelta = delta >= 0;
 
   return (
     <div className="mb-6">
@@ -283,8 +355,8 @@ function RevenueTrendChart() {
           <circle cx={lastPoint.x} cy={lastPoint.y} r={3.5} fill="#2563EB" />
           <circle cx={lastPoint.x} cy={lastPoint.y} r={6} fill="#2563EB" opacity={0.15} />
 
-          {weeklyRevenue.map((_, i) => {
-            const x = padLeft + (i / (weeklyRevenue.length - 1)) * plotW;
+          {values.map((_, i) => {
+            const x = padLeft + (i / Math.max(values.length - 1, 1)) * plotW;
             return (
               <text
                 key={i}
@@ -303,15 +375,30 @@ function RevenueTrendChart() {
 
         <div className="mt-3 flex items-center gap-4 flex-wrap">
           <div>
-            <span className="text-[13px] font-bold text-primary">This Week: $2,400</span>
+            <span className="text-[13px] font-bold text-primary">
+              This {period === "week" ? "Week" : "Month"}: ${Math.round(thisWeek).toLocaleString()}
+            </span>
           </div>
           <div className="flex items-center gap-1">
-            <TrendingUp size={12} className="text-success" />
-            <span className="text-[12px] font-semibold text-success">+$300 (+14%)</span>
+            {positiveDelta ? (
+              <TrendingUp size={12} className="text-success" />
+            ) : (
+              <TrendingDown size={12} className="text-error" />
+            )}
+            <span
+              className={`text-[12px] font-semibold ${
+                positiveDelta ? "text-success" : "text-error"
+              }`}
+            >
+              {positiveDelta ? "+" : ""}${Math.round(delta).toLocaleString()}
+              {lastWeek > 0 ? ` (${positiveDelta ? "+" : ""}${deltaPct}%)` : ""}
+            </span>
             <span className="text-[11px] text-text-tertiary ml-0.5">vs last week</span>
           </div>
           <div className="ml-auto">
-            <span className="text-[12px] text-text-secondary font-medium">Monthly total: $8,200</span>
+            <span className="text-[12px] text-text-secondary font-medium">
+              Monthly total: ${Math.round(monthlyTotal).toLocaleString()}
+            </span>
           </div>
         </div>
       </Card>
@@ -344,11 +431,27 @@ function isValidStatus(s: string): s is ScheduleItem["status"] {
   return ["confirmed", "pending", "completed", "in-progress", "needs-parts", "scheduled", "cancelled"].includes(s);
 }
 
+function formatOfferDate(iso: string) {
+  try {
+    return new Date(iso).toLocaleDateString("en-US", { month: "short", day: "numeric" });
+  } catch {
+    return iso;
+  }
+}
+
+function firstName(name: string | null | undefined): string {
+  if (!name) return "there";
+  return name.trim().split(/\s+/)[0] || "there";
+}
+
 export default function AdminDashboard() {
   const [stats, setStats] = useState<StatsResponse | null>(null);
   const [loading, setLoading] = useState(true);
+  const [unreadCount, setUnreadCount] = useState(0);
+  const [dismissedOfferIds, setDismissedOfferIds] = useState<Set<string>>(new Set());
 
   const { isDemo, mounted } = useDemoMode();
+  const { data: session } = useSession();
 
   useEffect(() => {
     if (!mounted) return;
@@ -356,9 +459,14 @@ export default function AdminDashboard() {
       setLoading(false);
       return;
     }
-    fetch("/api/admin/stats")
-      .then((r) => r.json())
-      .then((data) => setStats(data))
+    Promise.all([
+      fetch("/api/admin/stats").then((r) => (r.ok ? r.json() : null)),
+      fetch("/api/notifications?unread=true").then((r) => (r.ok ? r.json() : [])),
+    ])
+      .then(([statsData, notifications]) => {
+        setStats(statsData);
+        if (Array.isArray(notifications)) setUnreadCount(notifications.length);
+      })
       .catch(() => setStats(null))
       .finally(() => setLoading(false));
   }, [isDemo, mounted]);
@@ -425,13 +533,56 @@ export default function AdminDashboard() {
         },
       ];
 
-  const partsAlert = isDemo
-    ? { item: "Broan 688 fan motor", count: 2 }
-    : stats?.partsNeeded?.[0]
-      ? { item: stats.partsNeeded[0].item, count: stats.partsNeeded.length }
-      : null;
+  // Hide parts alert in real mode (no inventory data yet)
+  const partsAlert = isDemo ? { item: "Broan 688 fan motor", count: 2 } : null;
 
-  if (loading) {
+  // Pending offers list
+  const realPendingOffers = (stats?.pendingOffers ?? []).filter(
+    (o) => !dismissedOfferIds.has(o.id)
+  );
+
+  const greetingName = isDemo ? "Anthony" : firstName(session?.user?.name);
+  const todayLabel = mounted
+    ? new Date().toLocaleDateString("en-US", { weekday: "long", month: "long", day: "numeric" })
+    : "";
+  const notifBadge = isDemo ? 3 : unreadCount;
+
+  // Weekly revenue + monthly total
+  const weeklyRevenueData: WeeklyRevenuePoint[] = isDemo
+    ? demoWeeklyRevenue
+    : stats?.weeklyRevenue ?? [];
+  const monthlyTotal = isDemo ? 8200 : stats?.month.revenue ?? 0;
+
+  async function handleAccept(id: string) {
+    setDismissedOfferIds((prev) => new Set(prev).add(id));
+    try {
+      const res = await fetch(`/api/bookings/${id}/accept`, { method: "POST" });
+      if (!res.ok) throw new Error("Failed");
+    } catch {
+      // Roll back optimistic dismissal
+      setDismissedOfferIds((prev) => {
+        const next = new Set(prev);
+        next.delete(id);
+        return next;
+      });
+    }
+  }
+
+  async function handleDecline(id: string) {
+    setDismissedOfferIds((prev) => new Set(prev).add(id));
+    try {
+      const res = await fetch(`/api/bookings/${id}/decline`, { method: "POST" });
+      if (!res.ok) throw new Error("Failed");
+    } catch {
+      setDismissedOfferIds((prev) => {
+        const next = new Set(prev);
+        next.delete(id);
+        return next;
+      });
+    }
+  }
+
+  if (!mounted || loading) {
     return (
       <div className="px-5 pt-14 lg:pt-8 pb-24 flex items-center justify-center min-h-[60vh]">
         <div className="h-8 w-8 border-2 border-primary border-t-transparent rounded-full animate-spin" />
@@ -446,10 +597,10 @@ export default function AdminDashboard() {
       <div className="mb-5 flex items-center justify-between">
         <div>
           <p className="text-[11px] font-semibold uppercase tracking-[1.6px] text-text-tertiary">
-            Monday, March 30
+            {todayLabel}
           </p>
           <h1 className="mt-0.5 text-[26px] font-bold text-text-primary leading-tight">
-            Hey Anthony 👋
+            Hey {greetingName} 👋
           </h1>
         </div>
         <div className="flex items-center gap-2">
@@ -461,9 +612,11 @@ export default function AdminDashboard() {
           </Link>
           <button className="relative flex h-10 w-10 items-center justify-center rounded-full bg-surface border border-border shadow-[0_1px_4px_rgba(0,0,0,0.08)] active:bg-surface-secondary transition-colors">
             <Bell size={19} className="text-text-secondary" />
-            <span className="absolute -right-1 -top-1 flex h-[18px] w-[18px] items-center justify-center rounded-full bg-primary text-[9px] font-bold text-white shadow-sm">
-              3
-            </span>
+            {notifBadge > 0 && (
+              <span className="absolute -right-1 -top-1 flex h-[18px] min-w-[18px] items-center justify-center rounded-full bg-primary px-1 text-[9px] font-bold text-white shadow-sm">
+                {notifBadge > 9 ? "9+" : notifBadge}
+              </span>
+            )}
           </button>
         </div>
       </div>
@@ -487,9 +640,9 @@ export default function AdminDashboard() {
       </div>
 
       {/* ── Revenue Trend ── */}
-      <RevenueTrendChart />
+      <RevenueTrendChart weeklyRevenue={weeklyRevenueData} monthlyTotal={monthlyTotal} />
 
-      {/* ── Alert Banner ── */}
+      {/* ── Alert Banner (demo only) ── */}
       {partsAlert && (
         <div className="mb-6">
           <div className="flex items-center gap-3 rounded-xl border border-warning/25 bg-warning-light px-4 py-3 shadow-[0_1px_4px_rgba(0,0,0,0.06)]">
@@ -523,66 +676,74 @@ export default function AdminDashboard() {
           </Link>
         </div>
 
-        <div className="space-y-2.5">
-          {todaySchedule.map((job) => (
-            <Link key={job.id} href={job.address ? `/jobs/${job.id}` : "/schedule"}>
-              <Card
-                padding="sm"
-                className="transition-all active:scale-[0.985] hover:shadow-[0_4px_12px_rgba(0,0,0,0.10)]"
-              >
-                <div className="flex items-start gap-3">
-                  {/* Time column */}
-                  <div className="flex flex-col items-center shrink-0 pt-0.5 w-14">
-                    <span className="text-[12px] font-bold text-text-primary">{job.time}</span>
-                    <span className="text-[10px] text-text-tertiary">{job.duration}</span>
-                  </div>
-
-                  {/* Divider line */}
-                  <div className="w-px self-stretch bg-border-light shrink-0" />
-
-                  {/* Content */}
-                  <div className="flex-1 min-w-0">
-                    <div className="flex items-center gap-2 mb-1">
-                      <span className="text-[15px] font-semibold text-text-primary truncate">{job.client}</span>
-                      <StatusBadge status={job.status} />
+        {todaySchedule.length === 0 ? (
+          <Card padding="md" variant="outlined">
+            <p className="text-[12px] text-text-tertiary text-center py-2">
+              No jobs scheduled for today.
+            </p>
+          </Card>
+        ) : (
+          <div className="space-y-2.5">
+            {todaySchedule.map((job) => (
+              <Link key={job.id} href={job.address ? `/jobs/${job.id}` : "/schedule"}>
+                <Card
+                  padding="sm"
+                  className="transition-all active:scale-[0.985] hover:shadow-[0_4px_12px_rgba(0,0,0,0.10)]"
+                >
+                  <div className="flex items-start gap-3">
+                    {/* Time column */}
+                    <div className="flex flex-col items-center shrink-0 pt-0.5 w-14">
+                      <span className="text-[12px] font-bold text-text-primary">{job.time}</span>
+                      <span className="text-[10px] text-text-tertiary">{job.duration}</span>
                     </div>
 
-                    {job.address && (
-                      <div className="flex items-center gap-1.5 text-text-tertiary mb-2">
-                        <MapPin size={11} className="shrink-0" />
-                        <span className="text-[12px] truncate">{job.address}</span>
+                    {/* Divider line */}
+                    <div className="w-px self-stretch bg-border-light shrink-0" />
+
+                    {/* Content */}
+                    <div className="flex-1 min-w-0">
+                      <div className="flex items-center gap-2 mb-1">
+                        <span className="text-[15px] font-semibold text-text-primary truncate">{job.client}</span>
+                        <StatusBadge status={job.status} />
                       </div>
-                    )}
 
-                    <div className="flex flex-wrap gap-1.5">
-                      {job.tasks.map((task) => (
-                        <span
-                          key={task}
-                          className="rounded-md bg-surface-secondary px-2 py-0.5 text-[11px] font-medium text-text-secondary"
-                        >
-                          {task}
+                      {job.address && (
+                        <div className="flex items-center gap-1.5 text-text-tertiary mb-2">
+                          <MapPin size={11} className="shrink-0" />
+                          <span className="text-[12px] truncate">{job.address}</span>
+                        </div>
+                      )}
+
+                      <div className="flex flex-wrap gap-1.5">
+                        {job.tasks.map((task) => (
+                          <span
+                            key={task}
+                            className="rounded-md bg-surface-secondary px-2 py-0.5 text-[11px] font-medium text-text-secondary"
+                          >
+                            {task}
+                          </span>
+                        ))}
+                      </div>
+                    </div>
+
+                    {/* Right actions */}
+                    <div className="flex flex-col items-end gap-2 shrink-0">
+                      {job.partsNeeded && (
+                        <span className="flex items-center gap-1 rounded-full bg-warning-light px-2 py-0.5 text-[10px] font-semibold text-warning">
+                          <ShoppingCart size={9} />
+                          Parts
                         </span>
-                      ))}
+                      )}
+                      {job.address && (
+                        <ChevronRight size={15} className="text-text-tertiary mt-auto" />
+                      )}
                     </div>
                   </div>
-
-                  {/* Right actions */}
-                  <div className="flex flex-col items-end gap-2 shrink-0">
-                    {job.partsNeeded && (
-                      <span className="flex items-center gap-1 rounded-full bg-warning-light px-2 py-0.5 text-[10px] font-semibold text-warning">
-                        <ShoppingCart size={9} />
-                        Parts
-                      </span>
-                    )}
-                    {job.address && (
-                      <ChevronRight size={15} className="text-text-tertiary mt-auto" />
-                    )}
-                  </div>
-                </div>
-              </Card>
-            </Link>
-          ))}
-        </div>
+                </Card>
+              </Link>
+            ))}
+          </div>
+        )}
       </div>
 
       {/* ── Available Offers ── */}
@@ -591,41 +752,101 @@ export default function AdminDashboard() {
           <h2 className="text-sm font-semibold uppercase tracking-wider text-text-secondary">
             Available Offers
           </h2>
-          <span className="rounded-full bg-primary-100 px-2.5 py-0.5 text-[11px] font-bold text-primary">
-            {pendingOffers.length} new
-          </span>
+          {(isDemo ? demoPendingOffers.length : realPendingOffers.length) > 0 && (
+            <span className="rounded-full bg-primary-100 px-2.5 py-0.5 text-[11px] font-bold text-primary">
+              {isDemo ? demoPendingOffers.length : realPendingOffers.length} new
+            </span>
+          )}
         </div>
 
-        <div className="space-y-2.5">
-          {pendingOffers.map((offer) => (
-            <Card key={offer.client} padding="sm">
-              <div className="flex items-center gap-3">
-                {/* Avatar placeholder */}
-                <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-primary-50 text-[14px] font-bold text-primary">
-                  {offer.client.split(" ").map((n) => n[0]).join("")}
-                </div>
+        {isDemo ? (
+          <div className="space-y-2.5">
+            {demoPendingOffers.map((offer) => (
+              <Card key={offer.id} padding="sm">
+                <div className="flex items-center gap-3">
+                  <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-primary-50 text-[14px] font-bold text-primary">
+                    {offer.client.split(" ").map((n) => n[0]).join("")}
+                  </div>
 
-                <div className="flex-1 min-w-0">
-                  <p className="text-[14px] font-semibold text-text-primary">{offer.client}</p>
-                  <p className="text-[12px] text-text-secondary truncate">{offer.service}</p>
-                  <p className="text-[11px] text-text-tertiary mt-0.5">
-                    {offer.date} · {offer.area}
-                    <span className="ml-2 font-semibold text-success">{offer.est}</span>
-                  </p>
-                </div>
+                  <div className="flex-1 min-w-0">
+                    <p className="text-[14px] font-semibold text-text-primary">{offer.client}</p>
+                    <p className="text-[12px] text-text-secondary truncate">{offer.service}</p>
+                    <p className="text-[11px] text-text-tertiary mt-0.5">
+                      {offer.date} · {offer.area}
+                      <span className="ml-2 font-semibold text-success">{offer.est}</span>
+                    </p>
+                  </div>
 
-                <div className="flex gap-2 shrink-0">
-                  <Button variant="ghost" size="sm" className="!bg-success-light !text-success hover:!bg-green-100">
-                    Accept
-                  </Button>
-                  <Button variant="ghost" size="sm">
-                    Pass
-                  </Button>
+                  <div className="flex gap-2 shrink-0">
+                    <Button variant="ghost" size="sm" className="!bg-success-light !text-success hover:!bg-green-100">
+                      Accept
+                    </Button>
+                    <Button variant="ghost" size="sm">
+                      Pass
+                    </Button>
+                  </div>
                 </div>
-              </div>
-            </Card>
-          ))}
-        </div>
+              </Card>
+            ))}
+          </div>
+        ) : realPendingOffers.length === 0 ? (
+          <Card padding="md" variant="outlined">
+            <p className="text-[12px] text-text-tertiary text-center py-2">
+              No pending offers right now.
+            </p>
+          </Card>
+        ) : (
+          <div className="space-y-2.5">
+            {realPendingOffers.map((offer) => {
+              const initials = offer.customerName
+                .split(" ")
+                .map((n) => n[0])
+                .join("")
+                .slice(0, 2)
+                .toUpperCase();
+              const cost = offer.estimatedCost
+                ? `$${Math.round(Number(offer.estimatedCost))}`
+                : null;
+              return (
+                <Card key={offer.id} padding="sm">
+                  <div className="flex items-center gap-3">
+                    <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-primary-50 text-[14px] font-bold text-primary">
+                      {initials || "?"}
+                    </div>
+
+                    <div className="flex-1 min-w-0">
+                      <p className="text-[14px] font-semibold text-text-primary">
+                        {offer.customerName}
+                      </p>
+                      <p className="text-[12px] text-text-secondary truncate">
+                        {offer.description || offer.categories.join(", ") || "Service request"}
+                      </p>
+                      <p className="text-[11px] text-text-tertiary mt-0.5">
+                        {formatOfferDate(offer.scheduledDate)}
+                        {offer.address ? ` · ${offer.address.split(",")[1]?.trim() || offer.address}` : ""}
+                        {cost && <span className="ml-2 font-semibold text-success">{cost}</span>}
+                      </p>
+                    </div>
+
+                    <div className="flex gap-2 shrink-0">
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        className="!bg-success-light !text-success hover:!bg-green-100"
+                        onClick={() => handleAccept(offer.id)}
+                      >
+                        Accept
+                      </Button>
+                      <Button variant="ghost" size="sm" onClick={() => handleDecline(offer.id)}>
+                        Decline
+                      </Button>
+                    </div>
+                  </div>
+                </Card>
+              );
+            })}
+          </div>
+        )}
       </div>
 
       {/* ── Monthly Metrics ── */}

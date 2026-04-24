@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, use } from "react";
+import { useState, useEffect, use, useRef } from "react";
 import Link from "next/link";
 import Button from "@/components/Button";
 import Card from "@/components/Card";
@@ -27,7 +27,7 @@ interface JobDetail {
   estimate: string;
   tasks: { id: string; label: string; done: boolean; notes?: string }[];
   parts: { item: string; qty: number; status: "purchased" | "needed" | "ordered" }[];
-  photos: { id: string; label: string }[];
+  photos: { id: string; label: string; url?: string }[];
   techNotes: string;
   customerNotes: string;
   rating?: number;
@@ -149,7 +149,7 @@ function bookingToDetail(b: ApiBooking): JobDetail {
       qty: p.qty ?? 1,
       status: ((p.status ?? "needed") as "purchased" | "needed" | "ordered"),
     })),
-    photos: (b.photos ?? []).map((p) => ({ id: p.id, label: p.label ?? "photo" })),
+    photos: (b.photos ?? []).map((p) => ({ id: p.id, label: p.label ?? "photo", url: p.url })),
     techNotes: b.techNotes ?? "",
     customerNotes: b.customerNotes ?? b.description ?? "",
   };
@@ -163,11 +163,18 @@ export default function JobDetailPage({ params }: { params: Promise<{ id: string
 
   const [job, setJob] = useState<JobDetail | null>(null);
   const [tasks, setTasks] = useState<JobDetail["tasks"]>([]);
+  const [photos, setPhotos] = useState<JobDetail["photos"]>([]);
   const [notes, setNotes] = useState("");
   const [noteInput, setNoteInput] = useState("");
   const [showNoteInput, setShowNoteInput] = useState(false);
   const [showCompleteModal, setShowCompleteModal] = useState(false);
+  const [completing, setCompleting] = useState(false);
+  const [completeRating, setCompleteRating] = useState<number>(5);
+  const [uploading, setUploading] = useState(false);
+  const [uploadError, setUploadError] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
+  const fileInputRef = useRef<HTMLInputElement | null>(null);
+  const tasksRef = useRef<HTMLDivElement | null>(null);
 
   useEffect(() => {
     if (!mounted) return;
@@ -175,14 +182,17 @@ export default function JobDetailPage({ params }: { params: Promise<{ id: string
       const demo = DEMO_JOBS[id] ?? DEMO_JOBS["1"];
       setJob(demo);
       setTasks(demo.tasks);
+      setPhotos(demo.photos);
       setNotes(demo.techNotes);
       setLoading(false);
       return;
     }
     setLoading(true);
-    fetch(`/api/bookings/${id}`)
-      .then((r) => r.ok ? r.json() : null)
-      .then((data) => {
+    Promise.all([
+      fetch(`/api/bookings/${id}`).then((r) => (r.ok ? r.json() : null)).catch(() => null),
+      fetch(`/api/photos?bookingId=${id}`).then((r) => (r.ok ? r.json() : [])).catch(() => []),
+    ])
+      .then(([data, photoList]) => {
         if (!data) {
           setJob(null);
           return;
@@ -191,6 +201,17 @@ export default function JobDetailPage({ params }: { params: Promise<{ id: string
         setJob(detail);
         setTasks(detail.tasks);
         setNotes(detail.techNotes);
+        if (Array.isArray(photoList) && photoList.length > 0) {
+          setPhotos(
+            photoList.map((p: { id: string; label: string | null; url: string }) => ({
+              id: p.id,
+              label: p.label ?? "photo",
+              url: p.url,
+            }))
+          );
+        } else {
+          setPhotos(detail.photos);
+        }
       })
       .catch(() => setJob(null))
       .finally(() => setLoading(false));
@@ -229,18 +250,91 @@ export default function JobDetailPage({ params }: { params: Promise<{ id: string
     }).catch(() => {});
   }
 
-  function completeJob() {
-    setShowCompleteModal(false);
-    if (isDemo) return;
-    fetch(`/api/bookings/${id}`, {
-      method: "PATCH",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ status: "completed" }),
-    })
-      .then(() => {
-        setJob((prev) => prev ? { ...prev, status: "completed" } : prev);
-      })
-      .catch(() => {});
+  async function completeJob() {
+    if (isDemo) {
+      setShowCompleteModal(false);
+      setJob((prev) => (prev ? { ...prev, status: "completed", rating: completeRating } : prev));
+      return;
+    }
+    setCompleting(true);
+    try {
+      const res = await fetch(`/api/bookings/${id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ status: "completed" }),
+      });
+      if (res.ok) {
+        setJob((prev) => (prev ? { ...prev, status: "completed", rating: completeRating } : prev));
+        // The status-change handler on the booking PATCH endpoint is responsible
+        // for any customer-facing notifications. Nothing more to do client-side.
+      }
+    } catch {
+      /* swallow — UI will reflect non-completed state */
+    } finally {
+      setCompleting(false);
+      setShowCompleteModal(false);
+    }
+  }
+
+  function scrollToTasks() {
+    tasksRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
+  }
+
+  function openPhotoPicker() {
+    fileInputRef.current?.click();
+  }
+
+  async function handlePhotoChange(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0];
+    e.target.value = ""; // allow same-file reselect
+    if (!file) return;
+    setUploadError(null);
+
+    const dataUrl = await new Promise<string>((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onload = () => resolve(String(reader.result));
+      reader.onerror = () => reject(new Error("Failed to read file"));
+      reader.readAsDataURL(file);
+    }).catch((err) => {
+      setUploadError(err.message);
+      return null;
+    });
+    if (!dataUrl) return;
+
+    if (isDemo) {
+      // Append a placeholder entry locally for demo mode.
+      setPhotos((prev) => [
+        ...prev,
+        { id: `demo-${Date.now()}`, label: file.name, url: dataUrl },
+      ]);
+      return;
+    }
+    setUploading(true);
+    try {
+      const res = await fetch("/api/photos", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          bookingId: id,
+          dataUrl,
+          label: file.name,
+          type: "after",
+        }),
+      });
+      if (!res.ok) {
+        const body = await res.json().catch(() => ({}));
+        throw new Error(body?.error ?? `Upload failed (${res.status})`);
+      }
+      const created = await res.json();
+      setPhotos((prev) => [
+        ...prev,
+        { id: created.id, label: created.label ?? file.name, url: created.url },
+      ]);
+    } catch (err) {
+      setUploadError(err instanceof Error ? err.message : "Upload failed");
+    } finally {
+      setUploading(false);
+    }
   }
 
   if (loading) {
@@ -324,7 +418,7 @@ export default function JobDetailPage({ params }: { params: Promise<{ id: string
         </Card>
 
         {/* Tasks */}
-        <div>
+        <div ref={tasksRef}>
           <p className="mb-2 text-sm font-semibold uppercase tracking-wider text-text-secondary">Checklist</p>
           <Card className="divide-y divide-border-light">
             {tasks.length === 0 && (
@@ -398,23 +492,57 @@ export default function JobDetailPage({ params }: { params: Promise<{ id: string
         )}
 
         {/* Photos */}
-        {job.photos.length > 0 && (
-          <div>
-            <p className="mb-2 text-sm font-semibold uppercase tracking-wider text-text-secondary">Photos ({job.photos.length})</p>
-            <div className="grid grid-cols-3 gap-2">
-              {job.photos.map((photo) => (
-                <div key={photo.id} className="aspect-square rounded-xl bg-surface-secondary border border-border flex flex-col items-center justify-center gap-1.5">
-                  <Camera size={20} className="text-text-tertiary" />
-                  <p className="text-[9px] text-text-tertiary px-1 text-center truncate w-full">{photo.label}</p>
-                </div>
-              ))}
-              <button className="aspect-square rounded-xl border-2 border-dashed border-border flex flex-col items-center justify-center gap-1.5 hover:border-primary/40 transition-colors">
-                <Plus size={18} className="text-text-tertiary" />
-                <p className="text-[9px] text-text-tertiary">Add</p>
-              </button>
-            </div>
+        <div>
+          <div className="mb-2 flex items-center justify-between">
+            <p className="text-sm font-semibold uppercase tracking-wider text-text-secondary">
+              Photos {photos.length > 0 ? `(${photos.length})` : ""}
+            </p>
+            {uploading && (
+              <span className="text-[11px] text-text-tertiary">Uploading…</span>
+            )}
           </div>
-        )}
+          <input
+            ref={fileInputRef}
+            type="file"
+            accept="image/*"
+            className="hidden"
+            onChange={handlePhotoChange}
+          />
+          <div className="grid grid-cols-3 gap-2">
+            {photos.map((photo) => (
+              <div
+                key={photo.id}
+                className="aspect-square rounded-xl bg-surface-secondary border border-border flex flex-col items-center justify-center gap-1.5 overflow-hidden"
+              >
+                {photo.url ? (
+                  // eslint-disable-next-line @next/next/no-img-element
+                  <img
+                    src={photo.url}
+                    alt={photo.label}
+                    className="h-full w-full object-cover"
+                  />
+                ) : (
+                  <>
+                    <Camera size={20} className="text-text-tertiary" />
+                    <p className="text-[9px] text-text-tertiary px-1 text-center truncate w-full">{photo.label}</p>
+                  </>
+                )}
+              </div>
+            ))}
+            <button
+              type="button"
+              onClick={openPhotoPicker}
+              disabled={uploading}
+              className="aspect-square rounded-xl border-2 border-dashed border-border flex flex-col items-center justify-center gap-1.5 hover:border-primary/40 transition-colors disabled:opacity-60"
+            >
+              <Plus size={18} className="text-text-tertiary" />
+              <p className="text-[9px] text-text-tertiary">{uploading ? "Uploading" : "Add"}</p>
+            </button>
+          </div>
+          {uploadError && (
+            <p className="mt-2 text-[12px] text-error">{uploadError}</p>
+          )}
+        </div>
 
         {/* Tech Notes */}
         <div>
@@ -474,7 +602,7 @@ export default function JobDetailPage({ params }: { params: Promise<{ id: string
             Complete Job & Send Invoice
           </Button>
         ) : (
-          <Button variant="outline" size="lg" fullWidth>
+          <Button variant="outline" size="lg" fullWidth onClick={scrollToTasks}>
             {completedCount}/{tasks.length} Tasks Remaining
           </Button>
         )}
@@ -495,16 +623,38 @@ export default function JobDetailPage({ params }: { params: Promise<{ id: string
               </p>
             </div>
             <div className="mb-4">
-              <p className="mb-2 text-[12px] font-semibold text-text-secondary">Request a review?</p>
+              <p className="mb-2 text-[12px] font-semibold text-text-secondary">How would you rate this job?</p>
               <div className="flex justify-center gap-1">
-                {[1,2,3,4,5].map((s) => (
-                  <Star key={s} size={28} className="text-warning fill-warning" />
-                ))}
+                {[1,2,3,4,5].map((s) => {
+                  const active = s <= completeRating;
+                  return (
+                    <button
+                      key={s}
+                      type="button"
+                      onClick={() => setCompleteRating(s)}
+                      aria-label={`${s} star${s !== 1 ? "s" : ""}`}
+                      className="p-0.5 transition-transform active:scale-90"
+                    >
+                      <Star
+                        size={28}
+                        className={active ? "text-warning fill-warning" : "text-text-tertiary/40"}
+                      />
+                    </button>
+                  );
+                })}
               </div>
-              <p className="mt-1.5 text-center text-[11px] text-text-tertiary">A 5-star review request will be sent via text</p>
+              <p className="mt-1.5 text-center text-[11px] text-text-tertiary">
+                We&apos;ll notify your customer in-app to leave a review.
+              </p>
             </div>
-            <Button variant="primary" size="lg" fullWidth onClick={completeJob}>
-              Confirm &amp; Send Invoice
+            <Button
+              variant="primary"
+              size="lg"
+              fullWidth
+              onClick={completeJob}
+              disabled={completing}
+            >
+              {completing ? "Completing…" : "Confirm & Send Invoice"}
             </Button>
             <button className="mt-3 w-full text-center text-[13px] text-text-tertiary" onClick={() => setShowCompleteModal(false)}>
               Cancel

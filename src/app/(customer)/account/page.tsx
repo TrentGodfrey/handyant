@@ -28,8 +28,8 @@ const DEMO_JOBS: PastJob[] = [
 const menuItems = [
   { icon: Home, label: "Home Profile", href: "/account/home", desc: "To-do list, WiFi, household info", color: "bg-primary-50", iconColor: "text-primary" },
   { icon: FileText, label: "Receipts & Invoices", href: "/account/receipts", desc: "View transaction history", color: "bg-success-light", iconColor: "text-success" },
-  { icon: CreditCard, label: "Payment Methods", href: "#", desc: "Add a payment method", color: "bg-[#EFF6FF]", iconColor: "text-info" },
-  { icon: Bell, label: "Notifications", href: "#", desc: "Text & email preferences", color: "bg-warning-light", iconColor: "text-accent-amber" },
+  { icon: CreditCard, label: "Payment Methods", href: "/account/manage", desc: "Add a payment method", color: "bg-[#EFF6FF]", iconColor: "text-info" },
+  { icon: Bell, label: "Notifications", href: "/notifications", desc: "Text & email preferences", color: "bg-warning-light", iconColor: "text-accent-amber" },
   { icon: Settings, label: "Manage Account", href: "/account/manage", desc: "Profile, subscription, notifications", color: "bg-surface-secondary", iconColor: "text-text-secondary" },
 ];
 

@@ -1,8 +1,8 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { Suspense, useEffect, useState } from "react";
 import Link from "next/link";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import Card from "@/components/Card";
 import Button from "@/components/Button";
 import {
@@ -53,12 +53,21 @@ const TIME_SLOTS = [
   "4:00 PM", "4:30 PM", "5:00 PM", "5:30 PM", "6:00 PM",
 ];
 
-function buildCalendar() {
-  const today = new Date(2026, 2, 29); // March 29, 2026
-  const result: { date: Date; dayNum: number; month: string; dayName: string }[] = [];
+interface CalendarDay {
+  date: Date;
+  dayNum: number;
+  month: string;
+  dayName: string;
+}
+
+// Demo calendar anchored to March 29, 2026 (used only when in demo mode).
+const DEMO_ANCHOR = new Date(2026, 2, 29);
+
+function buildDemoCalendar(): CalendarDay[] {
+  const result: CalendarDay[] = [];
   for (let i = 0; i < 28; i++) {
-    const d = new Date(today);
-    d.setDate(today.getDate() + i);
+    const d = new Date(DEMO_ANCHOR);
+    d.setDate(DEMO_ANCHOR.getDate() + i);
     result.push({
       date: d,
       dayNum: d.getDate(),
@@ -68,8 +77,31 @@ function buildCalendar() {
   }
   return result;
 }
-const CALENDAR_DAYS = buildCalendar();
-const WEEKS: (typeof CALENDAR_DAYS) = CALENDAR_DAYS;
+
+function startOfWeekSunday(d: Date): Date {
+  const out = new Date(d);
+  out.setHours(0, 0, 0, 0);
+  out.setDate(out.getDate() - out.getDay());
+  return out;
+}
+
+function buildLiveCalendar(): CalendarDay[] {
+  const start = startOfWeekSunday(new Date());
+  const result: CalendarDay[] = [];
+  for (let i = 0; i < 35; i++) {
+    const d = new Date(start);
+    d.setDate(start.getDate() + i);
+    result.push({
+      date: d,
+      dayNum: d.getDate(),
+      month: d.toLocaleString("default", { month: "short" }),
+      dayName: d.toLocaleString("default", { weekday: "short" }),
+    });
+  }
+  return result;
+}
+
+const DEMO_CALENDAR = buildDemoCalendar();
 
 const inputCls =
   "w-full rounded-xl border border-border bg-surface px-4 py-3 text-[15px] text-text-primary placeholder:text-text-tertiary focus:outline-none focus:border-primary focus:ring-2 focus:ring-primary/10 transition-all";
@@ -111,13 +143,31 @@ function dateToISODate(d: Date): string {
 }
 
 export default function ScheduleNewPage() {
+  return (
+    <Suspense fallback={<div className="min-h-screen bg-background" />}>
+      <ScheduleNewPageInner />
+    </Suspense>
+  );
+}
+
+function ScheduleNewPageInner() {
   const router = useRouter();
+  const searchParams = useSearchParams();
+  const initialMode: Mode = searchParams?.get("mode") === "block" ? "block" : "job";
   const { isDemo, mounted } = useDemoMode();
 
-  const [mode, setMode] = useState<Mode>("job");
+  const [mode, setMode] = useState<Mode>(initialMode);
   const [submitted, setSubmitted] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [submitError, setSubmitError] = useState<string | null>(null);
+
+  // Calendar: demo mode uses fixed March 2026 grid; live mode anchors to today.
+  // Build inside the component so date math uses the current `new Date()`.
+  const calendarDays: CalendarDay[] = isDemo ? DEMO_CALENDAR : buildLiveCalendar();
+  const calendarAnchor: Date = isDemo ? DEMO_ANCHOR : startOfWeekSunday(new Date());
+  const calendarOffset: number = calendarAnchor.getDay();
+  const todayMidnight = new Date();
+  todayMidnight.setHours(0, 0, 0, 0);
 
   // Job mode
   const [clients, setClients] = useState<ClientView[]>([]);
@@ -178,6 +228,51 @@ export default function ScheduleNewPage() {
 
   function formatDate(d: Date) {
     return d.toLocaleDateString("en-US", { weekday: "short", month: "short", day: "numeric" });
+  }
+
+  async function handleSubmitBlock() {
+    if (!blockDate) {
+      setSubmitError("Please pick a date.");
+      return;
+    }
+    if (isDemo) {
+      setSubmitted(true);
+      return;
+    }
+    setSubmitting(true);
+    setSubmitError(null);
+    try {
+      const dateIso = dateToISODate(blockDate);
+      const startIso = `${dateIso}T${timeToHHMM(blockStart)}:00`;
+      const endIso = `${dateIso}T${timeToHHMM(blockEnd)}:00`;
+      const startMs = new Date(startIso).getTime();
+      const endMs = new Date(endIso).getTime();
+      if (Number.isNaN(startMs) || Number.isNaN(endMs)) {
+        throw new Error("Invalid time selection.");
+      }
+      if (endMs <= startMs) {
+        throw new Error("End time must be after start time.");
+      }
+      const reasonParts = [blockReason ?? "", blockNotes].filter(Boolean);
+      const res = await fetch("/api/admin/availability", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          startAt: new Date(startIso).toISOString(),
+          endAt: new Date(endIso).toISOString(),
+          reason: reasonParts.join(" — ") || null,
+        }),
+      });
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({}));
+        throw new Error(data?.error ?? `Request failed (${res.status})`);
+      }
+      setSubmitted(true);
+    } catch (err) {
+      setSubmitError(err instanceof Error ? err.message : "Could not block time.");
+    } finally {
+      setSubmitting(false);
+    }
   }
 
   async function handleSubmitJob() {
@@ -384,20 +479,25 @@ export default function ScheduleNewPage() {
                   ))}
                 </div>
                 <div className="grid grid-cols-7 gap-1">
-                  {/* Offset for first day (Sunday=0 offset for March 29 = 0) */}
-                  {Array.from({ length: new Date(2026, 2, 29).getDay() }, (_, i) => (
+                  {Array.from({ length: calendarOffset }, (_, i) => (
                     <div key={`empty-${i}`} />
                   ))}
-                  {WEEKS.map((day) => {
+                  {calendarDays.map((day) => {
                     const isSelected =
                       selectedDate?.toDateString() === day.date.toDateString();
-                    const isToday = day.date.toDateString() === new Date(2026, 2, 29).toDateString();
+                    const isToday = isDemo
+                      ? day.date.toDateString() === DEMO_ANCHOR.toDateString()
+                      : day.date.toDateString() === todayMidnight.toDateString();
+                    const isPast = !isDemo && day.date < todayMidnight;
                     return (
                       <button
                         key={day.date.toDateString()}
-                        onClick={() => setSelectedDate(day.date)}
+                        onClick={() => !isPast && setSelectedDate(day.date)}
+                        disabled={isPast}
                         className={`aspect-square rounded-xl text-[13px] font-semibold transition-all duration-150 flex flex-col items-center justify-center ${
-                          isSelected
+                          isPast
+                            ? "text-text-tertiary/40 cursor-not-allowed"
+                            : isSelected
                             ? "bg-primary text-white shadow-[0_2px_8px_rgba(37,99,235,0.30)]"
                             : isToday
                             ? "border-2 border-primary text-primary bg-primary-50"
@@ -578,18 +678,24 @@ export default function ScheduleNewPage() {
                   ))}
                 </div>
                 <div className="grid grid-cols-7 gap-1">
-                  {Array.from({ length: new Date(2026, 2, 29).getDay() }, (_, i) => (
+                  {Array.from({ length: calendarOffset }, (_, i) => (
                     <div key={`empty-${i}`} />
                   ))}
-                  {WEEKS.map((day) => {
+                  {calendarDays.map((day) => {
                     const isSelected = blockDate?.toDateString() === day.date.toDateString();
-                    const isToday = day.date.toDateString() === new Date(2026, 2, 29).toDateString();
+                    const isToday = isDemo
+                      ? day.date.toDateString() === DEMO_ANCHOR.toDateString()
+                      : day.date.toDateString() === todayMidnight.toDateString();
+                    const isPast = !isDemo && day.date < todayMidnight;
                     return (
                       <button
                         key={day.date.toDateString()}
-                        onClick={() => setBlockDate(day.date)}
+                        onClick={() => !isPast && setBlockDate(day.date)}
+                        disabled={isPast}
                         className={`aspect-square rounded-xl text-[13px] font-semibold transition-all duration-150 flex flex-col items-center justify-center ${
-                          isSelected
+                          isPast
+                            ? "text-text-tertiary/40 cursor-not-allowed"
+                            : isSelected
                             ? "bg-text-primary text-white shadow-sm"
                             : isToday
                             ? "border-2 border-border text-text-primary bg-surface-secondary"
@@ -715,14 +821,19 @@ export default function ScheduleNewPage() {
               />
             </div>
 
+            {submitError && (
+              <p className="text-[13px] font-medium text-error">{submitError}</p>
+            )}
+
             <Button
               variant="secondary"
               size="lg"
               fullWidth
               icon={<Lock size={17} />}
-              onClick={() => setSubmitted(true)}
+              onClick={handleSubmitBlock}
+              disabled={submitting}
             >
-              Block Time
+              {submitting ? "Blocking…" : "Block Time"}
             </Button>
           </>
         )}

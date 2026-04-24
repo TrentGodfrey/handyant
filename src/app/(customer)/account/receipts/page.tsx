@@ -3,9 +3,11 @@
 import { useState, useEffect } from "react";
 import Link from "next/link";
 import { useSession } from "next-auth/react";
-import Card from "@/components/Card";
 import StatusBadge from "@/components/StatusBadge";
-import { ChevronLeft, Download, ChevronRight, Wrench, DollarSign, FileText, CheckCircle } from "lucide-react";
+import {
+  ChevronLeft, Download, ChevronRight, Wrench, DollarSign,
+  FileText, CheckCircle, Loader2,
+} from "lucide-react";
 import { useDemoMode } from "@/lib/useDemoMode";
 
 interface Receipt {
@@ -19,6 +21,23 @@ interface Receipt {
   status: "completed";
   invoiceNum: string;
   paidVia: string;
+}
+
+interface RealInvoice {
+  id: string;
+  number: string;
+  subtotal: number;
+  tax: number;
+  total: number;
+  status: string;
+  sentAt: string | null;
+  paidAt: string | null;
+  createdAt: string | null;
+  booking: {
+    scheduledDate: string;
+    description: string | null;
+    durationMinutes: number | null;
+  };
 }
 
 const DEMO_RECEIPTS: Receipt[] = [
@@ -49,53 +68,118 @@ const DEMO_RECEIPTS: Receipt[] = [
   },
 ];
 
+function formatDate(iso: string | null): string {
+  if (!iso) return "";
+  return new Date(iso).toLocaleDateString("en-US", {
+    month: "short", day: "numeric", year: "numeric",
+  });
+}
+
+function formatHours(durationMinutes: number | null): string {
+  const mins = durationMinutes ?? 120;
+  const hours = mins / 60;
+  return Number.isInteger(hours) ? `${hours}h` : `${hours.toFixed(1)}h`;
+}
+
 export default function ReceiptsPage() {
-  const { data: session } = useSession();
+  useSession();
   const { isDemo, mounted } = useDemoMode();
 
-  const [receipts, setReceipts] = useState<Receipt[]>([]);
+  const [demoReceipts, setDemoReceipts] = useState<Receipt[]>([]);
+  const [invoices, setInvoices] = useState<RealInvoice[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
   const [expanded, setExpanded] = useState<string | null>(null);
+  const [paying, setPaying] = useState<string | null>(null);
+  const [payError, setPayError] = useState<Record<string, string>>({});
 
   useEffect(() => {
     if (!mounted) return;
     if (isDemo) {
-      setReceipts(DEMO_RECEIPTS);
+      setDemoReceipts(DEMO_RECEIPTS);
+      setLoading(false);
       return;
     }
-    fetch("/api/bookings")
-      .then((r) => r.json())
-      .then((bookings) => {
-        if (!Array.isArray(bookings)) return;
-        const completed: Receipt[] = bookings
-          .filter((b: Record<string, unknown>) => b.status === "completed")
-          .map((b: Record<string, unknown>, i: number) => {
-            const durationMins = (b.durationMinutes as number) ?? 120;
-            const hours = durationMins / 60;
-            const hoursLabel = Number.isInteger(hours) ? `${hours}h` : `${hours.toFixed(1)}h`;
-            const labor = Math.round(hours * 80);
-            return {
-              id: b.id as string,
-              date: new Date(b.scheduledDate as string).toLocaleDateString("en-US", {
-                month: "short", day: "numeric", year: "numeric",
-              }),
-              tasks: (b.description as string) || "Service visit",
-              hours: hoursLabel,
-              labor,
-              materials: 0,
-              total: labor,
-              status: "completed" as const,
-              invoiceNum: `INV-${new Date(b.scheduledDate as string).getFullYear()}-${String(i + 1).padStart(3, "0")}`,
-              paidVia: "Card on file",
-            };
-          });
-        setReceipts(completed);
+    setLoading(true);
+    setError(null);
+    fetch("/api/invoices")
+      .then(async (r) => {
+        if (!r.ok) throw new Error("Failed to load invoices");
+        return r.json();
       })
-      .catch(() => setReceipts([]));
-  }, [isDemo, session, mounted]);
+      .then((data) => {
+        setInvoices(Array.isArray(data) ? data : []);
+      })
+      .catch((e: unknown) => {
+        setError(e instanceof Error ? e.message : "Failed to load invoices");
+        setInvoices([]);
+      })
+      .finally(() => setLoading(false));
+  }, [isDemo, mounted]);
 
-  const total = receipts.reduce((sum, r) => sum + r.total, 0);
+  async function handlePay(invoiceId: string) {
+    setPaying(invoiceId);
+    setPayError((prev) => {
+      const next = { ...prev };
+      delete next[invoiceId];
+      return next;
+    });
+    try {
+      const res = await fetch(`/api/invoices/${invoiceId}/pay`, { method: "POST" });
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({}));
+        throw new Error(err.error ?? "Payment failed");
+      }
+      const updated = await res.json();
+      setInvoices((prev) =>
+        prev.map((inv) =>
+          inv.id === invoiceId
+            ? { ...inv, status: updated.status ?? "paid", paidAt: updated.paidAt ?? new Date().toISOString() }
+            : inv
+        )
+      );
+    } catch (e: unknown) {
+      setPayError((prev) => ({
+        ...prev,
+        [invoiceId]: e instanceof Error ? e.message : "Payment failed",
+      }));
+    } finally {
+      setPaying(null);
+    }
+  }
+
+  function handleDownloadPdf() {
+    if (typeof window !== "undefined") window.print();
+  }
+
+  // Build the unified list of receipt-shaped items for rendering
+  const items: Receipt[] = (() => {
+    if (!mounted) return [];
+    if (isDemo) return demoReceipts;
+    return invoices.map((inv) => {
+      const subtotal = Number(inv.subtotal) || 0;
+      const tax = Number(inv.tax) || 0;
+      const total = Number(inv.total) || subtotal + tax;
+      const dateIso = inv.sentAt ?? inv.booking?.scheduledDate ?? inv.createdAt;
+      const isPaid = !!inv.paidAt || inv.status === "paid";
+      return {
+        id: inv.id,
+        date: formatDate(dateIso),
+        tasks: inv.booking?.description || "Service visit",
+        hours: formatHours(inv.booking?.durationMinutes ?? null),
+        labor: subtotal,
+        materials: 0,
+        total,
+        status: "completed" as const,
+        invoiceNum: inv.number,
+        paidVia: isPaid ? "Card on file" : "Unpaid",
+      };
+    });
+  })();
+
+  const total = items.reduce((sum, r) => sum + r.total, 0);
   const thisYear = new Date().getFullYear();
-  const thisYearTotal = receipts
+  const thisYearTotal = items
     .filter((r) => r.date.includes(String(thisYear)))
     .reduce((sum, r) => sum + r.total, 0);
 
@@ -114,7 +198,7 @@ export default function ReceiptsPage() {
         {/* Summary card */}
         <div className="grid grid-cols-3 gap-2">
           {[
-            { label: "Total Visits", value: receipts.length.toString(), icon: Wrench, color: "text-primary", bg: "bg-primary-50" },
+            { label: "Total Visits", value: items.length.toString(), icon: Wrench, color: "text-primary", bg: "bg-primary-50" },
             { label: "Total Spent", value: `$${total.toLocaleString()}`, icon: DollarSign, color: "text-success", bg: "bg-success-light" },
             { label: "This Year", value: `$${thisYearTotal.toLocaleString()}`, icon: FileText, color: "text-accent-amber", bg: "bg-warning-light" },
           ].map((stat) => (
@@ -132,7 +216,16 @@ export default function ReceiptsPage() {
         <div>
           <p className="mb-3 text-sm font-semibold uppercase tracking-wider text-text-secondary">History</p>
 
-          {receipts.length === 0 ? (
+          {!mounted || loading ? (
+            <div className="rounded-xl border border-border bg-white px-6 py-10 text-center">
+              <Loader2 size={22} className="animate-spin text-text-tertiary mx-auto" />
+              <p className="mt-3 text-[13px] text-text-secondary">Loading receipts…</p>
+            </div>
+          ) : error ? (
+            <div className="rounded-xl border border-error/30 bg-error/5 px-6 py-6 text-center">
+              <p className="text-[13px] font-semibold text-error">{error}</p>
+            </div>
+          ) : items.length === 0 ? (
             <div className="rounded-xl border border-border bg-white px-6 py-10 text-center">
               <div className="mx-auto mb-3 flex h-12 w-12 items-center justify-center rounded-full bg-surface-secondary">
                 <FileText size={22} className="text-text-tertiary" />
@@ -142,64 +235,103 @@ export default function ReceiptsPage() {
             </div>
           ) : (
             <div className="space-y-2">
-              {receipts.map((r) => (
-                <div key={r.id} className="rounded-xl border border-border bg-white overflow-hidden">
-                  {/* Row */}
-                  <button
-                    className="flex w-full items-center gap-3 px-4 py-3.5 text-left"
-                    onClick={() => setExpanded(expanded === r.id ? null : r.id)}
-                  >
-                    <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-success-light">
-                      <CheckCircle size={18} className="text-success" />
-                    </div>
-                    <div className="flex-1 min-w-0">
-                      <p className="text-[13px] font-semibold text-text-primary truncate">{r.tasks}</p>
-                      <p className="text-[11px] text-text-tertiary mt-0.5">{r.date} · {r.hours}</p>
-                    </div>
-                    <div className="flex flex-col items-end gap-1 shrink-0">
-                      <span className="text-[15px] font-bold text-text-primary">${r.total}</span>
-                      <ChevronRight
-                        size={14}
-                        className={`text-text-tertiary transition-transform ${expanded === r.id ? "rotate-90" : ""}`}
-                      />
-                    </div>
-                  </button>
+              {items.map((r) => {
+                const invoice = !isDemo ? invoices.find((inv) => inv.id === r.id) : null;
+                const isPaid = invoice ? !!invoice.paidAt || invoice.status === "paid" : true;
+                return (
+                  <div key={r.id} className="rounded-xl border border-border bg-white overflow-hidden">
+                    {/* Row */}
+                    <button
+                      className="flex w-full items-center gap-3 px-4 py-3.5 text-left"
+                      onClick={() => setExpanded(expanded === r.id ? null : r.id)}
+                    >
+                      <div className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-xl ${isPaid ? "bg-success-light" : "bg-warning-light"}`}>
+                        <CheckCircle size={18} className={isPaid ? "text-success" : "text-accent-amber"} />
+                      </div>
+                      <div className="flex-1 min-w-0">
+                        <p className="text-[13px] font-semibold text-text-primary truncate">{r.tasks}</p>
+                        <p className="text-[11px] text-text-tertiary mt-0.5">{r.date} · {r.hours}</p>
+                      </div>
+                      <div className="flex flex-col items-end gap-1 shrink-0">
+                        <span className="text-[15px] font-bold text-text-primary">${r.total}</span>
+                        <ChevronRight
+                          size={14}
+                          className={`text-text-tertiary transition-transform ${expanded === r.id ? "rotate-90" : ""}`}
+                        />
+                      </div>
+                    </button>
 
-                  {/* Expanded detail */}
-                  {expanded === r.id && (
-                    <div className="border-t border-border bg-surface-secondary px-4 py-4">
-                      <div className="mb-3 flex items-center justify-between">
-                        <span className="text-[11px] font-semibold text-text-tertiary uppercase tracking-wider">{r.invoiceNum}</span>
-                        <StatusBadge status={r.status} />
-                      </div>
-                      <div className="space-y-1.5 mb-3">
-                        <div className="flex justify-between text-[13px]">
-                          <span className="text-text-secondary">Labor ({r.hours})</span>
-                          <span className="font-medium text-text-primary">${r.labor}</span>
+                    {/* Expanded detail */}
+                    {expanded === r.id && (
+                      <div className="border-t border-border bg-surface-secondary px-4 py-4">
+                        <div className="mb-3 flex items-center justify-between">
+                          <span className="text-[11px] font-semibold text-text-tertiary uppercase tracking-wider">{r.invoiceNum}</span>
+                          {isPaid ? (
+                            <StatusBadge status={r.status} />
+                          ) : (
+                            <span className="rounded-full bg-warning-light px-2 py-0.5 text-[10px] font-semibold text-accent-amber uppercase tracking-wider">
+                              {invoice?.status ?? "sent"}
+                            </span>
+                          )}
                         </div>
-                        {r.materials > 0 && (
+                        <div className="space-y-1.5 mb-3">
                           <div className="flex justify-between text-[13px]">
-                            <span className="text-text-secondary">Materials</span>
-                            <span className="font-medium text-text-primary">${r.materials}</span>
+                            <span className="text-text-secondary">Labor ({r.hours})</span>
+                            <span className="font-medium text-text-primary">${r.labor}</span>
                           </div>
-                        )}
-                        <div className="h-px bg-border" />
-                        <div className="flex justify-between">
-                          <span className="text-[13px] font-semibold text-text-primary">Total</span>
-                          <span className="text-[14px] font-bold text-primary">${r.total}</span>
+                          {r.materials > 0 && (
+                            <div className="flex justify-between text-[13px]">
+                              <span className="text-text-secondary">Materials</span>
+                              <span className="font-medium text-text-primary">${r.materials}</span>
+                            </div>
+                          )}
+                          <div className="h-px bg-border" />
+                          <div className="flex justify-between">
+                            <span className="text-[13px] font-semibold text-text-primary">Total</span>
+                            <span className="text-[14px] font-bold text-primary">${r.total}</span>
+                          </div>
                         </div>
+                        <div className="flex items-center justify-between gap-3 flex-wrap">
+                          <span className="text-[11px] text-text-tertiary">
+                            {isPaid ? `Paid via ${r.paidVia}` : "Awaiting payment"}
+                          </span>
+                          <div className="flex items-center gap-3">
+                            {!isPaid && !isDemo && (
+                              <button
+                                onClick={() => handlePay(r.id)}
+                                disabled={paying === r.id}
+                                className="inline-flex items-center gap-1.5 rounded-lg bg-primary px-3 py-1.5 text-[12px] font-semibold text-white hover:bg-primary-dark disabled:opacity-60"
+                              >
+                                {paying === r.id ? (
+                                  <>
+                                    <Loader2 size={12} className="animate-spin" />
+                                    Paying…
+                                  </>
+                                ) : (
+                                  <>
+                                    <DollarSign size={12} />
+                                    Pay ${r.total}
+                                  </>
+                                )}
+                              </button>
+                            )}
+                            <button
+                              onClick={handleDownloadPdf}
+                              className="flex items-center gap-1 text-[12px] font-semibold text-primary"
+                            >
+                              <Download size={13} />
+                              Download PDF
+                            </button>
+                          </div>
+                        </div>
+                        {payError[r.id] && (
+                          <p className="mt-2 text-[12px] text-error">{payError[r.id]}</p>
+                        )}
                       </div>
-                      <div className="flex items-center justify-between">
-                        <span className="text-[11px] text-text-tertiary">Paid via {r.paidVia}</span>
-                        <button className="flex items-center gap-1 text-[12px] font-semibold text-primary">
-                          <Download size={13} />
-                          Download PDF
-                        </button>
-                      </div>
-                    </div>
-                  )}
-                </div>
-              ))}
+                    )}
+                  </div>
+                );
+              })}
             </div>
           )}
         </div>

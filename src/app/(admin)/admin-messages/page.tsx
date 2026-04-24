@@ -161,6 +161,27 @@ type ApiMessage = {
   sender?: { id: string; name: string | null };
 };
 
+type ApiBooking = {
+  id: string;
+  customerId: string;
+  scheduledDate: string;
+  scheduledTime: string;
+  status: string;
+  home: { address: string | null; city: string | null } | null;
+};
+
+function formatVisit(dateStr: string, timeStr: string): string {
+  const d = new Date(dateStr);
+  if (Number.isNaN(d.getTime())) return "";
+  const dayLabel = d.toLocaleDateString("en-US", { weekday: "short", month: "short", day: "numeric" });
+  // scheduledTime arrives as ISO; format the time-of-day portion only.
+  const t = new Date(timeStr);
+  const timeLabel = Number.isNaN(t.getTime())
+    ? ""
+    : t.toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit" });
+  return timeLabel ? `${dayLabel} · ${timeLabel}` : dayLabel;
+}
+
 // ─── Component ──────────────────────────────────────────────────────────────
 
 export default function AdminMessagesPage() {
@@ -191,11 +212,31 @@ export default function AdminMessagesPage() {
     Promise.all([
       fetch("/api/me").then((r) => (r.ok ? r.json() : null)),
       fetch("/api/conversations").then((r) => (r.ok ? r.json() : [])),
+      fetch("/api/bookings").then((r) => (r.ok ? r.json() : [])).catch(() => []),
     ])
-      .then(([me, convos]: [{ id: string } | null, ApiConvo[]]) => {
+      .then(([me, convos, bookings]: [
+        { id: string } | null,
+        ApiConvo[],
+        ApiBooking[],
+      ]) => {
         if (me) setCurrentUserId(me.id);
+
+        // Group bookings by customer; pick the soonest upcoming visit for each.
+        const todayStr = new Date().toISOString().slice(0, 10);
+        const bookingList: ApiBooking[] = Array.isArray(bookings) ? bookings : [];
+        const visitByCustomer = new Map<string, ApiBooking>();
+        for (const b of bookingList) {
+          if (!["pending", "confirmed", "in_progress"].includes(b.status)) continue;
+          if (b.scheduledDate < todayStr) continue;
+          const existing = visitByCustomer.get(b.customerId);
+          if (!existing || b.scheduledDate < existing.scheduledDate) {
+            visitByCustomer.set(b.customerId, b);
+          }
+        }
+
         const mapped: Conversation[] = (Array.isArray(convos) ? convos : []).map((c) => {
           const clientName = c.customer?.name ?? "Unknown";
+          const visit = c.customer ? visitByCustomer.get(c.customer.id) : undefined;
           return {
             id: c.id,
             client: clientName,
@@ -203,9 +244,8 @@ export default function AdminMessagesPage() {
             lastMessage: c.lastMessage?.text ?? "",
             time: formatRelative(c.lastMessageAt),
             unread: c.unreadCount ?? 0,
-            // TODO: surface next booking + address per convo via API.
-            nextVisit: "",
-            address: "",
+            nextVisit: visit ? formatVisit(visit.scheduledDate, visit.scheduledTime) : "",
+            address: visit?.home?.address ?? "",
             online: false,
             messages: [],
           };

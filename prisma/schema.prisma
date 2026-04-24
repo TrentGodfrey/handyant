@@ -31,6 +31,7 @@ model User {
   reviewsReceived    Review[]       @relation("TechReviews")
   serviceAreas       ServiceArea[]
   subscriptions      Subscription[]
+  notifyPrefs        Json?          @map("notify_prefs")
 
   @@map("users")
 }
@@ -245,4 +246,30 @@ model Subscription {
   customer   User      @relation(fields: [customerId], references: [id], onDelete: NoAction, onUpdate: NoAction)
 
   @@map("subscriptions")
+}
+
+model BusinessProfile {
+  id            String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  techId        String   @unique @map("tech_id") @db.Uuid
+  businessName  String?  @map("business_name")
+  licenseNumber String?  @map("license_number")
+  workingHours  Json?    @map("working_hours")
+  notifyPrefs   Json?    @map("notify_prefs")
+  bio           String?
+  phone         String?
+  updatedAt     DateTime @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  @@map("business_profiles")
+}
+
+model AvailabilityBlock {
+  id        String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  techId    String   @map("tech_id") @db.Uuid
+  startAt   DateTime @map("start_at") @db.Timestamptz(6)
+  endAt     DateTime @map("end_at") @db.Timestamptz(6)
+  reason    String?
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  @@index([techId, startAt], map: "idx_availability_tech")
+  @@map("availability_blocks")
 }

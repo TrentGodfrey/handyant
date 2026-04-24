@@ -14,11 +14,14 @@ import {
 
 // ─── Static Data (UI config, not mock) ──────────────────────────────────────
 
-const trustStats = [
-  { icon: BadgeCheck, label: "Licensed & Insured", sub: "TX Contractor #TXH-2824", color: "text-primary" },
-  { icon: Star, label: "4.9 Rating", sub: "86 reviews", color: "text-warning" },
-  { icon: Users, label: "DFW Since 2024", sub: "Justin · Plano · Frisco", color: "text-success" },
-];
+// Fallback contact for the "Call" button when the tech's phone isn't loaded yet.
+const FALLBACK_TEL = "tel:+12145550199";
+
+const PLAN_LABELS: Record<string, string> = {
+  basic: "Basic Plan · Free",
+  pro: "Pro Plan",
+  premium: "Premium Plan",
+};
 
 // ─── Types ──────────────────────────────────────────────────────────────────
 
@@ -29,8 +32,19 @@ interface BookingData {
   status: string;
   description: string | null;
   tasks: { label: string; done: boolean }[];
-  tech: { name: string } | null;
+  tech: { name: string; phone?: string | null } | null;
   home: { address: string; city: string | null } | null;
+}
+
+interface ApiReview {
+  id: string;
+  rating: number;
+}
+
+interface ApiSubscription {
+  id: string;
+  plan: string;
+  status: string | null;
 }
 
 const DEMO_BOOKING: BookingData = {
@@ -53,6 +67,9 @@ export default function CustomerHome() {
   const { data: session } = useSession();
   const [nextBooking, setNextBooking] = useState<BookingData | null>(null);
   const [loading, setLoading] = useState(true);
+  const [reviewStats, setReviewStats] = useState<{ count: number; avg: number } | null>(null);
+  const [planLabel, setPlanLabel] = useState<string>("Basic Plan · Free");
+  const [techPhone, setTechPhone] = useState<string | null>(null);
   const { isDemo, mounted } = useDemoMode();
 
   const userName = !mounted
@@ -72,20 +89,74 @@ export default function CustomerHome() {
     if (!mounted) return;
     if (isDemo) {
       setNextBooking(DEMO_BOOKING);
+      setReviewStats({ count: 86, avg: 4.9 });
+      setPlanLabel("Basic Plan · Free");
+      setTechPhone("+12145550199");
       setLoading(false);
       return;
     }
-    fetch("/api/bookings")
-      .then((r) => r.json())
-      .then((bookings) => {
-        const upcoming = Array.isArray(bookings)
-          ? bookings.find((b: BookingData) => ["pending", "confirmed", "in_progress"].includes(b.status))
-          : null;
+
+    let cancelled = false;
+    Promise.all([
+      fetch("/api/bookings").then((r) => (r.ok ? r.json() : [])).catch(() => []),
+      fetch("/api/reviews").then((r) => (r.ok ? r.json() : [])).catch(() => []),
+      fetch("/api/subscriptions").then((r) => (r.ok ? r.json() : [])).catch(() => []),
+    ])
+      .then(([bookings, reviews, subs]) => {
+        if (cancelled) return;
+
+        const bookingList: BookingData[] = Array.isArray(bookings) ? bookings : [];
+        const upcoming = bookingList.find((b) =>
+          ["pending", "confirmed", "in_progress"].includes(b.status)
+        );
         setNextBooking(upcoming || null);
+
+        // Surface a tech phone for the Call button (prefer the upcoming booking's tech).
+        const phone =
+          (upcoming?.tech?.phone as string | null | undefined) ??
+          bookingList.find((b) => b.tech?.phone)?.tech?.phone ??
+          null;
+        setTechPhone(phone ?? null);
+
+        const reviewList: ApiReview[] = Array.isArray(reviews) ? reviews : [];
+        if (reviewList.length > 0) {
+          const sum = reviewList.reduce((acc, r) => acc + (r.rating ?? 0), 0);
+          setReviewStats({
+            count: reviewList.length,
+            avg: Math.round((sum / reviewList.length) * 10) / 10,
+          });
+        } else {
+          setReviewStats(null);
+        }
+
+        const subsList: ApiSubscription[] = Array.isArray(subs) ? subs : [];
+        const active = subsList.find((s) => s.status === "active") ?? subsList[0];
+        if (active) {
+          setPlanLabel(PLAN_LABELS[active.plan] ?? `${active.plan[0]?.toUpperCase()}${active.plan.slice(1)} Plan`);
+        } else {
+          setPlanLabel("Basic Plan · Free");
+        }
       })
-      .catch(() => setNextBooking(null))
-      .finally(() => setLoading(false));
+      .finally(() => {
+        if (!cancelled) setLoading(false);
+      });
+
+    return () => { cancelled = true; };
   }, [isDemo, mounted]);
+
+  const trustStats = [
+    { icon: BadgeCheck, label: "Licensed & Insured", sub: "TX Contractor #TXH-2824", color: "text-primary" },
+    ...(reviewStats
+      ? [{ icon: Star, label: `${reviewStats.avg} Rating`, sub: `${reviewStats.count} review${reviewStats.count === 1 ? "" : "s"}`, color: "text-warning" }]
+      : []),
+    { icon: Users, label: "DFW Since 2024", sub: "Justin · Plano · Frisco", color: "text-success" },
+  ];
+
+  const trustGridCols = trustStats.length === 3 ? "grid-cols-3" : "grid-cols-2";
+
+  const callHref = techPhone
+    ? `tel:${techPhone.replace(/[^+\d]/g, "")}`
+    : FALLBACK_TEL;
 
   const formatDate = (dateStr: string) => {
     const d = new Date(dateStr);
@@ -221,10 +292,13 @@ export default function CustomerHome() {
                     Message
                   </button>
                 </Link>
-                <button className="flex items-center justify-center gap-2 rounded-xl border border-border bg-white px-4 py-2.5 text-[13px] font-semibold text-text-primary active:bg-surface-secondary transition-colors">
+                <a
+                  href={callHref}
+                  className="flex items-center justify-center gap-2 rounded-xl border border-border bg-white px-4 py-2.5 text-[13px] font-semibold text-text-primary active:bg-surface-secondary transition-colors"
+                >
                   <Phone size={15} className="text-success" />
                   Call
-                </button>
+                </a>
               </div>
             </Card>
           ) : (
@@ -288,7 +362,7 @@ export default function CustomerHome() {
           <h2 className="text-sm font-semibold text-text-secondary uppercase tracking-wider mb-2.5">
             Why Choose Us
           </h2>
-          <div className="grid grid-cols-3 gap-2">
+          <div className={`grid ${trustGridCols} gap-2`}>
             {trustStats.map((stat) => (
               <Card key={stat.label} padding="sm" className="flex flex-col items-center text-center gap-2 py-4">
                 <stat.icon size={22} className={stat.color} />
@@ -331,7 +405,7 @@ export default function CustomerHome() {
           <div className="rounded-2xl bg-gradient-to-r from-primary-50 to-white border border-primary-100 px-4 py-3.5">
             <div className="flex items-center justify-between">
               <div>
-                <p className="text-[13px] font-semibold text-text-primary">Basic Plan · Free</p>
+                <p className="text-[13px] font-semibold text-text-primary">{planLabel}</p>
                 <Link href="/account/plans" className="text-[12px] font-medium text-primary mt-0.5 inline-block">
                   Upgrade to Pro for priority scheduling →
                 </Link>

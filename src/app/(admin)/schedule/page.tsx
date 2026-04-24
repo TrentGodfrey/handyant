@@ -92,6 +92,13 @@ interface ApiBooking {
   tasks: { id: string }[];
 }
 
+interface ApiAvailabilityBlock {
+  id: string;
+  startAt: string;
+  endAt: string;
+  reason: string | null;
+}
+
 const STATUS_MAP: Record<string, JobStatus> = {
   confirmed: "confirmed",
   pending: "pending",
@@ -141,6 +148,18 @@ function formatDuration(mins: number | null): string {
   if (m < 60) return `${m} min`;
   const h = m / 60;
   return Number.isInteger(h) ? `${h}h` : `${h}h`;
+}
+
+function parseTimeToMinutes(label: string): number {
+  // e.g. "9:00 AM" -> 540
+  const match = /^(\d{1,2}):(\d{2})\s*(AM|PM)$/i.exec(label.trim());
+  if (!match) return 0;
+  let h = parseInt(match[1], 10);
+  const m = parseInt(match[2], 10);
+  const ampm = match[3].toUpperCase();
+  if (ampm === "PM" && h !== 12) h += 12;
+  if (ampm === "AM" && h === 12) h = 0;
+  return h * 60 + m;
 }
 
 // ── Schedule Empty State ──────────────────────────────────────────────────────
@@ -198,6 +217,7 @@ export default function SchedulePage() {
   const initialAnchor = isDemo ? new Date(2026, 2, 30) : new Date();
   const [weekStart, setWeekStart] = useState<Date>(() => startOfWeekMonday(initialAnchor));
   const [bookings, setBookings] = useState<ApiBooking[]>([]);
+  const [blocks, setBlocks] = useState<ApiAvailabilityBlock[]>([]);
   const [loading, setLoading] = useState(!isDemo);
 
   // Build week-day metadata for the header strip from weekStart.
@@ -225,7 +245,7 @@ export default function SchedulePage() {
   const [selectedIndex, setSelectedIndex] = useState<number>(0);
   const selectedDay = weekDays[selectedIndex]?.date ?? weekDays[0].date;
 
-  // Fetch bookings for the visible week (skip in demo mode).
+  // Fetch bookings + availability blocks for the visible week (skip in demo mode).
   useEffect(() => {
     if (!mounted) return;
     if (isDemo) return;
@@ -234,12 +254,18 @@ export default function SchedulePage() {
     end.setDate(end.getDate() + 7);
     const to = isoDate(end);
     setLoading(true);
-    fetch(`/api/admin/bookings?from=${from}&to=${to}`)
-      .then((r) => (r.ok ? r.json() : []))
-      .then((data) => {
-        setBookings(Array.isArray(data) ? data : []);
+    Promise.all([
+      fetch(`/api/admin/bookings?from=${from}&to=${to}`)
+        .then((r) => (r.ok ? r.json() : []))
+        .catch(() => []),
+      fetch(`/api/admin/availability?from=${from}&to=${to}`)
+        .then((r) => (r.ok ? r.json() : []))
+        .catch(() => []),
+    ])
+      .then(([b, av]) => {
+        setBookings(Array.isArray(b) ? b : []);
+        setBlocks(Array.isArray(av) ? av : []);
       })
-      .catch(() => setBookings([]))
       .finally(() => setLoading(false));
   }, [isDemo, weekStart, mounted]);
 
@@ -249,12 +275,13 @@ export default function SchedulePage() {
     const target = new Date(weekStart);
     target.setDate(weekStart.getDate() + selectedIndex);
     const targetIso = isoDate(target);
-    return bookings
+
+    const bookingItems: ScheduleItem[] = bookings
       .filter((b) => b.scheduledDate.slice(0, 10) === targetIso)
-      .map<ScheduleItem>((b) => ({
+      .map((b) => ({
         time: formatTime(b.scheduledTime),
         label: b.customer?.name ?? "Booking",
-        type: "job",
+        type: "job" as const,
         duration: formatDuration(b.durationMinutes),
         address: b.home
           ? `${b.home.address}${b.home.city ? `, ${b.home.city}` : ""}`
@@ -264,7 +291,38 @@ export default function SchedulePage() {
         homeId: b.home?.id,
         bookingId: b.id,
       }));
-  }, [isDemo, selectedDay, selectedIndex, weekStart, bookings]);
+
+    const blockItems: ScheduleItem[] = blocks
+      .filter((blk) => {
+        const d = new Date(blk.startAt);
+        const y = d.getFullYear();
+        const m = String(d.getMonth() + 1).padStart(2, "0");
+        const day = String(d.getDate()).padStart(2, "0");
+        return `${y}-${m}-${day}` === targetIso;
+      })
+      .map((blk) => {
+        const start = new Date(blk.startAt);
+        const end = new Date(blk.endAt);
+        const mins = Math.max(0, Math.round((end.getTime() - start.getTime()) / 60000));
+        const h = start.getHours();
+        const m = start.getMinutes();
+        const ampm = h >= 12 ? "PM" : "AM";
+        const h12 = h % 12 === 0 ? 12 : h % 12;
+        const timeLabel = m === 0 ? `${h12}:00 ${ampm}` : `${h12}:${String(m).padStart(2, "0")} ${ampm}`;
+        return {
+          time: timeLabel,
+          label: blk.reason || "Blocked",
+          type: "block" as const,
+          duration: formatDuration(mins),
+          details: blk.reason ?? "",
+        };
+      });
+
+    // Merge then sort by start hour:minute
+    const all = [...bookingItems, ...blockItems];
+    all.sort((a, b) => parseTimeToMinutes(a.time) - parseTimeToMinutes(b.time));
+    return all;
+  }, [isDemo, selectedDay, selectedIndex, weekStart, bookings, blocks]);
 
   const selectedData = weekDays[selectedIndex];
   const selectedDayLabel = selectedData?.day ?? "";

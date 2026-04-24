@@ -22,10 +22,17 @@ import { useDemoMode } from "@/lib/useDemoMode";
 
 const TAX_RATE = 8.25;
 
-const PAYMENT_METHODS = [
+const DEMO_PAYMENT_METHODS = [
   { name: "Venmo", handle: "@AnthonyHandyAnt", icon: Smartphone, color: "text-[#3D95CE] bg-[#E8F4FC]" },
   { name: "Zelle", handle: "(214) 555-0199", icon: DollarSign, color: "text-[#6D1ED4] bg-[#F3EAFD]" },
   { name: "Card", handle: "Via secure link", icon: CreditCard, color: "text-success bg-success-light" },
+];
+
+// Real-mode methods: generic copy only (no fake handles).
+const LIVE_PAYMENT_METHODS = [
+  { name: "Venmo", handle: "Pay your tech", icon: Smartphone, color: "text-[#3D95CE] bg-[#E8F4FC]" },
+  { name: "Zelle", handle: "Pay your tech", icon: DollarSign, color: "text-[#6D1ED4] bg-[#F3EAFD]" },
+  { name: "Card", handle: "On site", icon: CreditCard, color: "text-success bg-success-light" },
 ];
 
 // ── Demo data ────────────────────────────────────────────────────────────────
@@ -78,6 +85,7 @@ interface ApiInvoice {
 }
 
 interface InvoiceView {
+  id?: string;
   number: string;
   date: string;
   dueDate: string;
@@ -88,6 +96,7 @@ interface InvoiceView {
   tax: number;
   total: number;
   exists: boolean;
+  sentAt?: string | null;
 }
 
 function buildView(b: ApiBooking, invoice?: ApiInvoice): InvoiceView {
@@ -129,6 +138,7 @@ function buildView(b: ApiBooking, invoice?: ApiInvoice): InvoiceView {
     : "";
 
   return {
+    id: invoice?.id,
     number: invoice?.number ?? "DRAFT",
     date: fmt(dateObj),
     dueDate: fmt(dueObj),
@@ -145,6 +155,7 @@ function buildView(b: ApiBooking, invoice?: ApiInvoice): InvoiceView {
     tax,
     total,
     exists: !!invoice,
+    sentAt: invoice?.sentAt ?? null,
   };
 }
 
@@ -157,6 +168,8 @@ export default function InvoicePage({ params }: { params: Promise<{ id: string }
   const [view, setView] = useState<InvoiceView | null>(null);
   const [loading, setLoading] = useState(true);
   const [generating, setGenerating] = useState(false);
+  const [sending, setSending] = useState(false);
+  const [sendError, setSendError] = useState<string | null>(null);
   const [includePaymentLink, setIncludePaymentLink] = useState(true);
   const [message, setMessage] = useState(
     "Hi! It was a pleasure working on your home today. Here's your invoice for today's service. Please let me know if you have any questions!"
@@ -191,14 +204,50 @@ export default function InvoicePage({ params }: { params: Promise<{ id: string }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [jobId, isDemo, mounted]);
 
-  function handleSend(method: "text" | "email") {
-    setSent(method);
-    setTimeout(() => setSent(null), 3500);
+  async function handleSend(method: "text" | "email") {
+    if (!view) return;
+    setSendError(null);
+    if (isDemo) {
+      setSent(method);
+      setTimeout(() => setSent(null), 3500);
+      return;
+    }
+    if (!view.exists || !view.id) {
+      setSendError("Generate the invoice before sending.");
+      return;
+    }
+    setSending(true);
+    try {
+      const res = await fetch(`/api/invoices/${view.id}/send`, { method: "POST" });
+      if (!res.ok) {
+        const body = await res.json().catch(() => ({}));
+        throw new Error(body?.error ?? `Send failed (${res.status})`);
+      }
+      const updated = await res.json();
+      setView((prev) => (prev ? { ...prev, sentAt: updated?.sentAt ?? new Date().toISOString() } : prev));
+      setSent(method);
+      setTimeout(() => setSent(null), 3500);
+    } catch (err) {
+      setSendError(err instanceof Error ? err.message : "Could not send invoice.");
+    } finally {
+      setSending(false);
+    }
   }
 
-  function handleCopy() {
-    setCopied(true);
-    setTimeout(() => setCopied(false), 2000);
+  async function handleCopy() {
+    try {
+      if (typeof window !== "undefined" && navigator.clipboard) {
+        await navigator.clipboard.writeText(window.location.href);
+      }
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2000);
+    } catch {
+      setSendError("Could not copy to clipboard.");
+    }
+  }
+
+  function handleDownloadPdf() {
+    if (typeof window !== "undefined") window.print();
   }
 
   function generateInvoice() {
@@ -238,7 +287,16 @@ export default function InvoicePage({ params }: { params: Promise<{ id: string }
   }
 
   return (
-    <div className="min-h-screen bg-background pb-28">
+    <div className="min-h-screen bg-background pb-28 invoice-page">
+      <style>{`
+        @media print {
+          body { background: #fff !important; }
+          .invoice-page > *:not(.invoice-print-area) { display: none !important; }
+          .invoice-print-area { display: block !important; padding: 0 !important; }
+          .invoice-print-area > *:not(.invoice-printable) { display: none !important; }
+          .invoice-printable { box-shadow: none !important; border: none !important; }
+        }
+      `}</style>
       {/* Header */}
       <div className="bg-surface border-b border-border px-5 pt-14 pb-4">
         <Link
@@ -259,7 +317,7 @@ export default function InvoicePage({ params }: { params: Promise<{ id: string }
         </div>
       </div>
 
-      <div className="px-5 py-5 space-y-5">
+      <div className="px-5 py-5 space-y-5 invoice-print-area">
 
         {/* ── Generate prompt if no invoice yet ── */}
         {!view.exists && !isDemo && (
@@ -282,7 +340,7 @@ export default function InvoicePage({ params }: { params: Promise<{ id: string }
         )}
 
         {/* ── Invoice Preview Card ── */}
-        <Card padding="lg">
+        <Card padding="lg" className="invoice-printable">
           {/* Invoice header */}
           <div className="flex items-start justify-between mb-5 pb-5 border-b border-border">
             <div>
@@ -359,7 +417,7 @@ export default function InvoicePage({ params }: { params: Promise<{ id: string }
               Payment Accepted Via
             </p>
             <div className="flex gap-2">
-              {PAYMENT_METHODS.map((method) => (
+              {(isDemo ? DEMO_PAYMENT_METHODS : LIVE_PAYMENT_METHODS).map((method) => (
                 <div
                   key={method.name}
                   className={`flex flex-1 flex-col items-center gap-1 rounded-xl p-2.5 ${method.color}`}
@@ -370,6 +428,11 @@ export default function InvoicePage({ params }: { params: Promise<{ id: string }
                 </div>
               ))}
             </div>
+            {!isDemo && (
+              <p className="mt-2 text-[10px] text-text-tertiary text-center">
+                Pay your tech directly at the time of service.
+              </p>
+            )}
           </div>
         </Card>
 
@@ -417,7 +480,7 @@ export default function InvoicePage({ params }: { params: Promise<{ id: string }
           <div className="grid grid-cols-2 gap-3">
             <button
               onClick={() => handleSend("text")}
-              disabled={!view.exists}
+              disabled={!view.exists || sending}
               className={`relative flex flex-col items-center gap-2.5 rounded-2xl border-2 px-4 py-4 transition-all duration-150 ${
                 sent === "text"
                   ? "border-success bg-success-light"
@@ -446,7 +509,7 @@ export default function InvoicePage({ params }: { params: Promise<{ id: string }
 
             <button
               onClick={() => handleSend("email")}
-              disabled={!view.exists}
+              disabled={!view.exists || sending}
               className={`relative flex flex-col items-center gap-2.5 rounded-2xl border-2 px-4 py-4 transition-all duration-150 ${
                 sent === "email"
                   ? "border-success bg-success-light"
@@ -502,8 +565,9 @@ export default function InvoicePage({ params }: { params: Promise<{ id: string }
             fullWidth
             icon={<Send size={17} />}
             onClick={() => handleSend("text")}
+            disabled={sending}
           >
-            Send Invoice · ${view.total.toFixed(2)}
+            {sending ? "Sending…" : `Send Invoice · $${view.total.toFixed(2)}`}
           </Button>
         ) : (
           <Button
@@ -524,7 +588,7 @@ export default function InvoicePage({ params }: { params: Promise<{ id: string }
             variant="outline"
             size="md"
             icon={<Download size={15} />}
-            onClick={() => {}}
+            onClick={handleDownloadPdf}
           >
             Download PDF
           </Button>
@@ -537,6 +601,10 @@ export default function InvoicePage({ params }: { params: Promise<{ id: string }
             {copied ? "Copied!" : "Copy Link"}
           </Button>
         </div>
+
+        {sendError && (
+          <p className="text-center text-[12px] text-error">{sendError}</p>
+        )}
 
         <p className="text-center text-[11px] text-text-tertiary pb-2">
           Invoice will be logged in {view.client.name}&apos;s job history

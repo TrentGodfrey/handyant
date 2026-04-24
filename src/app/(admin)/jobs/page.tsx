@@ -599,12 +599,38 @@ function KanbanColumn({
 
 // ── Page ─────────────────────────────────────────────────────────────────────
 
+// Multi-select filter set
+type FilterStatus = "pending" | "confirmed" | "in-progress" | "completed" | "cancelled" | "needs-parts" | "scheduled";
+
+const FILTER_STATUSES: { key: FilterStatus; label: string }[] = [
+  { key: "pending", label: "Pending" },
+  { key: "confirmed", label: "Confirmed" },
+  { key: "in-progress", label: "In Progress" },
+  { key: "needs-parts", label: "Needs Parts" },
+  { key: "scheduled", label: "Scheduled" },
+  { key: "completed", label: "Completed" },
+  { key: "cancelled", label: "Cancelled" },
+];
+
+const DATE_BUCKETS: { key: "today" | "this-week" | "future" | "past"; label: string }[] = [
+  { key: "today", label: "Today" },
+  { key: "this-week", label: "This Week" },
+  { key: "future", label: "Future" },
+  { key: "past", label: "Past" },
+];
+
 export default function JobsPage() {
   const [search, setSearch] = useState("");
   const [activeStage, setActiveStage] = useState<PipelineStage | "all">("all");
   const [view, setView] = useState<"list" | "board">("list");
   const [jobData, setJobData] = useState<Job[]>([]);
   const [loading, setLoading] = useState(true);
+
+  // Filter panel state
+  const [showFilterPanel, setShowFilterPanel] = useState(false);
+  const [filterStatuses, setFilterStatuses] = useState<Set<FilterStatus>>(new Set());
+  const [filterDateBuckets, setFilterDateBuckets] = useState<Set<"today" | "this-week" | "future" | "past">>(new Set());
+  const [filterPartsOnly, setFilterPartsOnly] = useState(false);
 
   const { isDemo, mounted } = useDemoMode();
 
@@ -679,9 +705,24 @@ export default function JobsPage() {
   const filtered = useMemo(() => {
     let result = jobData;
 
-    // Stage filter
+    // Stage filter (pipeline pills)
     if (activeStage !== "all") {
       result = result.filter((j) => toPipelineStage(j.status) === activeStage);
+    }
+
+    // Filter-panel: status (multi)
+    if (filterStatuses.size > 0) {
+      result = result.filter((j) => filterStatuses.has(j.status as FilterStatus));
+    }
+
+    // Filter-panel: date bucket (multi)
+    if (filterDateBuckets.size > 0) {
+      result = result.filter((j) => filterDateBuckets.has(j.dateGroup));
+    }
+
+    // Filter-panel: parts only
+    if (filterPartsOnly) {
+      result = result.filter((j) => j.partsNeeded);
     }
 
     // Search
@@ -696,7 +737,34 @@ export default function JobsPage() {
     }
 
     return result;
-  }, [activeStage, search, jobData]);
+  }, [activeStage, search, jobData, filterStatuses, filterDateBuckets, filterPartsOnly]);
+
+  const activeFilterCount =
+    filterStatuses.size + filterDateBuckets.size + (filterPartsOnly ? 1 : 0);
+
+  function toggleFilterStatus(s: FilterStatus) {
+    setFilterStatuses((prev) => {
+      const next = new Set(prev);
+      if (next.has(s)) next.delete(s);
+      else next.add(s);
+      return next;
+    });
+  }
+
+  function toggleFilterDateBucket(b: "today" | "this-week" | "future" | "past") {
+    setFilterDateBuckets((prev) => {
+      const next = new Set(prev);
+      if (next.has(b)) next.delete(b);
+      else next.add(b);
+      return next;
+    });
+  }
+
+  function clearAllFilters() {
+    setFilterStatuses(new Set());
+    setFilterDateBuckets(new Set());
+    setFilterPartsOnly(false);
+  }
 
   // Group by stage for board view
   const groupedByStage = useMemo(() => {
@@ -752,10 +820,108 @@ export default function JobsPage() {
             className="flex-1 bg-transparent text-[14px] text-text-primary placeholder:text-text-tertiary focus:outline-none"
           />
         </div>
-        <button className="flex h-[44px] w-[44px] shrink-0 items-center justify-center rounded-xl border border-border bg-surface shadow-[0_1px_2px_rgba(0,0,0,0.04)] active:bg-surface-secondary transition-colors">
-          <Filter size={17} className="text-text-secondary" />
+        <button
+          onClick={() => setShowFilterPanel((v) => !v)}
+          className={`relative flex h-[44px] w-[44px] shrink-0 items-center justify-center rounded-xl border shadow-[0_1px_2px_rgba(0,0,0,0.04)] active:bg-surface-secondary transition-colors ${
+            showFilterPanel || activeFilterCount > 0
+              ? "border-primary bg-primary-50"
+              : "border-border bg-surface"
+          }`}
+          aria-label="Filters"
+        >
+          <Filter size={17} className={showFilterPanel || activeFilterCount > 0 ? "text-primary" : "text-text-secondary"} />
+          {activeFilterCount > 0 && (
+            <span className="absolute -top-1 -right-1 flex h-4 min-w-[16px] items-center justify-center rounded-full bg-primary px-1 text-[9px] font-bold text-white">
+              {activeFilterCount}
+            </span>
+          )}
         </button>
       </div>
+
+      {/* Filter panel */}
+      {showFilterPanel && (
+        <Card padding="md" className="mb-4">
+          <div className="flex items-center justify-between mb-3">
+            <p className="text-[13px] font-bold text-text-primary">Filters</p>
+            <div className="flex items-center gap-3">
+              {activeFilterCount > 0 && (
+                <button
+                  onClick={clearAllFilters}
+                  className="text-[12px] font-semibold text-text-secondary hover:text-text-primary"
+                >
+                  Clear all
+                </button>
+              )}
+              <button
+                onClick={() => setShowFilterPanel(false)}
+                className="text-[12px] font-semibold text-primary"
+              >
+                Done
+              </button>
+            </div>
+          </div>
+
+          <div className="space-y-3">
+            <div>
+              <p className="mb-1.5 text-[10px] font-bold uppercase tracking-widest text-text-tertiary">Status</p>
+              <div className="flex flex-wrap gap-1.5">
+                {FILTER_STATUSES.map((s) => {
+                  const active = filterStatuses.has(s.key);
+                  return (
+                    <button
+                      key={s.key}
+                      onClick={() => toggleFilterStatus(s.key)}
+                      className={`rounded-full border px-3 py-1 text-[11px] font-semibold transition-colors ${
+                        active
+                          ? "border-primary bg-primary text-white"
+                          : "border-border bg-surface text-text-secondary hover:border-primary/40"
+                      }`}
+                    >
+                      {s.label}
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+
+            <div>
+              <p className="mb-1.5 text-[10px] font-bold uppercase tracking-widest text-text-tertiary">Date Range</p>
+              <div className="flex flex-wrap gap-1.5">
+                {DATE_BUCKETS.map((b) => {
+                  const active = filterDateBuckets.has(b.key);
+                  return (
+                    <button
+                      key={b.key}
+                      onClick={() => toggleFilterDateBucket(b.key)}
+                      className={`rounded-full border px-3 py-1 text-[11px] font-semibold transition-colors ${
+                        active
+                          ? "border-primary bg-primary text-white"
+                          : "border-border bg-surface text-text-secondary hover:border-primary/40"
+                      }`}
+                    >
+                      {b.label}
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+
+            <div>
+              <p className="mb-1.5 text-[10px] font-bold uppercase tracking-widest text-text-tertiary">Other</p>
+              <button
+                onClick={() => setFilterPartsOnly((v) => !v)}
+                className={`rounded-full border px-3 py-1 text-[11px] font-semibold transition-colors ${
+                  filterPartsOnly
+                    ? "border-accent-amber bg-accent-amber text-white"
+                    : "border-border bg-surface text-text-secondary hover:border-accent-amber/40"
+                }`}
+              >
+                Parts needed only
+              </button>
+            </div>
+          </div>
+        </Card>
+      )}
 
       {/* Pipeline summary (visible in both views) */}
       <PipelineSummary

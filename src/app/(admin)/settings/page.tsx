@@ -25,10 +25,9 @@ import {
 import { useDemoMode } from "@/lib/useDemoMode";
 
 // ── DFW City Zones (x, y within 420x310 SVG viewport) ──
-// Geographically accurate layout — min 42px between any two city centers (r=20)
 const DFW_CITIES = [
   { id: "denton",       name: "Denton",       x: 82,  y: 28  },
-  { id: "justin",       name: "Justin",        x: 82,  y: 78  }, // Anthony's base
+  { id: "justin",       name: "Justin",        x: 82,  y: 78  },
   { id: "keller",       name: "Keller",        x: 108, y: 128 },
   { id: "southlake",    name: "Southlake",     x: 158, y: 118 },
   { id: "fort-worth",   name: "Fort Worth",    x: 95,  y: 205 },
@@ -58,18 +57,49 @@ const WEEK_DAYS = [
   { key: "sun", label: "Sun" },
 ];
 
-const START_TIMES = ["6:00 AM", "6:30 AM", "7:00 AM", "7:30 AM", "8:00 AM", "8:30 AM", "9:00 AM"];
-const END_TIMES   = ["4:00 PM", "4:30 PM", "5:00 PM", "5:30 PM", "6:00 PM", "6:30 PM", "7:00 PM", "8:00 PM"];
+const TIME_OPTIONS = [
+  "06:00", "06:30", "07:00", "07:30", "08:00", "08:30", "09:00",
+  "10:00", "11:00", "12:00", "13:00", "14:00", "15:00",
+  "16:00", "16:30", "17:00", "17:30", "18:00", "18:30", "19:00", "20:00",
+];
 
 type EditableField = "name" | "owner" | "phone" | "email" | null;
 
-// Map DFW city display names to lookup ids — used to hydrate active set from server response.
+type WorkingHours = Record<string, { start: string; end: string; enabled: boolean }>;
+type NotifyPrefs = {
+  jobReminders?: boolean;
+  leadAlerts?: boolean;
+  sms?: boolean;
+  email?: boolean;
+  // back-compat with default schema
+  newBookings?: boolean;
+};
+
 const cityNameToId = new Map(DFW_CITIES.map((c) => [c.name.toLowerCase(), c.id]));
+
+const DEFAULT_HOURS: WorkingHours = {
+  mon: { start: "08:00", end: "17:00", enabled: true },
+  tue: { start: "08:00", end: "17:00", enabled: true },
+  wed: { start: "08:00", end: "17:00", enabled: true },
+  thu: { start: "08:00", end: "17:00", enabled: true },
+  fri: { start: "08:00", end: "17:00", enabled: true },
+  sat: { start: "09:00", end: "13:00", enabled: false },
+  sun: { start: "09:00", end: "13:00", enabled: false },
+};
+
+function format12h(h24: string): string {
+  const [hStr, m] = h24.split(":");
+  const h = parseInt(hStr, 10);
+  if (Number.isNaN(h)) return h24;
+  const period = h >= 12 ? "PM" : "AM";
+  const display = h === 0 ? 12 : h > 12 ? h - 12 : h;
+  return `${display}:${m} ${period}`;
+}
 
 export default function SettingsPage() {
   const { isDemo, mounted } = useDemoMode();
 
-  // Business info — bizName is UI-only (not on User model). TODO: add a Business model or extend User.
+  // Business info
   const [bizName, setBizName]   = useState("HandyAnt");
   const [owner, setOwner]       = useState("");
   const [phone, setPhone]       = useState("");
@@ -83,17 +113,16 @@ export default function SettingsPage() {
   const [activeCities, setActiveCities] = useState<Set<string>>(new Set());
   const [showMapTooltip, setShowMapTooltip] = useState(false);
 
-  // Availability — UI-only state (no backing schema yet). TODO.
-  const [activeDays, setActiveDays] = useState<Set<string>>(
-    new Set(["mon", "tue", "wed", "thu", "fri", "sat"])
-  );
-  const [startTime, setStartTime] = useState("8:00 AM");
-  const [endTime, setEndTime]     = useState("6:00 PM");
+  // Availability — backed by BusinessProfile.workingHours
+  const [workingHours, setWorkingHours] = useState<WorkingHours>(DEFAULT_HOURS);
 
-  // Notifications — UI-only state. TODO: add prefs schema.
-  const [notifSMS, setNotifSMS]         = useState(true);
-  const [notifEmail, setNotifEmail]     = useState(true);
-  const [notifNewBook, setNotifNewBook] = useState(true);
+  // Notifications — backed by BusinessProfile.notifyPrefs
+  const [notifyPrefs, setNotifyPrefs] = useState<NotifyPrefs>({
+    jobReminders: true,
+    leadAlerts: true,
+    sms: true,
+    email: true,
+  });
 
   useEffect(() => {
     if (!mounted) return;
@@ -109,11 +138,11 @@ export default function SettingsPage() {
     Promise.all([
       fetch("/api/me").then((r) => (r.ok ? r.json() : null)),
       fetch("/api/admin/service-areas").then((r) => (r.ok ? r.json() : [])),
+      fetch("/api/admin/business").then((r) => (r.ok ? r.json() : null)),
     ])
-      .then(([me, areas]) => {
+      .then(([me, areas, business]) => {
         if (me) {
           setOwner(me.name ?? "");
-          setPhone(me.phone ?? "");
           setEmail(me.email ?? "");
         }
         if (Array.isArray(areas)) {
@@ -125,9 +154,22 @@ export default function SettingsPage() {
           }
           setActiveCities(ids);
         }
+        if (business) {
+          if (business.businessName) setBizName(business.businessName);
+          if (business.phone) setPhone(business.phone);
+          else if (me?.phone) setPhone(me.phone);
+          if (business.workingHours && typeof business.workingHours === "object") {
+            setWorkingHours({ ...DEFAULT_HOURS, ...(business.workingHours as WorkingHours) });
+          }
+          if (business.notifyPrefs && typeof business.notifyPrefs === "object") {
+            setNotifyPrefs((prev) => ({ ...prev, ...(business.notifyPrefs as NotifyPrefs) }));
+          }
+        } else if (me?.phone) {
+          setPhone(me.phone);
+        }
       })
       .catch(() => {
-        /* leave defaults blank */
+        /* leave defaults */
       })
       .finally(() => setLoading(false));
   }, [isDemo, mounted]);
@@ -142,22 +184,42 @@ export default function SettingsPage() {
     const value = draft;
     if (!field) return;
 
-    // Optimistic update
     if (field === "name")  setBizName(value);
     if (field === "owner") setOwner(value);
     if (field === "phone") setPhone(value);
     if (field === "email") setEmail(value);
     setEditing(null);
 
-    if (!isDemo && field !== "name") {
-      // Map editor field to User column
-      const patchKey = field === "owner" ? "name" : field; // phone/email pass through
+    if (!isDemo) {
       try {
-        await fetch("/api/me", {
-          method: "PATCH",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ [patchKey]: value }),
-        });
+        if (field === "name") {
+          await fetch("/api/admin/business", {
+            method: "PATCH",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ businessName: value }),
+          });
+        } else if (field === "phone") {
+          // Persist to both User.phone and BusinessProfile.phone
+          await Promise.all([
+            fetch("/api/me", {
+              method: "PATCH",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({ phone: value }),
+            }),
+            fetch("/api/admin/business", {
+              method: "PATCH",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({ phone: value }),
+            }),
+          ]);
+        } else {
+          const patchKey = field === "owner" ? "name" : field;
+          await fetch("/api/me", {
+            method: "PATCH",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ [patchKey]: value }),
+          });
+        }
       } catch {
         /* swallow — UI keeps optimistic value */
       }
@@ -213,11 +275,63 @@ export default function SettingsPage() {
     }
   }
 
+  async function persistWorkingHours(next: WorkingHours) {
+    if (isDemo) return;
+    try {
+      await fetch("/api/admin/business", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ workingHours: next }),
+      });
+    } catch {
+      /* swallow */
+    }
+  }
+
   function toggleDay(key: string) {
-    setActiveDays((prev) => {
-      const next = new Set(prev);
-      if (next.has(key)) next.delete(key);
-      else next.add(key);
+    setWorkingHours((prev) => {
+      const day = prev[key] ?? DEFAULT_HOURS[key] ?? { start: "08:00", end: "17:00", enabled: true };
+      const next: WorkingHours = { ...prev, [key]: { ...day, enabled: !day.enabled } };
+      void persistWorkingHours(next);
+      return next;
+    });
+  }
+
+  function updateAllStartTimes(time: string) {
+    setWorkingHours((prev) => {
+      const next: WorkingHours = { ...prev };
+      for (const k of Object.keys(next)) next[k] = { ...next[k], start: time };
+      void persistWorkingHours(next);
+      return next;
+    });
+  }
+
+  function updateAllEndTimes(time: string) {
+    setWorkingHours((prev) => {
+      const next: WorkingHours = { ...prev };
+      for (const k of Object.keys(next)) next[k] = { ...next[k], end: time };
+      void persistWorkingHours(next);
+      return next;
+    });
+  }
+
+  async function persistNotifyPrefs(next: NotifyPrefs) {
+    if (isDemo) return;
+    try {
+      await fetch("/api/admin/business", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ notifyPrefs: next }),
+      });
+    } catch {
+      /* swallow */
+    }
+  }
+
+  function toggleNotifPref(key: keyof NotifyPrefs) {
+    setNotifyPrefs((prev) => {
+      const next = { ...prev, [key]: !prev[key] };
+      void persistNotifyPrefs(next);
       return next;
     });
   }
@@ -225,7 +339,15 @@ export default function SettingsPage() {
   const labelCls = "block text-[12px] font-semibold uppercase tracking-wider text-text-secondary mb-1.5";
   const activeCityList = DFW_CITIES.filter((c) => activeCities.has(c.id));
 
-  if (loading) {
+  // Working day set / shared start/end derived from workingHours
+  const activeDayKeys = WEEK_DAYS.filter(({ key }) => workingHours[key]?.enabled).map((d) => d.key);
+  // Pick start/end from first enabled day (or default mon)
+  const sharedStart =
+    workingHours[activeDayKeys[0] ?? "mon"]?.start ?? DEFAULT_HOURS.mon.start;
+  const sharedEnd =
+    workingHours[activeDayKeys[0] ?? "mon"]?.end ?? DEFAULT_HOURS.mon.end;
+
+  if (!mounted || loading) {
     return (
       <div className="min-h-screen bg-background flex items-center justify-center">
         <div className="h-8 w-8 border-2 border-primary border-t-transparent rounded-full animate-spin" />
@@ -330,29 +452,21 @@ export default function SettingsPage() {
                 className="w-full"
                 style={{ touchAction: "manipulation", maxHeight: "310px" }}
               >
-                {/* DFW metro background */}
                 <rect x="18" y="12" width="386" height="286" rx="14" fill="#E8EDF2" stroke="#C8D0DA" strokeWidth="1" />
 
-                {/* I-35W / I-35E corridor — vertical through Justin/Fort Worth */}
                 <line x1="88" y1="12" x2="88" y2="298" stroke="#C8D0DA" strokeWidth="1.5" strokeDasharray="5 4" />
-                {/* I-35E corridor — through Plano/Richardson/Dallas */}
                 <line x1="265" y1="12" x2="265" y2="298" stroke="#C8D0DA" strokeWidth="1.5" strokeDasharray="5 4" />
-                {/* I-30 corridor — horizontal Fort Worth → Dallas → Mesquite */}
                 <line x1="18" y1="195" x2="404" y2="195" stroke="#C8D0DA" strokeWidth="1.5" strokeDasharray="5 4" />
-                {/* SH-121 / Sam Rayburn Tollway — diagonal NW to NE */}
                 <line x1="108" y1="128" x2="340" y2="86" stroke="#C8D0DA" strokeWidth="1" strokeDasharray="4 5" opacity="0.5" />
 
-                {/* "Home base" star for Justin */}
                 <circle cx="82" cy="78" r="28" fill="#EEF2FF" stroke="#A5B4FC" strokeWidth="1.5" opacity="0.6" />
 
-                {/* City nodes */}
                 {DFW_CITIES.map((city) => {
                   const active = activeCities.has(city.id);
                   const r = 20;
                   const words = city.name.split(" ");
                   return (
                     <g key={city.id} onClick={() => toggleCity(city.id)} style={{ cursor: "pointer" }}>
-                      {/* Invisible larger hit area for easier tapping */}
                       <circle cx={city.x} cy={city.y} r={r + 6} fill="transparent" />
                       <circle
                         cx={city.x}
@@ -431,7 +545,6 @@ export default function SettingsPage() {
         </section>
 
         {/* ── SECTION: Availability ── */}
-        {/* TODO: persist working days/hours — no schema yet for tech availability. */}
         <section>
           <div className="flex items-center gap-2 mb-3">
             <Clock size={15} className="text-text-tertiary" />
@@ -443,7 +556,7 @@ export default function SettingsPage() {
               <label className={labelCls}>Working Days</label>
               <div className="flex gap-1.5">
                 {WEEK_DAYS.map(({ key, label }) => {
-                  const on = activeDays.has(key);
+                  const on = workingHours[key]?.enabled ?? false;
                   return (
                     <button
                       key={key}
@@ -468,24 +581,24 @@ export default function SettingsPage() {
                 <div>
                   <p className="text-[11px] text-text-tertiary mb-1">Start</p>
                   <select
-                    value={startTime}
-                    onChange={(e) => setStartTime(e.target.value)}
+                    value={sharedStart}
+                    onChange={(e) => updateAllStartTimes(e.target.value)}
                     className="w-full rounded-xl border border-border bg-surface px-3 py-2.5 text-[14px] font-semibold text-text-primary focus:outline-none focus:border-primary"
                   >
-                    {START_TIMES.map((t) => (
-                      <option key={t} value={t}>{t}</option>
+                    {TIME_OPTIONS.map((t) => (
+                      <option key={t} value={t}>{format12h(t)}</option>
                     ))}
                   </select>
                 </div>
                 <div>
                   <p className="text-[11px] text-text-tertiary mb-1">End</p>
                   <select
-                    value={endTime}
-                    onChange={(e) => setEndTime(e.target.value)}
+                    value={sharedEnd}
+                    onChange={(e) => updateAllEndTimes(e.target.value)}
                     className="w-full rounded-xl border border-border bg-surface px-3 py-2.5 text-[14px] font-semibold text-text-primary focus:outline-none focus:border-primary"
                   >
-                    {END_TIMES.map((t) => (
-                      <option key={t} value={t}>{t}</option>
+                    {TIME_OPTIONS.map((t) => (
+                      <option key={t} value={t}>{format12h(t)}</option>
                     ))}
                   </select>
                 </div>
@@ -498,7 +611,6 @@ export default function SettingsPage() {
         </section>
 
         {/* ── SECTION: Notifications ── */}
-        {/* TODO: persist notification prefs — no schema yet. */}
         <section>
           <div className="flex items-center gap-2 mb-3">
             <Bell size={15} className="text-text-tertiary" />
@@ -507,90 +619,93 @@ export default function SettingsPage() {
           <Card padding="md" className="divide-y divide-border space-y-0">
             {[
               {
-                key: "sms",
+                key: "sms" as const,
                 label: "SMS Reminders",
                 sub: "Get a text 1 hour before each job",
-                value: notifSMS,
-                set: setNotifSMS,
               },
               {
-                key: "email",
+                key: "email" as const,
                 label: "Email Summaries",
                 sub: "Daily recap of jobs and revenue",
-                value: notifEmail,
-                set: setNotifEmail,
               },
               {
-                key: "book",
+                key: "leadAlerts" as const,
                 label: "New Booking Alerts",
                 sub: "Instant notification when a client books",
-                value: notifNewBook,
-                set: setNotifNewBook,
               },
-            ].map(({ key, label, sub, value, set }) => (
-              <div key={key} className="flex items-center gap-3 py-3.5 first:pt-0 last:pb-0">
-                <div className="flex-1 min-w-0">
-                  <p className="text-[14px] font-semibold text-text-primary">{label}</p>
-                  <p className="text-[12px] text-text-tertiary mt-0.5">{sub}</p>
+              {
+                key: "jobReminders" as const,
+                label: "Job Reminders",
+                sub: "Pre-shift reminders and prep alerts",
+              },
+            ].map(({ key, label, sub }) => {
+              const value = !!notifyPrefs[key];
+              return (
+                <div key={key} className="flex items-center gap-3 py-3.5 first:pt-0 last:pb-0">
+                  <div className="flex-1 min-w-0">
+                    <p className="text-[14px] font-semibold text-text-primary">{label}</p>
+                    <p className="text-[12px] text-text-tertiary mt-0.5">{sub}</p>
+                  </div>
+                  <button onClick={() => toggleNotifPref(key)} className="shrink-0 transition-colors">
+                    {value ? (
+                      <ToggleRight size={32} className="text-primary" />
+                    ) : (
+                      <ToggleLeft size={32} className="text-text-tertiary" />
+                    )}
+                  </button>
                 </div>
-                <button onClick={() => set((v) => !v)} className="shrink-0 transition-colors">
-                  {value ? (
-                    <ToggleRight size={32} className="text-primary" />
-                  ) : (
-                    <ToggleLeft size={32} className="text-text-tertiary" />
-                  )}
-                </button>
-              </div>
-            ))}
+              );
+            })}
           </Card>
         </section>
 
-        {/* ── SECTION: Subscription / Billing ── */}
-        {/* TODO: read from /api/me subscriptions[0] once billing UI is wired. */}
-        <section>
-          <div className="flex items-center gap-2 mb-3">
-            <CreditCard size={15} className="text-text-tertiary" />
-            <h2 className="text-[12px] font-bold uppercase tracking-wider text-text-secondary">Subscription</h2>
-          </div>
-          <Card padding="md">
-            <div className="flex items-start justify-between gap-3 mb-4">
-              <div>
-                <div className="flex items-center gap-2">
-                  <span className="text-[18px] font-bold text-text-primary">Pro Plan</span>
-                  <span className="rounded-full bg-primary px-2.5 py-0.5 text-[10px] font-bold text-white uppercase tracking-wider">
-                    Active
-                  </span>
+        {/* ── SECTION: Subscription / Billing — demo only ── */}
+        {isDemo && (
+          <section>
+            <div className="flex items-center gap-2 mb-3">
+              <CreditCard size={15} className="text-text-tertiary" />
+              <h2 className="text-[12px] font-bold uppercase tracking-wider text-text-secondary">Subscription</h2>
+            </div>
+            <Card padding="md">
+              <div className="flex items-start justify-between gap-3 mb-4">
+                <div>
+                  <div className="flex items-center gap-2">
+                    <span className="text-[18px] font-bold text-text-primary">Pro Plan</span>
+                    <span className="rounded-full bg-primary px-2.5 py-0.5 text-[10px] font-bold text-white uppercase tracking-wider">
+                      Active
+                    </span>
+                  </div>
+                  <p className="mt-1 text-[13px] text-text-secondary">$49 / month · Billed monthly</p>
                 </div>
-                <p className="mt-1 text-[13px] text-text-secondary">$49 / month · Billed monthly</p>
-              </div>
-              <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-primary-50 shrink-0">
-                <CreditCard size={20} className="text-primary" />
-              </div>
-            </div>
-
-            <div className="space-y-2.5">
-              {[
-                { label: "Next billing date", value: "April 15, 2026" },
-                { label: "Payment method", value: "Visa ···· 4242" },
-                { label: "Plan includes", value: "Unlimited clients, invoicing, scheduling" },
-              ].map(({ label, value }) => (
-                <div key={label} className="flex items-start justify-between gap-2">
-                  <span className="text-[12px] text-text-tertiary shrink-0">{label}</span>
-                  <span className="text-[12px] font-medium text-text-primary text-right">{value}</span>
+                <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-primary-50 shrink-0">
+                  <CreditCard size={20} className="text-primary" />
                 </div>
-              ))}
-            </div>
+              </div>
 
-            <div className="mt-4 border-t border-border pt-4 flex gap-2">
-              <Button variant="outline" size="sm" icon={<ChevronRight size={13} />}>
-                Manage Plan
-              </Button>
-              <Button variant="ghost" size="sm" icon={<Info size={13} />}>
-                View Invoices
-              </Button>
-            </div>
-          </Card>
-        </section>
+              <div className="space-y-2.5">
+                {[
+                  { label: "Next billing date", value: "April 15, 2026" },
+                  { label: "Payment method", value: "Visa ···· 4242" },
+                  { label: "Plan includes", value: "Unlimited clients, invoicing, scheduling" },
+                ].map(({ label, value }) => (
+                  <div key={label} className="flex items-start justify-between gap-2">
+                    <span className="text-[12px] text-text-tertiary shrink-0">{label}</span>
+                    <span className="text-[12px] font-medium text-text-primary text-right">{value}</span>
+                  </div>
+                ))}
+              </div>
+
+              <div className="mt-4 border-t border-border pt-4 flex gap-2">
+                <Button variant="outline" size="sm" icon={<ChevronRight size={13} />}>
+                  Manage Plan
+                </Button>
+                <Button variant="ghost" size="sm" icon={<Info size={13} />}>
+                  View Invoices
+                </Button>
+              </div>
+            </Card>
+          </section>
+        )}
 
         {/* ── Danger zone ── */}
         <section>

@@ -2,6 +2,7 @@
 
 import { useState, useEffect } from "react";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import {
   ChevronLeft, Calendar, MessageCircle, Package, CheckCircle2,
   DollarSign, CreditCard, Bell, BellOff,
@@ -18,6 +19,7 @@ interface Notification {
   description: string;
   time: string;
   read: boolean;
+  link: string | null;
 }
 
 interface ApiNotification {
@@ -27,6 +29,7 @@ interface ApiNotification {
   type: string | null;
   read: boolean | null;
   createdAt: string | null;
+  link: string | null;
 }
 
 const DEMO_NOTIFICATIONS: Notification[] = [
@@ -37,6 +40,7 @@ const DEMO_NOTIFICATIONS: Notification[] = [
     description: "Anthony is coming tomorrow, March 30 at 10:00 AM. Don't forget to leave the gate open.",
     time: "2h ago",
     read: false,
+    link: null,
   },
   {
     id: "2",
@@ -45,6 +49,7 @@ const DEMO_NOTIFICATIONS: Notification[] = [
     description: "\"Hey Sarah, just confirming — I'll have the exhaust fan motor by Thursday. Sound good?\"",
     time: "3h ago",
     read: false,
+    link: "/messages",
   },
   {
     id: "3",
@@ -53,6 +58,7 @@ const DEMO_NOTIFICATIONS: Notification[] = [
     description: "Broan 688 Fan Motor arrived at our warehouse. Bringing it to your appointment on Thursday.",
     time: "5h ago",
     read: false,
+    link: null,
   },
   {
     id: "4",
@@ -61,6 +67,7 @@ const DEMO_NOTIFICATIONS: Notification[] = [
     description: "Kitchen faucet repair + garbage disposal completed on Mar 15. How did Anthony do?",
     time: "14d ago",
     read: true,
+    link: null,
   },
   {
     id: "5",
@@ -69,6 +76,7 @@ const DEMO_NOTIFICATIONS: Notification[] = [
     description: "Your invoice for $0 (covered by Pro plan) is ready. Parts: $42.00 billed separately.",
     time: "14d ago",
     read: true,
+    link: "/account/receipts",
   },
   {
     id: "6",
@@ -77,6 +85,7 @@ const DEMO_NOTIFICATIONS: Notification[] = [
     description: "Your appointment with Anthony is in 24 hours — Mar 15 at 10:00 AM.",
     time: "15d ago",
     read: true,
+    link: null,
   },
   {
     id: "7",
@@ -85,6 +94,7 @@ const DEMO_NOTIFICATIONS: Notification[] = [
     description: "Anthony ordered the Moen kitchen faucet cartridge for your repair. Est. arrival 2 days.",
     time: "17d ago",
     read: true,
+    link: null,
   },
   {
     id: "8",
@@ -93,6 +103,7 @@ const DEMO_NOTIFICATIONS: Notification[] = [
     description: "Your Pro plan renewed for March. $89.00 charged to Visa •••• 4242.",
     time: "28d ago",
     read: true,
+    link: null,
   },
   {
     id: "9",
@@ -101,6 +112,7 @@ const DEMO_NOTIFICATIONS: Notification[] = [
     description: "\"Smart thermostat install went great! I left the old one in the closet in case you need it.\"",
     time: "29d ago",
     read: true,
+    link: "/messages",
   },
   {
     id: "10",
@@ -109,6 +121,7 @@ const DEMO_NOTIFICATIONS: Notification[] = [
     description: "Smart thermostat installation completed on Feb 28. Tap to leave a review.",
     time: "29d ago",
     read: true,
+    link: null,
   },
 ];
 
@@ -166,6 +179,7 @@ function adapt(api: ApiNotification): Notification {
     description: api.body ?? "",
     time: relativeTime(api.createdAt),
     read: !!api.read,
+    link: api.link ?? null,
   };
 }
 
@@ -179,6 +193,7 @@ function matchesFilter(n: Notification, filter: FilterType): boolean {
 }
 
 export default function NotificationsPage() {
+  const router = useRouter();
   const { isDemo, mounted } = useDemoMode();
   const [notifications, setNotifications] = useState<Notification[]>([]);
   const [activeFilter, setActiveFilter] = useState<FilterType>("all");
@@ -226,6 +241,11 @@ export default function NotificationsPage() {
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ id, read: true }),
     }).catch(() => {});
+  }
+
+  function handleNotifClick(notif: Notification) {
+    markRead(notif.id);
+    if (notif.link) router.push(notif.link);
   }
 
   const filtered = notifications.filter((n) => matchesFilter(n, activeFilter));
@@ -301,7 +321,9 @@ export default function NotificationsPage() {
             <div className="flex h-16 w-16 items-center justify-center rounded-full bg-surface-secondary mb-4">
               <Bell size={28} className="text-text-tertiary" />
             </div>
-            <p className="text-[16px] font-semibold text-text-primary">All caught up</p>
+            <p className="text-[16px] font-semibold text-text-primary">
+              {notifications.length === 0 ? "No notifications" : "All caught up"}
+            </p>
             <p className="text-[13px] text-text-secondary mt-1.5 leading-relaxed">
               No {activeFilter === "all" ? "" : activeFilter + " "}notifications to show right now.
             </p>
@@ -314,7 +336,7 @@ export default function NotificationsPage() {
               return (
                 <button
                   key={notif.id}
-                  onClick={() => markRead(notif.id)}
+                  onClick={() => handleNotifClick(notif)}
                   className={`w-full flex items-start gap-3.5 px-5 py-4 text-left transition-colors active:bg-surface-secondary ${
                     !notif.read ? "bg-primary-50/40" : "bg-surface"
                   } ${i < filtered.length - 1 ? "border-b border-border" : ""}`}

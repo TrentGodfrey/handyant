@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, Suspense } from "react";
+import { useState, useEffect, useMemo, Suspense } from "react";
 import { useSearchParams, useRouter } from "next/navigation";
 import { useSession } from "next-auth/react";
 import Card from "@/components/Card";
@@ -11,57 +11,70 @@ import {
 } from "lucide-react";
 import { useDemoMode } from "@/lib/useDemoMode";
 
-// ─── All calendar data (6 weeks) ────────────────────────────────────────────
+// ─── Calendar generation ────────────────────────────────────────────────────
 
-const allCalendarWeeks = [
-  // March/April 2026 — show 3 weeks
-  [
-    { date: 30, month: "Mar", day: "Mon", available: true },
-    { date: 31, month: "Mar", day: "Tue", available: true },
-    { date: 1, month: "Apr", day: "Wed", available: true },
-    { date: 2, month: "Apr", day: "Thu", available: false },
-    { date: 3, month: "Apr", day: "Fri", available: true },
-    { date: 4, month: "Apr", day: "Sat", available: false },
-    { date: 5, month: "Apr", day: "Sun", available: false },
-  ],
-  [
-    { date: 6, month: "Apr", day: "Mon", available: true },
-    { date: 7, month: "Apr", day: "Tue", available: true },
-    { date: 8, month: "Apr", day: "Wed", available: true },
-    { date: 9, month: "Apr", day: "Thu", available: true },
-    { date: 10, month: "Apr", day: "Fri", available: true },
-    { date: 11, month: "Apr", day: "Sat", available: false },
-    { date: 12, month: "Apr", day: "Sun", available: false },
-  ],
-  [
-    { date: 13, month: "Apr", day: "Mon", available: true },
-    { date: 14, month: "Apr", day: "Tue", available: false },
-    { date: 15, month: "Apr", day: "Wed", available: true },
-    { date: 16, month: "Apr", day: "Thu", available: true },
-    { date: 17, month: "Apr", day: "Fri", available: true },
-    { date: 18, month: "Apr", day: "Sat", available: false },
-    { date: 19, month: "Apr", day: "Sun", available: false },
-  ],
-  [
-    { date: 20, month: "Apr", day: "Mon", available: true },
-    { date: 21, month: "Apr", day: "Tue", available: true },
-    { date: 22, month: "Apr", day: "Wed", available: false },
-    { date: 23, month: "Apr", day: "Thu", available: true },
-    { date: 24, month: "Apr", day: "Fri", available: true },
-    { date: 25, month: "Apr", day: "Sat", available: false },
-    { date: 26, month: "Apr", day: "Sun", available: false },
-  ],
-  [
-    { date: 27, month: "Apr", day: "Mon", available: true },
-    { date: 28, month: "Apr", day: "Tue", available: true },
-    { date: 29, month: "Apr", day: "Wed", available: true },
-    { date: 30, month: "Apr", day: "Thu", available: false },
-    { date: 1,  month: "May", day: "Fri", available: true },
-    { date: 2,  month: "May", day: "Sat", available: false },
-    { date: 3,  month: "May", day: "Sun", available: false },
-  ],
+const MONTH_NAMES = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+const FULL_MONTH_NAMES = [
+  "January", "February", "March", "April", "May", "June",
+  "July", "August", "September", "October", "November", "December",
 ];
 
+interface CalendarDay {
+  date: number;
+  month: string;
+  day: string;
+  year: number;
+  available: boolean;
+  isPast: boolean;
+  isToday: boolean;
+}
+
+function isSameDay(a: Date, b: Date): boolean {
+  return (
+    a.getFullYear() === b.getFullYear() &&
+    a.getMonth() === b.getMonth() &&
+    a.getDate() === b.getDate()
+  );
+}
+
+// Build N weeks starting from the Monday of the week containing `start`.
+function buildCalendar(start: Date, weeksCount: number): CalendarDay[][] {
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+  // Find Monday of the week containing `start`
+  const monday = new Date(start);
+  monday.setHours(0, 0, 0, 0);
+  const dayOfWeek = monday.getDay(); // 0=Sun..6=Sat
+  const offsetToMonday = dayOfWeek === 0 ? -6 : 1 - dayOfWeek;
+  monday.setDate(monday.getDate() + offsetToMonday);
+
+  const dayLabels = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
+  const weeks: CalendarDay[][] = [];
+  const cursor = new Date(monday);
+  for (let w = 0; w < weeksCount; w++) {
+    const week: CalendarDay[] = [];
+    for (let d = 0; d < 7; d++) {
+      const isPast = cursor < today;
+      const isToday = isSameDay(cursor, today);
+      // Mark Sundays as unavailable, plus past days
+      const isSunday = cursor.getDay() === 0;
+      week.push({
+        date: cursor.getDate(),
+        month: MONTH_NAMES[cursor.getMonth()],
+        day: dayLabels[cursor.getDay()],
+        year: cursor.getFullYear(),
+        available: !isPast && !isSunday,
+        isPast,
+        isToday,
+      });
+      cursor.setDate(cursor.getDate() + 1);
+    }
+    weeks.push(week);
+  }
+  return weeks;
+}
+
+const WEEKS_TOTAL = 10;
 const WEEKS_PER_PAGE = 3;
 
 const morningSlots = [
@@ -100,18 +113,27 @@ function timeToHHMM(displayTime: string): string {
   return `${String(hour).padStart(2, "0")}:${minute}`;
 }
 
-// Convert selected day/month to ISO date string (assumes year 2026)
-function toISODate(day: number, month: string): string {
+// Convert selected day/month/year to ISO date string
+function toISODate(day: number, month: string, year: number): string {
   const monthMap: Record<string, string> = {
     Jan: "01", Feb: "02", Mar: "03", Apr: "04", May: "05", Jun: "06",
     Jul: "07", Aug: "08", Sep: "09", Oct: "10", Nov: "11", Dec: "12",
   };
   const m = monthMap[month] ?? "01";
-  return `2026-${m}-${String(day).padStart(2, "0")}`;
+  return `${year}-${m}-${String(day).padStart(2, "0")}`;
 }
 
-interface Photo { id: string; url: string; name: string; }
+interface Photo { id: string; url: string; name: string; dataUrl?: string; }
 interface ServiceCategory { id: string; name: string; }
+
+function readFileAsDataUrl(file: File): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => resolve(String(reader.result ?? ""));
+    reader.onerror = () => reject(new Error("Failed to read file"));
+    reader.readAsDataURL(file);
+  });
+}
 
 function BookingPageInner() {
   const router = useRouter();
@@ -123,6 +145,7 @@ function BookingPageInner() {
   const [step, setStep] = useState(1);
   const [selectedDay, setSelectedDay] = useState<number | null>(null);
   const [selectedMonth, setSelectedMonth] = useState<string | null>(null);
+  const [selectedYear, setSelectedYear] = useState<number | null>(null);
   const [selectedTime, setSelectedTime] = useState<string | null>(null);
   const [serviceType, setServiceType] = useState("one-time");
   const [description, setDescription] = useState("");
@@ -133,6 +156,9 @@ function BookingPageInner() {
   const [categories, setCategories] = useState<string[]>(fallbackCategories);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [submitError, setSubmitError] = useState<string | null>(null);
+
+  // Build a dynamic calendar starting from today
+  const allCalendarWeeks = useMemo(() => buildCalendar(new Date(), WEEKS_TOTAL), []);
 
   // Fetch real service categories, fall back to hardcoded list on error
   useEffect(() => {
@@ -164,20 +190,59 @@ function BookingPageInner() {
 
   const calendarWeeks = allCalendarWeeks.slice(calendarPage * WEEKS_PER_PAGE, (calendarPage + 1) * WEEKS_PER_PAGE);
   const totalPages = Math.ceil(allCalendarWeeks.length / WEEKS_PER_PAGE);
-  const monthLabel = calendarPage === 0 ? "March – April 2026" : "April – May 2026";
+
+  // Compute month label from the visible weeks
+  const monthLabel = useMemo(() => {
+    if (!calendarWeeks.length) return "";
+    const first = calendarWeeks[0][0];
+    const last = calendarWeeks[calendarWeeks.length - 1][6];
+    const firstFull = FULL_MONTH_NAMES[MONTH_NAMES.indexOf(first.month)];
+    const lastFull = FULL_MONTH_NAMES[MONTH_NAMES.indexOf(last.month)];
+    if (first.year === last.year && first.month === last.month) {
+      return `${firstFull} ${first.year}`;
+    }
+    if (first.year === last.year) {
+      return `${firstFull} – ${lastFull} ${first.year}`;
+    }
+    return `${firstFull} ${first.year} – ${lastFull} ${last.year}`;
+  }, [calendarWeeks]);
 
   function goTo(s: number) { setStep(s); window.scrollTo(0, 0); }
   function toggleCategory(cat: string) {
     setSelectedCategories((prev) => prev.includes(cat) ? prev.filter((c) => c !== cat) : [...prev, cat]);
   }
-  function handlePhotoUpload() {
-    const id = Math.random().toString(36).slice(2);
-    setPhotos((prev) => [...prev, { id, url: `https://picsum.photos/seed/${id}/200/200`, name: `Photo ${prev.length + 1}` }]);
+
+  async function handlePhotoUpload() {
+    if (isDemo) {
+      // Demo mode: keep existing placeholder behavior
+      const id = Math.random().toString(36).slice(2);
+      setPhotos((prev) => [...prev, { id, url: `https://picsum.photos/seed/${id}/200/200`, name: `Photo ${prev.length + 1}` }]);
+      return;
+    }
+    // Real mode: open a file picker, read as data URL, store locally until booking submits
+    if (typeof document === "undefined") return;
+    const input = document.createElement("input");
+    input.type = "file";
+    input.accept = "image/*";
+    input.multiple = false;
+    input.onchange = async () => {
+      const file = input.files?.[0];
+      if (!file) return;
+      try {
+        const dataUrl = await readFileAsDataUrl(file);
+        const id = Math.random().toString(36).slice(2);
+        setPhotos((prev) => [...prev, { id, url: dataUrl, dataUrl, name: file.name || `Photo ${prev.length + 1}` }]);
+      } catch {
+        // ignore failed read
+      }
+    };
+    input.click();
   }
+
   function removePhoto(id: string) { setPhotos((prev) => prev.filter((p) => p.id !== id)); }
 
   const selectedLabel = selectedDay && selectedMonth ? `${selectedMonth} ${selectedDay}` : null;
-  const canStep1Continue = selectedDay !== null && selectedTime !== null;
+  const canStep1Continue = selectedDay !== null && selectedTime !== null && selectedYear !== null;
 
   async function handleConfirmBooking() {
     if (isDemo) {
@@ -190,9 +255,12 @@ function BookingPageInner() {
     setSubmitError(null);
 
     try {
-      const scheduledDate = toISODate(selectedDay!, selectedMonth!);
+      const scheduledDate = toISODate(selectedDay!, selectedMonth!, selectedYear!);
       const scheduledTime = timeToHHMM(selectedTime!);
       const apiServiceType = serviceType === "subscription" ? "subscription" : "one_time";
+
+      // Combine description and partsNote since the schema has no separate parts field on booking
+      const combinedDescription = description + (partsNote ? `\n\nParts to bring: ${partsNote}` : "");
 
       const res = await fetch("/api/bookings", {
         method: "POST",
@@ -200,7 +268,8 @@ function BookingPageInner() {
         body: JSON.stringify({
           scheduledDate,
           scheduledTime,
-          description,
+          description: combinedDescription,
+          customerNotes: partsNote || null,
           serviceType: apiServiceType,
           durationMinutes: 120,
         }),
@@ -211,7 +280,29 @@ function BookingPageInner() {
         throw new Error(data?.error ?? `Request failed (${res.status})`);
       }
 
-      router.push("/book/confirmation");
+      const booking = await res.json();
+      const bookingId: string | undefined = booking?.id;
+
+      // Upload any collected photos against the new booking — best effort
+      if (bookingId && photos.length) {
+        const uploads = photos
+          .filter((p) => p.dataUrl)
+          .map((p) =>
+            fetch("/api/photos", {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({
+                bookingId,
+                dataUrl: p.dataUrl,
+                label: p.name,
+                type: "before",
+              }),
+            }).catch(() => null)
+          );
+        await Promise.all(uploads);
+      }
+
+      router.push(bookingId ? `/book/confirmation?id=${bookingId}` : "/book/confirmation");
     } catch (err) {
       setSubmitError(err instanceof Error ? err.message : "Something went wrong. Please try again.");
       setIsSubmitting(false);
@@ -307,13 +398,20 @@ function BookingPageInner() {
                 {calendarWeeks.map((week, wi) => (
                   <div key={wi} className="grid grid-cols-7 gap-1 mb-1">
                     {week.map((day) => {
-                      const isSelected = selectedDay === day.date && selectedMonth === day.month;
-                      const isToday = day.date === 29 && day.month === "Mar";
+                      const isSelected =
+                        selectedDay === day.date &&
+                        selectedMonth === day.month &&
+                        selectedYear === day.year;
                       return (
                         <button
-                          key={`${day.month}-${day.date}`}
+                          key={`${day.year}-${day.month}-${day.date}`}
                           disabled={!day.available}
-                          onClick={() => { setSelectedDay(day.date); setSelectedMonth(day.month); setSelectedTime(null); }}
+                          onClick={() => {
+                            setSelectedDay(day.date);
+                            setSelectedMonth(day.month);
+                            setSelectedYear(day.year);
+                            setSelectedTime(null);
+                          }}
                           className={`relative flex flex-col items-center justify-center rounded-xl h-11 transition-all ${
                             isSelected
                               ? "bg-primary text-white shadow-[0_2px_8px_rgba(37,99,235,0.30)]"
@@ -326,7 +424,7 @@ function BookingPageInner() {
                           {day.available && !isSelected && (
                             <div className="absolute bottom-1 h-1 w-1 rounded-full bg-success" />
                           )}
-                          {isToday && !isSelected && (
+                          {day.isToday && !isSelected && (
                             <div className="absolute bottom-1 h-1 w-3 rounded-full bg-primary" />
                           )}
                         </button>
