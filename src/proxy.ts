@@ -1,7 +1,17 @@
 import { getToken } from "next-auth/jwt";
 import { NextRequest, NextResponse } from "next/server";
 
-const publicPaths = ["/login", "/signup", "/api/auth", "/onboarding", "/demo"];
+const publicPaths = [
+  "/login",
+  "/signup",
+  "/api/auth",
+  "/onboarding",
+  "/demo",
+  "/forgot-password",
+  "/reset-password",
+  "/verify-email",
+  "/api/availability",
+];
 const publicExact = new Set(["/"]);
 
 export async function proxy(req: NextRequest) {
