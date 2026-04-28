@@ -399,6 +399,10 @@ model BusinessProfile {
   notifyPrefs   Json?    @map("notify_prefs")
   bio           String?
   phone         String?
+  venmoHandle   String?  @map("venmo_handle")
+  zelleHandle   String?  @map("zelle_handle")
+  cashappHandle String?  @map("cashapp_handle")
+  paypalEmail   String?  @map("paypal_email")
   updatedAt     DateTime @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(6)
 
   @@map("business_profiles")

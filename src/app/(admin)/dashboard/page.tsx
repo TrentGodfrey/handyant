@@ -95,6 +95,20 @@ type StatsResponse = {
   pendingOffers: PendingOffer[];
 };
 
+type PartsNeededItem = {
+  id: string;
+  item: string;
+  qty: number;
+  cost: number;
+  bookingId: string;
+  customerName: string;
+  scheduledDate: string;
+};
+
+type PartsNeededResponse = {
+  parts: PartsNeededItem[];
+};
+
 const demoTodaySchedule: ScheduleItem[] = [
   {
     id: 1,
@@ -447,6 +461,7 @@ function firstName(name: string | null | undefined): string {
 
 export default function AdminDashboard() {
   const [stats, setStats] = useState<StatsResponse | null>(null);
+  const [partsNeeded, setPartsNeeded] = useState<PartsNeededItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [unreadCount, setUnreadCount] = useState(0);
   const [dismissedOfferIds, setDismissedOfferIds] = useState<Set<string>>(new Set());
@@ -464,10 +479,14 @@ export default function AdminDashboard() {
     Promise.all([
       fetch("/api/admin/stats").then((r) => (r.ok ? r.json() : null)),
       fetch("/api/notifications?unread=true").then((r) => (r.ok ? r.json() : [])),
+      fetch("/api/admin/parts-needed").then((r) =>
+        r.ok ? (r.json() as Promise<PartsNeededResponse>) : { parts: [] }
+      ),
     ])
-      .then(([statsData, notifications]) => {
+      .then(([statsData, notifications, partsData]) => {
         setStats(statsData);
         if (Array.isArray(notifications)) setUnreadCount(notifications.length);
+        setPartsNeeded(partsData?.parts ?? []);
       })
       .catch(() => setStats(null))
       .finally(() => setLoading(false));
@@ -535,8 +554,15 @@ export default function AdminDashboard() {
         },
       ];
 
-  // Hide parts alert in real mode (no inventory data yet)
-  const partsAlert = isDemo ? { item: "Broan 688 fan motor", count: 2 } : null;
+  // Demo banner: keep the static "Broan 688 fan motor" message.
+  // Real mode: aggregate the live parts-needed list.
+  const realPartsAlert = !isDemo && partsNeeded.length > 0
+    ? {
+        count: partsNeeded.length,
+        previewItems: partsNeeded.slice(0, 2).map((p) => p.item),
+      }
+    : null;
+  const demoPartsAlert = isDemo ? { item: "Broan 688 fan motor", count: 2 } : null;
 
   // Pending offers list
   const realPendingOffers = (stats?.pendingOffers ?? []).filter(
@@ -666,8 +692,8 @@ export default function AdminDashboard() {
       {/* ── Revenue Trend ── */}
       <RevenueTrendChart weeklyRevenue={weeklyRevenueData} monthlyTotal={monthlyTotal} />
 
-      {/* ── Alert Banner (demo only) ── */}
-      {partsAlert && (
+      {/* ── Parts Alert Banner ── */}
+      {demoPartsAlert && (
         <div className="mb-6">
           <div className="flex items-center gap-3 rounded-xl border border-warning/25 bg-warning-light px-4 py-3 shadow-[0_1px_4px_rgba(0,0,0,0.06)]">
             <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-warning/15">
@@ -675,12 +701,35 @@ export default function AdminDashboard() {
             </div>
             <div className="flex-1 min-w-0">
               <p className="text-[13px] font-semibold text-text-primary">Parts needed before 9 AM</p>
-              <p className="text-[11px] text-text-secondary truncate">{partsAlert.item} · Home Depot Plano</p>
+              <p className="text-[11px] text-text-secondary truncate">{demoPartsAlert.item} · Home Depot Plano</p>
             </div>
             <button className="flex items-center gap-1 rounded-lg bg-warning px-2.5 py-1.5 text-[11px] font-semibold text-white shrink-0 active:opacity-80 transition-opacity">
               <Navigation size={11} />
               Go
             </button>
+          </div>
+        </div>
+      )}
+      {realPartsAlert && (
+        <div className="mb-6">
+          <div className="flex items-center gap-3 rounded-xl border border-warning/25 bg-warning-light px-4 py-3 shadow-[0_1px_4px_rgba(0,0,0,0.06)]">
+            <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-warning/15">
+              <AlertTriangle size={15} className="text-warning" />
+            </div>
+            <div className="flex-1 min-w-0">
+              <p className="text-[13px] font-semibold text-text-primary">
+                {realPartsAlert.count} {realPartsAlert.count === 1 ? "part" : "parts"} needed
+              </p>
+              <p className="text-[11px] text-text-secondary truncate">
+                {realPartsAlert.previewItems.join(", ")}
+              </p>
+            </div>
+            <Link
+              href="/jobs?status=confirmed"
+              className="flex items-center gap-1 rounded-lg bg-warning px-2.5 py-1.5 text-[11px] font-semibold text-white shrink-0 active:opacity-80 transition-opacity"
+            >
+              View all
+            </Link>
           </div>
         </div>
       )}

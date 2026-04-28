@@ -8,6 +8,8 @@ import {
   DollarSign,
   Briefcase,
   TrendingUp,
+  TrendingDown,
+  Minus,
   Star,
   Users,
   MapPin,
@@ -58,6 +60,15 @@ const CATEGORY_COLORS = ["#3B82F6", "#8B5CF6", "#F59E0B", "#10B981", "#EC4899", 
 
 /* ── Types ── */
 
+type TrendDirection = "up" | "down" | "flat";
+type TrendData = {
+  current: number;
+  prior: number;
+  deltaAbs: number;
+  deltaPct: number;
+  direction: TrendDirection;
+};
+
 type StatsResponse = {
   today: { jobs: number; hours: number; partsToBuy: number };
   week: { jobs: number; hours: number; revenue: number };
@@ -79,6 +90,27 @@ type StatsResponse = {
     revenue: number;
   }[];
   revenueByCategory: { category: string; revenue: number }[];
+  period?: {
+    key: "week" | "month" | "quarter" | "year";
+    current: {
+      revenue: number;
+      jobsCompleted: number;
+      avgJobValue: number;
+      activeCustomers: number;
+    };
+    prior: {
+      revenue: number;
+      jobsCompleted: number;
+      avgJobValue: number;
+      activeCustomers: number;
+    };
+    trends: {
+      revenue: TrendData;
+      jobsCompleted: TrendData;
+      avgJobValue: TrendData;
+      activeCustomers: TrendData;
+    };
+  };
 };
 
 type AdminBooking = {
@@ -233,10 +265,60 @@ function shortDate(iso: string) {
 
 const WEEKDAYS = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
 
+/* ── Trend delta badge ── */
+
+function TrendDeltaBadge({
+  trend,
+  format,
+  priorLabel,
+}: {
+  trend: TrendData;
+  format: "currency" | "count";
+  priorLabel: string;
+}) {
+  const { direction, deltaAbs, deltaPct } = trend;
+
+  if (direction === "flat") {
+    return (
+      <div className="flex items-center gap-1">
+        <Minus size={11} className="text-text-tertiary" />
+        <span className="text-[11px] font-semibold text-text-tertiary">
+          — {priorLabel}
+        </span>
+      </div>
+    );
+  }
+
+  const positive = direction === "up";
+  const sign = positive ? "+" : "-";
+  const absVal = Math.abs(deltaAbs);
+  const absPct = Math.abs(Math.round(deltaPct));
+
+  const valueText =
+    format === "currency"
+      ? `${sign}$${Math.round(absVal).toLocaleString()}`
+      : `${sign}${Math.round(absVal)}`;
+
+  const Icon = positive ? TrendingUp : TrendingDown;
+  const colorClass = positive ? "text-success" : "text-error";
+
+  return (
+    <div className="flex items-center gap-1">
+      <Icon size={11} className={colorClass} />
+      <span className={`text-[11px] font-semibold ${colorClass}`}>
+        {valueText} ({sign}{absPct}%)
+      </span>
+      <span className="text-[10px] font-medium text-text-tertiary">
+        {priorLabel}
+      </span>
+    </div>
+  );
+}
+
 /* ── Page Component ── */
 
 export default function ReportsPage() {
-  const [period, setPeriod] = useState<"week" | "month" | "quarter">("month");
+  const [period, setPeriod] = useState<"week" | "month" | "quarter" | "year">("month");
   const [stats, setStats] = useState<StatsResponse | null>(null);
   const [bookings, setBookings] = useState<AdminBooking[]>([]);
   const [loading, setLoading] = useState(true);
@@ -249,8 +331,9 @@ export default function ReportsPage() {
       setLoading(false);
       return;
     }
+    setLoading(true);
     Promise.all([
-      fetch("/api/admin/stats").then((r) => (r.ok ? r.json() : null)),
+      fetch(`/api/admin/stats?period=${period}`).then((r) => (r.ok ? r.json() : null)),
       fetch("/api/admin/bookings").then((r) => (r.ok ? r.json() : [])),
     ])
       .then(([statsData, bookingsData]) => {
@@ -262,7 +345,7 @@ export default function ReportsPage() {
         setBookings([]);
       })
       .finally(() => setLoading(false));
-  }, [isDemo, mounted]);
+  }, [isDemo, mounted, period]);
 
   /* ─ Time-series chart data based on period ─ */
   const chartData = useMemo(() => {
@@ -289,17 +372,30 @@ export default function ReportsPage() {
         labels: [...months.keys()],
       };
     }
-    // quarter — group 8 weeks into ~3-month buckets
-    const quarters = new Map<string, number>();
+    if (period === "quarter") {
+      // group 8 weeks into ~3-month buckets
+      const quarters = new Map<string, number>();
+      for (const w of weekly) {
+        const date = new Date(w.weekStart);
+        const q = Math.floor(date.getMonth() / 3) + 1;
+        const key = `Q${q} ${date.getFullYear()}`;
+        quarters.set(key, (quarters.get(key) ?? 0) + w.revenue);
+      }
+      return {
+        values: [...quarters.values()],
+        labels: [...quarters.keys()],
+      };
+    }
+    // year — bucket by year
+    const years = new Map<string, number>();
     for (const w of weekly) {
       const date = new Date(w.weekStart);
-      const q = Math.floor(date.getMonth() / 3) + 1;
-      const key = `Q${q} ${date.getFullYear()}`;
-      quarters.set(key, (quarters.get(key) ?? 0) + w.revenue);
+      const key = String(date.getFullYear());
+      years.set(key, (years.get(key) ?? 0) + w.revenue);
     }
     return {
-      values: [...quarters.values()],
-      labels: [...quarters.keys()],
+      values: [...years.values()],
+      labels: [...years.keys()],
     };
   }, [isDemo, period, stats]);
 
@@ -374,40 +470,55 @@ export default function ReportsPage() {
   const maxAreaJobs = serviceAreas[0]?.jobs ?? 1;
 
   /* ─ KPIs ─ */
+  // In real mode the API computes period+prior+trends so we use those directly.
+  const apiPeriod = stats?.period;
+
   const periodRevenue = isDemo
     ? 8200
-    : period === "week"
-      ? stats?.week.revenue ?? 0
-      : period === "month"
-        ? stats?.month.revenue ?? 0
-        : (stats?.weeklyRevenue ?? []).reduce((acc, w) => acc + w.revenue, 0);
+    : apiPeriod?.current.revenue ?? 0;
 
   const periodJobs = isDemo
     ? 18
-    : period === "week"
-      ? stats?.week.jobs ?? 0
-      : period === "month"
-        ? stats?.month.completed ?? 0
-        : (stats?.weeklyRevenue ?? []).filter((w) => w.revenue > 0).length;
+    : apiPeriod?.current.jobsCompleted ?? 0;
 
   const avgJobValue = isDemo
     ? 456
-    : periodJobs > 0
-      ? Math.round(periodRevenue / periodJobs)
-      : 0;
+    : Math.round(apiPeriod?.current.avgJobValue ?? 0);
 
   const rating = isDemo ? 4.9 : stats?.month.avgRating ?? 0;
   const reviewCount = isDemo ? null : stats?.month.reviewCount ?? 0;
 
-  const periodLabel =
-    period === "week" ? "this week" : period === "month" ? "this month" : "this quarter";
+  const priorLabel =
+    period === "week"
+      ? "vs last week"
+      : period === "month"
+        ? "vs last month"
+        : period === "quarter"
+          ? "vs last quarter"
+          : "vs last year";
 
-  const kpiCards = [
+  type KpiTrend =
+    | { kind: "stars" }
+    | { kind: "demo"; text: string }
+    | { kind: "real"; trend: TrendData; format: "currency" | "count" };
+
+  const kpiCards: Array<{
+    label: string;
+    value: string;
+    trend: KpiTrend;
+    icon: typeof DollarSign;
+    iconBg: string;
+    iconColor: string;
+    reviewCount?: number | null;
+  }> = [
     {
       label: "Revenue",
       value: formatCurrency(periodRevenue),
-      trend: isDemo ? "+12% vs last month" : periodLabel,
-      positive: true,
+      trend: isDemo
+        ? { kind: "demo", text: "+12% vs last month" }
+        : apiPeriod
+          ? { kind: "real", trend: apiPeriod.trends.revenue, format: "currency" }
+          : { kind: "demo", text: priorLabel },
       icon: DollarSign,
       iconBg: "bg-success-light",
       iconColor: "text-success",
@@ -415,8 +526,11 @@ export default function ReportsPage() {
     {
       label: "Jobs Completed",
       value: String(periodJobs),
-      trend: isDemo ? "+3 vs last month" : periodLabel,
-      positive: true,
+      trend: isDemo
+        ? { kind: "demo", text: "+3 vs last month" }
+        : apiPeriod
+          ? { kind: "real", trend: apiPeriod.trends.jobsCompleted, format: "count" }
+          : { kind: "demo", text: priorLabel },
       icon: Briefcase,
       iconBg: "bg-primary-50",
       iconColor: "text-primary",
@@ -424,8 +538,11 @@ export default function ReportsPage() {
     {
       label: "Avg Job Value",
       value: avgJobValue ? `$${avgJobValue}` : "$0",
-      trend: isDemo ? "+$32 vs last month" : "per completed job",
-      positive: true,
+      trend: isDemo
+        ? { kind: "demo", text: "+$32 vs last month" }
+        : apiPeriod
+          ? { kind: "real", trend: apiPeriod.trends.avgJobValue, format: "currency" }
+          : { kind: "demo", text: "per completed job" },
       icon: TrendingUp,
       iconBg: "bg-[#EFF9FF]",
       iconColor: "text-info",
@@ -433,8 +550,7 @@ export default function ReportsPage() {
     {
       label: "Client Satisfaction",
       value: `${rating ? rating.toFixed(1) : "—"}/5.0`,
-      trend: "stars" as const,
-      positive: true,
+      trend: { kind: "stars" },
       icon: Star,
       iconBg: "bg-warning-light",
       iconColor: "text-warning",
@@ -478,9 +594,10 @@ export default function ReportsPage() {
         <div className="flex rounded-lg bg-surface-secondary p-0.5">
           {(
             [
-              { key: "week", label: "This Week" },
-              { key: "month", label: "This Month" },
-              { key: "quarter", label: "This Quarter" },
+              { key: "week", label: "Week" },
+              { key: "month", label: "Month" },
+              { key: "quarter", label: "Quarter" },
+              { key: "year", label: "Year" },
             ] as const
           ).map((p) => (
             <button
@@ -515,7 +632,7 @@ export default function ReportsPage() {
             <p className="text-[22px] font-bold text-text-primary leading-none">
               {stat.value}
             </p>
-            {stat.trend === "stars" ? (
+            {stat.trend.kind === "stars" ? (
               <div className="flex items-center gap-0.5">
                 {[1, 2, 3, 4, 5].map((s) => (
                   <Star
@@ -534,10 +651,16 @@ export default function ReportsPage() {
                   </span>
                 )}
               </div>
-            ) : (
+            ) : stat.trend.kind === "demo" ? (
               <p className="text-[11px] font-semibold text-success">
-                {stat.trend}
+                {stat.trend.text}
               </p>
+            ) : (
+              <TrendDeltaBadge
+                trend={stat.trend.trend}
+                format={stat.trend.format}
+                priorLabel={priorLabel}
+              />
             )}
           </Card>
         ))}
@@ -555,7 +678,9 @@ export default function ReportsPage() {
                 ? "Weekly revenue — last 8 weeks"
                 : period === "month"
                   ? "Monthly revenue"
-                  : "Quarterly revenue"}
+                  : period === "quarter"
+                    ? "Quarterly revenue"
+                    : "Yearly revenue"}
             </p>
           </div>
           {chartHasData ? (

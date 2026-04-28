@@ -8,10 +8,24 @@ function fmtMoney(value: unknown): string {
   return `$${n.toFixed(2)}`;
 }
 
-export async function POST(_req: NextRequest, ctx: { params: Promise<{ id: string }> }) {
+export async function POST(req: NextRequest, ctx: { params: Promise<{ id: string }> }) {
   const user = await requireUser();
   if (!user) return unauthorized();
   const { id } = await ctx.params;
+
+  // Body is optional; default to including payment info for backward compat.
+  let includePaymentLink = true;
+  try {
+    const text = await req.text();
+    if (text) {
+      const parsed = JSON.parse(text) as { includePaymentLink?: boolean };
+      if (typeof parsed?.includePaymentLink === "boolean") {
+        includePaymentLink = parsed.includePaymentLink;
+      }
+    }
+  } catch {
+    /* ignore — fall back to default */
+  }
 
   const invoice = await prisma.invoice.findUnique({
     where: { id },
@@ -97,6 +111,50 @@ export async function POST(_req: NextRequest, ctx: { params: Promise<{ id: strin
     ? `<div style="margin-top:4px;font-size:12px;color:#6a7280;">Phone: ${escapeHtml(techPhone)}</div>`
     : "";
 
+  // Build payment-method snippets from the tech's BusinessProfile, if requested.
+  const paymentMethods: { name: string; handle: string }[] = [];
+  if (includePaymentLink && businessProfile) {
+    const v = businessProfile.venmoHandle?.trim();
+    if (v) paymentMethods.push({ name: "Venmo", handle: v.startsWith("@") ? v : `@${v}` });
+    const z = businessProfile.zelleHandle?.trim();
+    if (z) paymentMethods.push({ name: "Zelle", handle: z });
+    const c = businessProfile.cashappHandle?.trim();
+    if (c) paymentMethods.push({ name: "Cash App", handle: c.startsWith("$") ? c : `$${c}` });
+    const p = businessProfile.paypalEmail?.trim();
+    if (p) paymentMethods.push({ name: "PayPal", handle: p });
+  }
+
+  const paymentLinesHtml = paymentMethods
+    .map(
+      (m) =>
+        `<div style="font-size:13px;color:#5b4a1a;line-height:1.7;"><strong>${escapeHtml(m.name)}:</strong> ${escapeHtml(m.handle)}</div>`,
+    )
+    .join("");
+
+  let paymentBlockHtml = "";
+  if (includePaymentLink) {
+    if (paymentMethods.length > 0) {
+      paymentBlockHtml = `
+        <div style="background-color:#fff8e6;border:1px solid #f3d68a;border-radius:10px;padding:14px 16px;margin-bottom:18px;">
+          <div style="font-size:13px;font-weight:700;color:#1a1a1a;margin-bottom:6px;">How to Pay</div>
+          ${paymentLinesHtml}
+          <div style="font-size:12px;color:#5b4a1a;margin-top:8px;line-height:1.5;">
+            Or simply reply to this email and we'll sort it out.
+          </div>
+        </div>
+      `;
+    } else {
+      paymentBlockHtml = `
+        <div style="background-color:#fff8e6;border:1px solid #f3d68a;border-radius:10px;padding:14px 16px;margin-bottom:18px;">
+          <div style="font-size:13px;font-weight:700;color:#1a1a1a;margin-bottom:4px;">How to Pay</div>
+          <div style="font-size:13px;color:#5b4a1a;line-height:1.5;">
+            Reply to this email and ${escapeHtml(techName)} will follow up with payment options.
+          </div>
+        </div>
+      `;
+    }
+  }
+
   const contentHtml = `
     <h1 style="margin:0 0 6px;font-size:20px;color:#1a1a1a;">Invoice ${escapeHtml(invoice.number)}</h1>
     <p style="margin:0 0 18px;color:#6a7280;font-size:13px;">
@@ -147,13 +205,7 @@ export async function POST(_req: NextRequest, ctx: { params: Promise<{ id: strin
       </tr>
     </table>
 
-    <div style="background-color:#fff8e6;border:1px solid #f3d68a;border-radius:10px;padding:14px 16px;margin-bottom:18px;">
-      <div style="font-size:13px;font-weight:700;color:#1a1a1a;margin-bottom:4px;">How to Pay</div>
-      <div style="font-size:13px;color:#5b4a1a;line-height:1.5;">
-        Pay via Venmo <strong>@anthonyhandyant</strong>, or simply reply to this email and we'll
-        sort it out. We also accept Zelle and card on site.
-      </div>
-    </div>
+    ${paymentBlockHtml}
 
     <div style="border-top:1px solid #ececec;padding-top:14px;">
       <div style="font-size:11px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;color:#6a7280;margin-bottom:4px;">
@@ -184,11 +236,19 @@ export async function POST(_req: NextRequest, ctx: { params: Promise<{ id: strin
     `Total:    ${totalStr}`,
     ``,
     `View online: ${receiptsUrl}`,
-    ``,
-    `Pay via Venmo @anthonyhandyant or reply to this email.`,
-    ``,
-    `— ${techName}${techPhone ? ` · ${techPhone}` : ""}`,
   ];
+
+  if (includePaymentLink) {
+    if (paymentMethods.length > 0) {
+      textLines.push(``, `How to pay:`);
+      for (const m of paymentMethods) textLines.push(`  • ${m.name}: ${m.handle}`);
+      textLines.push(`Or reply to this email.`);
+    } else {
+      textLines.push(``, `Reply to this email and ${techName} will follow up with payment options.`);
+    }
+  }
+
+  textLines.push(``, `— ${techName}${techPhone ? ` · ${techPhone}` : ""}`);
 
   const result = await sendEmail({
     to: customerEmail,

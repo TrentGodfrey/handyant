@@ -8,7 +8,7 @@ import StatusBadge from "@/components/StatusBadge";
 import {
   ChevronLeft, MapPin, Clock, Phone, MessageCircle, Navigation,
   CheckSquare, Square, Camera,
-  Plus, AlertTriangle, Check, Package, Star,
+  Plus, AlertTriangle, Check, Package, Star, Trash2,
 } from "lucide-react";
 import { useDemoMode } from "@/lib/useDemoMode";
 import { toast } from "@/components/Toaster";
@@ -16,6 +16,15 @@ import { toast } from "@/components/Toaster";
 // ── Types ────────────────────────────────────────────────────────────────────
 
 type UiStatus = "confirmed" | "pending" | "needs-parts" | "in-progress" | "scheduled" | "completed" | "cancelled";
+
+interface TechNote {
+  id: string;
+  text: string;
+  createdAt: string;
+  authorId?: string;
+  authorName: string;
+  legacy?: boolean;
+}
 
 interface JobDetail {
   id: string;
@@ -168,8 +177,11 @@ export default function JobDetailPage({ params }: { params: Promise<{ id: string
   const [tasks, setTasks] = useState<JobDetail["tasks"]>([]);
   const [photos, setPhotos] = useState<JobDetail["photos"]>([]);
   const [notes, setNotes] = useState("");
+  const [bookingNotes, setBookingNotes] = useState<TechNote[]>([]);
+  const [currentUserId, setCurrentUserId] = useState<string | null>(null);
   const [noteInput, setNoteInput] = useState("");
   const [showNoteInput, setShowNoteInput] = useState(false);
+  const [savingNote, setSavingNote] = useState(false);
   const [showCompleteModal, setShowCompleteModal] = useState(false);
   const [completing, setCompleting] = useState(false);
   const [completeRating, setCompleteRating] = useState<number>(5);
@@ -199,8 +211,11 @@ export default function JobDetailPage({ params }: { params: Promise<{ id: string
     Promise.all([
       fetch(`/api/bookings/${id}`).then((r) => (r.ok ? r.json() : null)).catch(() => null),
       fetch(`/api/photos?bookingId=${id}`).then((r) => (r.ok ? r.json() : [])).catch(() => []),
+      fetch(`/api/bookings/${id}/notes`).then((r) => (r.ok ? r.json() : [])).catch(() => []),
+      fetch(`/api/me`).then((r) => (r.ok ? r.json() : null)).catch(() => null),
     ])
-      .then(([data, photoList]) => {
+      .then(([data, photoList, noteList, me]) => {
+        if (me?.id) setCurrentUserId(me.id as string);
         if (!data) {
           setJob(null);
           return;
@@ -220,10 +235,53 @@ export default function JobDetailPage({ params }: { params: Promise<{ id: string
         } else {
           setPhotos(detail.photos);
         }
+        if (Array.isArray(noteList)) {
+          setBookingNotes(
+            noteList.map((n: {
+              id: string;
+              text: string;
+              createdAt: string;
+              authorId?: string;
+              author?: { id?: string; name?: string | null } | null;
+            }) => ({
+              id: n.id,
+              text: n.text,
+              createdAt: n.createdAt,
+              authorId: n.author?.id ?? n.authorId,
+              authorName: n.author?.name ?? "Tech",
+            })),
+          );
+        }
       })
       .catch(() => setJob(null))
       .finally(() => setLoading(false));
   }, [id, isDemo, mounted]);
+
+  async function refetchBookingNotes() {
+    try {
+      const res = await fetch(`/api/bookings/${id}/notes`);
+      if (!res.ok) return;
+      const list = await res.json();
+      if (!Array.isArray(list)) return;
+      setBookingNotes(
+        list.map((n: {
+          id: string;
+          text: string;
+          createdAt: string;
+          authorId?: string;
+          author?: { id?: string; name?: string | null } | null;
+        }) => ({
+          id: n.id,
+          text: n.text,
+          createdAt: n.createdAt,
+          authorId: n.author?.id ?? n.authorId,
+          authorName: n.author?.name ?? "Tech",
+        })),
+      );
+    } catch {
+      /* swallow */
+    }
+  }
 
   const completedCount = tasks.filter((t) => t.done).length;
   const progress = tasks.length > 0 ? Math.round((completedCount / tasks.length) * 100) : 0;
@@ -309,20 +367,92 @@ export default function JobDetailPage({ params }: { params: Promise<{ id: string
     setShowAddTask(false);
   }
 
-  function addNote() {
-    if (!noteInput.trim()) return;
-    const updated = notes + (notes ? "\n\n" : "") + noteInput.trim();
-    setNotes(updated);
+  async function addNote() {
+    const text = noteInput.trim();
+    if (!text) return;
+
+    // Demo mode: keep the legacy concatenated-string behavior so the demo UI still works.
+    if (isDemo) {
+      const updated = notes + (notes ? "\n\n" : "") + text;
+      setNotes(updated);
+      setNoteInput("");
+      setShowNoteInput(false);
+      return;
+    }
+
+    // Real mode: append optimistically as a BookingNote, then POST.
+    const tempId = `temp-${Date.now()}`;
+    const optimistic: TechNote = {
+      id: tempId,
+      text,
+      createdAt: new Date().toISOString(),
+      authorId: currentUserId ?? undefined,
+      authorName: "You",
+    };
+    setBookingNotes((prev) => [optimistic, ...prev]);
     setNoteInput("");
     setShowNoteInput(false);
-    if (isDemo) return;
-    fetch(`/api/bookings/${id}`, {
-      method: "PATCH",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ techNotes: updated }),
-    }).catch((e) => {
+    setSavingNote(true);
+
+    try {
+      const res = await fetch(`/api/bookings/${id}/notes`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ text }),
+      });
+      if (!res.ok) {
+        const body = await res.json().catch(() => ({}));
+        throw new Error(body?.error ?? `Failed (${res.status})`);
+      }
+      const created = await res.json();
+      setBookingNotes((prev) =>
+        prev.map((n) =>
+          n.id === tempId
+            ? {
+                id: created.id,
+                text: created.text,
+                createdAt: created.createdAt,
+                authorId: created.author?.id ?? created.authorId,
+                authorName: created.author?.name ?? "You",
+              }
+            : n,
+        ),
+      );
+    } catch (e) {
       toast.error("Failed to save note: " + (e instanceof Error ? e.message : String(e)));
-    });
+      // Refetch to drop the optimistic entry.
+      refetchBookingNotes();
+    } finally {
+      setSavingNote(false);
+    }
+  }
+
+  async function deleteBookingNote(noteId: string) {
+    if (isDemo) return;
+    const prev = bookingNotes;
+    // Optimistic remove
+    setBookingNotes((p) => p.filter((n) => n.id !== noteId));
+    try {
+      const res = await fetch(`/api/bookings/${id}/notes/${noteId}`, { method: "DELETE" });
+      if (!res.ok) {
+        const body = await res.json().catch(() => ({}));
+        throw new Error(body?.error ?? `Failed (${res.status})`);
+      }
+    } catch (e) {
+      toast.error("Failed to delete note: " + (e instanceof Error ? e.message : String(e)));
+      setBookingNotes(prev);
+      refetchBookingNotes();
+    }
+  }
+
+  function formatNoteTimestamp(iso: string): string {
+    const d = new Date(iso);
+    if (Number.isNaN(d.getTime())) return "";
+    const today = new Date();
+    const isToday = d.toDateString() === today.toDateString();
+    const time = d.toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit" });
+    if (isToday) return `Today · ${time}`;
+    return `${d.toLocaleDateString("en-US", { month: "short", day: "numeric" })} · ${time}`;
   }
 
   async function completeJob() {
@@ -676,33 +806,123 @@ export default function JobDetailPage({ params }: { params: Promise<{ id: string
         <div>
           <div className="mb-2 flex items-center justify-between">
             <p className="text-sm font-semibold uppercase tracking-wider text-text-secondary">Tech Notes</p>
-            <button
-              onClick={() => setShowNoteInput(!showNoteInput)}
-              className="flex items-center gap-1 text-[12px] font-semibold text-primary"
-            >
-              <Plus size={14} />
-              Add
-            </button>
-          </div>
-          <Card>
-            <p className="text-[13px] text-text-primary leading-relaxed whitespace-pre-line">{notes || "No notes yet."}</p>
-            {showNoteInput && (
-              <div className="mt-3 border-t border-border pt-3">
-                <textarea
-                  autoFocus
-                  value={noteInput}
-                  onChange={(e) => setNoteInput(e.target.value)}
-                  placeholder="Add a note..."
-                  rows={3}
-                  className="w-full rounded-lg border border-border bg-surface-secondary px-3 py-2.5 text-[13px] text-text-primary placeholder:text-text-tertiary focus:outline-none focus:border-primary resize-none"
-                />
-                <div className="mt-2 flex gap-2">
-                  <Button variant="primary" size="sm" onClick={addNote}>Save Note</Button>
-                  <Button variant="ghost" size="sm" onClick={() => setShowNoteInput(false)}>Cancel</Button>
-                </div>
-              </div>
+            {!showNoteInput && (
+              <button
+                onClick={() => setShowNoteInput(true)}
+                className="flex items-center gap-1 text-[12px] font-semibold text-primary"
+              >
+                <Plus size={14} />
+                Add
+              </button>
             )}
-          </Card>
+          </div>
+          {isDemo ? (
+            <Card>
+              <p className="text-[13px] text-text-primary leading-relaxed whitespace-pre-line">{notes || "No notes yet."}</p>
+              {showNoteInput && (
+                <div className="mt-3 border-t border-border pt-3">
+                  <textarea
+                    autoFocus
+                    value={noteInput}
+                    onChange={(e) => setNoteInput(e.target.value)}
+                    placeholder="Add a note..."
+                    rows={3}
+                    className="w-full rounded-lg border border-border bg-surface-secondary px-3 py-2.5 text-[13px] text-text-primary placeholder:text-text-tertiary focus:outline-none focus:border-primary resize-none"
+                  />
+                  <div className="mt-2 flex gap-2">
+                    <Button variant="primary" size="sm" onClick={addNote}>Save Note</Button>
+                    <Button variant="ghost" size="sm" onClick={() => setShowNoteInput(false)}>Cancel</Button>
+                  </div>
+                </div>
+              )}
+            </Card>
+          ) : (
+            <Card className="divide-y divide-border-light">
+              {/* Add-note form (real mode) */}
+              {showNoteInput && (
+                <div className="pb-3 first:pt-0">
+                  <textarea
+                    autoFocus
+                    value={noteInput}
+                    onChange={(e) => setNoteInput(e.target.value)}
+                    placeholder="Add a note..."
+                    rows={3}
+                    className="w-full rounded-lg border border-border bg-surface-secondary px-3 py-2.5 text-[13px] text-text-primary placeholder:text-text-tertiary focus:outline-none focus:border-primary resize-none"
+                  />
+                  <div className="mt-2 flex gap-2">
+                    <Button
+                      variant="primary"
+                      size="sm"
+                      onClick={addNote}
+                      disabled={savingNote || !noteInput.trim()}
+                    >
+                      {savingNote ? "Saving…" : "Save Note"}
+                    </Button>
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      onClick={() => { setShowNoteInput(false); setNoteInput(""); }}
+                      disabled={savingNote}
+                    >
+                      Cancel
+                    </Button>
+                  </div>
+                </div>
+              )}
+
+              {/* Legacy note (back-compat) */}
+              {notes.trim() && (
+                <div className="py-3 first:pt-0">
+                  <div className="flex items-center justify-between gap-2 mb-1">
+                    <div className="flex items-center gap-2">
+                      <span className="text-[12px] font-semibold text-text-primary">Previous notes</span>
+                      <span className="rounded-full bg-surface-secondary px-2 py-0.5 text-[9px] font-bold uppercase tracking-wider text-text-tertiary">
+                        Legacy
+                      </span>
+                    </div>
+                  </div>
+                  <p className="text-[13px] text-text-primary leading-relaxed whitespace-pre-line">{notes}</p>
+                </div>
+              )}
+
+              {/* Real notes */}
+              {bookingNotes.map((note) => {
+                const canDelete = !!currentUserId && note.authorId === currentUserId && !note.id.startsWith("temp-");
+                return (
+                  <div key={note.id} className="py-3 first:pt-0 last:pb-0">
+                    <div className="flex items-center justify-between gap-2 mb-1">
+                      <div className="flex items-center gap-2 min-w-0">
+                        <span className="text-[12px] font-semibold text-text-primary truncate">
+                          {note.authorName || "Tech"}
+                        </span>
+                        <span className="text-[11px] text-text-tertiary shrink-0">
+                          {formatNoteTimestamp(note.createdAt)}
+                        </span>
+                      </div>
+                      {canDelete && (
+                        <button
+                          type="button"
+                          onClick={() => deleteBookingNote(note.id)}
+                          aria-label="Delete note"
+                          className="shrink-0 flex h-7 w-7 items-center justify-center rounded-lg text-text-tertiary hover:bg-error-light hover:text-error transition-colors"
+                        >
+                          <Trash2 size={13} />
+                        </button>
+                      )}
+                    </div>
+                    <p className="text-[13px] text-text-primary leading-relaxed whitespace-pre-line">{note.text}</p>
+                  </div>
+                );
+              })}
+
+              {/* Empty state */}
+              {!showNoteInput && bookingNotes.length === 0 && !notes.trim() && (
+                <p className="py-3 text-[13px] text-text-tertiary text-center first:pt-0 last:pb-0">
+                  No notes yet.
+                </p>
+              )}
+            </Card>
+          )}
         </div>
 
         {/* Invoice estimate */}

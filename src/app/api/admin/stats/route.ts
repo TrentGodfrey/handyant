@@ -1,9 +1,92 @@
+import { NextRequest } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { requireTech, unauthorized } from "@/lib/session";
 
-export async function GET() {
+type Period = "week" | "month" | "quarter" | "year";
+
+function parsePeriod(raw: string | null): Period {
+  if (raw === "week" || raw === "month" || raw === "quarter" || raw === "year") {
+    return raw;
+  }
+  return "month";
+}
+
+function periodBounds(period: Period, now: Date) {
+  // Returns { currentStart, currentEnd, priorStart, priorEnd } where:
+  //  - currentEnd is exclusive (= now's start-of-period + length)
+  //  - priorEnd === currentStart, priorStart === currentStart - length
+  const startOfDay = new Date(now);
+  startOfDay.setHours(0, 0, 0, 0);
+
+  if (period === "week") {
+    const currentStart = new Date(startOfDay);
+    currentStart.setDate(currentStart.getDate() - currentStart.getDay());
+    const currentEnd = new Date(currentStart);
+    currentEnd.setDate(currentEnd.getDate() + 7);
+    const priorStart = new Date(currentStart);
+    priorStart.setDate(priorStart.getDate() - 7);
+    return { currentStart, currentEnd, priorStart, priorEnd: currentStart };
+  }
+  if (period === "quarter") {
+    const qIndex = Math.floor(now.getMonth() / 3);
+    const currentStart = new Date(now.getFullYear(), qIndex * 3, 1);
+    const currentEnd = new Date(now.getFullYear(), qIndex * 3 + 3, 1);
+    const priorStart = new Date(now.getFullYear(), qIndex * 3 - 3, 1);
+    return { currentStart, currentEnd, priorStart, priorEnd: currentStart };
+  }
+  if (period === "year") {
+    const currentStart = new Date(now.getFullYear(), 0, 1);
+    const currentEnd = new Date(now.getFullYear() + 1, 0, 1);
+    const priorStart = new Date(now.getFullYear() - 1, 0, 1);
+    return { currentStart, currentEnd, priorStart, priorEnd: currentStart };
+  }
+  // month (default)
+  const currentStart = new Date(now.getFullYear(), now.getMonth(), 1);
+  const currentEnd = new Date(now.getFullYear(), now.getMonth() + 1, 1);
+  const priorStart = new Date(now.getFullYear(), now.getMonth() - 1, 1);
+  return { currentStart, currentEnd, priorStart, priorEnd: currentStart };
+}
+
+type BookingForMetrics = {
+  customerId: string;
+  status: string;
+  finalCost: { toString(): string } | null;
+  estimatedCost: { toString(): string } | null;
+};
+
+function metricsFor(bookings: BookingForMetrics[]) {
+  const completed = bookings.filter((b) => b.status === "completed");
+  const revenue = completed.reduce((acc, b) => {
+    const cost = b.finalCost ?? b.estimatedCost;
+    return acc + (cost ? Number(cost.toString()) : 0);
+  }, 0);
+  const jobsCompleted = completed.length;
+  const avgJobValue = jobsCompleted > 0 ? revenue / jobsCompleted : 0;
+  const activeCustomers = new Set(bookings.map((b) => b.customerId)).size;
+  return { revenue, jobsCompleted, avgJobValue, activeCustomers };
+}
+
+function trend(current: number, prior: number) {
+  const deltaAbs = current - prior;
+  const deltaPct = prior > 0 ? (deltaAbs / prior) * 100 : current > 0 ? 100 : 0;
+  let direction: "up" | "down" | "flat";
+  if (Math.abs(deltaPct) < 1) direction = "flat";
+  else if (deltaAbs > 0) direction = "up";
+  else direction = "down";
+  return {
+    current,
+    prior,
+    deltaAbs,
+    deltaPct,
+    direction,
+  };
+}
+
+export async function GET(req: NextRequest) {
   const tech = await requireTech();
   if (!tech) return unauthorized();
+
+  const period = parsePeriod(req.nextUrl.searchParams.get("period"));
 
   const now = new Date();
   const startOfDay = new Date(now);
@@ -26,6 +109,12 @@ export async function GET() {
   const eightWeeksAgoStart = new Date(startOfWeek);
   eightWeeksAgoStart.setDate(eightWeeksAgoStart.getDate() - 7 * 7);
 
+  // Period boundaries (current vs prior)
+  const { currentStart, currentEnd, priorStart, priorEnd } = periodBounds(
+    period,
+    now
+  );
+
   const [
     todayBookings,
     weekBookings,
@@ -35,6 +124,8 @@ export async function GET() {
     completedForRevenue,
     pendingOffers,
     recentBookings,
+    currentPeriodBookings,
+    priorPeriodBookings,
   ] = await Promise.all([
     prisma.booking.findMany({
       where: { scheduledDate: { gte: startOfDay, lt: endOfDay } },
@@ -87,6 +178,30 @@ export async function GET() {
       include: {
         customer: { select: { id: true, name: true, avatarUrl: true } },
         categories: { include: { category: { select: { name: true } } } },
+      },
+    }),
+    prisma.booking.findMany({
+      where: {
+        techId: tech.id,
+        scheduledDate: { gte: currentStart, lt: currentEnd },
+      },
+      select: {
+        customerId: true,
+        status: true,
+        finalCost: true,
+        estimatedCost: true,
+      },
+    }),
+    prisma.booking.findMany({
+      where: {
+        techId: tech.id,
+        scheduledDate: { gte: priorStart, lt: priorEnd },
+      },
+      select: {
+        customerId: true,
+        status: true,
+        finalCost: true,
+        estimatedCost: true,
       },
     }),
   ]);
@@ -175,6 +290,16 @@ export async function GET() {
     .map(([category, revenue]) => ({ category, revenue }))
     .sort((a, b) => b.revenue - a.revenue);
 
+  // Period-over-period
+  const currentMetrics = metricsFor(currentPeriodBookings);
+  const priorMetrics = metricsFor(priorPeriodBookings);
+  const trends = {
+    revenue: trend(currentMetrics.revenue, priorMetrics.revenue),
+    jobsCompleted: trend(currentMetrics.jobsCompleted, priorMetrics.jobsCompleted),
+    avgJobValue: trend(currentMetrics.avgJobValue, priorMetrics.avgJobValue),
+    activeCustomers: trend(currentMetrics.activeCustomers, priorMetrics.activeCustomers),
+  };
+
   return Response.json({
     today: {
       jobs: todayBookings.length,
@@ -219,5 +344,15 @@ export async function GET() {
     })),
     topClients,
     revenueByCategory,
+    period: {
+      key: period,
+      currentStart: currentStart.toISOString(),
+      currentEnd: currentEnd.toISOString(),
+      priorStart: priorStart.toISOString(),
+      priorEnd: priorEnd.toISOString(),
+      current: currentMetrics,
+      prior: priorMetrics,
+      trends,
+    },
   });
 }

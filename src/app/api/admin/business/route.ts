@@ -55,6 +55,10 @@ export async function PATCH(req: NextRequest) {
   if (body.notifyPrefs !== undefined) data.notifyPrefs = body.notifyPrefs;
   if (body.bio !== undefined) data.bio = body.bio;
   if (body.phone !== undefined) data.phone = body.phone;
+  if (body.venmoHandle !== undefined) data.venmoHandle = body.venmoHandle;
+  if (body.zelleHandle !== undefined) data.zelleHandle = body.zelleHandle;
+  if (body.cashappHandle !== undefined) data.cashappHandle = body.cashappHandle;
+  if (body.paypalEmail !== undefined) data.paypalEmail = body.paypalEmail;
 
   const profile = await prisma.businessProfile.update({
     where: { techId: tech.id },

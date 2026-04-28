@@ -22,18 +22,70 @@ import { useDemoMode } from "@/lib/useDemoMode";
 
 const TAX_RATE = 8.25;
 
-const DEMO_PAYMENT_METHODS = [
-  { name: "Venmo", handle: "@AnthonyHandyAnt", icon: Smartphone, color: "text-[#3D95CE] bg-[#E8F4FC]" },
-  { name: "Zelle", handle: "(214) 555-0199", icon: DollarSign, color: "text-[#6D1ED4] bg-[#F3EAFD]" },
-  { name: "Card", handle: "Via secure link", icon: CreditCard, color: "text-success bg-success-light" },
+type PaymentMethod = {
+  key: "venmo" | "zelle" | "cashapp" | "paypal" | "card";
+  name: string;
+  handle: string;
+  icon: typeof Smartphone;
+  color: string;
+};
+
+const DEMO_PAYMENT_METHODS: PaymentMethod[] = [
+  { key: "venmo", name: "Venmo", handle: "@AnthonyHandyAnt", icon: Smartphone, color: "text-[#3D95CE] bg-[#E8F4FC]" },
+  { key: "zelle", name: "Zelle", handle: "(214) 555-0199", icon: DollarSign, color: "text-[#6D1ED4] bg-[#F3EAFD]" },
+  { key: "card",  name: "Card",  handle: "Via secure link", icon: CreditCard, color: "text-success bg-success-light" },
 ];
 
-// Real-mode methods: generic copy only (no fake handles).
-const LIVE_PAYMENT_METHODS = [
-  { name: "Venmo", handle: "Pay your tech", icon: Smartphone, color: "text-[#3D95CE] bg-[#E8F4FC]" },
-  { name: "Zelle", handle: "Pay your tech", icon: DollarSign, color: "text-[#6D1ED4] bg-[#F3EAFD]" },
-  { name: "Card", handle: "On site", icon: CreditCard, color: "text-success bg-success-light" },
-];
+interface BusinessPayment {
+  venmoHandle?: string | null;
+  zelleHandle?: string | null;
+  cashappHandle?: string | null;
+  paypalEmail?: string | null;
+}
+
+function buildLivePaymentMethods(biz: BusinessPayment | null): PaymentMethod[] {
+  if (!biz) return [];
+  const out: PaymentMethod[] = [];
+  if (biz.venmoHandle && biz.venmoHandle.trim()) {
+    const v = biz.venmoHandle.trim();
+    out.push({
+      key: "venmo",
+      name: "Venmo",
+      handle: v.startsWith("@") ? v : `@${v}`,
+      icon: Smartphone,
+      color: "text-[#3D95CE] bg-[#E8F4FC]",
+    });
+  }
+  if (biz.zelleHandle && biz.zelleHandle.trim()) {
+    out.push({
+      key: "zelle",
+      name: "Zelle",
+      handle: biz.zelleHandle.trim(),
+      icon: DollarSign,
+      color: "text-[#6D1ED4] bg-[#F3EAFD]",
+    });
+  }
+  if (biz.cashappHandle && biz.cashappHandle.trim()) {
+    const c = biz.cashappHandle.trim();
+    out.push({
+      key: "cashapp",
+      name: "Cash App",
+      handle: c.startsWith("$") ? c : `$${c}`,
+      icon: DollarSign,
+      color: "text-success bg-success-light",
+    });
+  }
+  if (biz.paypalEmail && biz.paypalEmail.trim()) {
+    out.push({
+      key: "paypal",
+      name: "PayPal",
+      handle: biz.paypalEmail.trim(),
+      icon: CreditCard,
+      color: "text-[#0070BA] bg-[#E8F4FC]",
+    });
+  }
+  return out;
+}
 
 // ── Demo data ────────────────────────────────────────────────────────────────
 
@@ -166,11 +218,13 @@ export default function InvoicePage({ params }: { params: Promise<{ id: string }
   const { isDemo, mounted } = useDemoMode();
 
   const [view, setView] = useState<InvoiceView | null>(null);
+  const [business, setBusiness] = useState<BusinessPayment | null>(null);
   const [loading, setLoading] = useState(true);
   const [generating, setGenerating] = useState(false);
   const [sending, setSending] = useState(false);
   const [sendError, setSendError] = useState<string | null>(null);
   const [includePaymentLink, setIncludePaymentLink] = useState(true);
+  const [copiedHandle, setCopiedHandle] = useState<string | null>(null);
   const [message, setMessage] = useState(
     "Hi! It was a pleasure working on your home today. Here's your invoice for today's service. Please let me know if you have any questions!"
   );
@@ -185,9 +239,12 @@ export default function InvoicePage({ params }: { params: Promise<{ id: string }
       return;
     }
     setLoading(true);
-    fetch(`/api/bookings/${jobId}`)
-      .then((r) => r.ok ? r.json() : null)
-      .then((booking: ApiBooking | null) => {
+    Promise.all([
+      fetch(`/api/bookings/${jobId}`).then((r) => (r.ok ? r.json() : null)).catch(() => null),
+      fetch(`/api/admin/business`).then((r) => (r.ok ? r.json() : null)).catch(() => null),
+    ])
+      .then(([booking, biz]: [ApiBooking | null, BusinessPayment | null]) => {
+        if (biz) setBusiness(biz);
         if (!booking) {
           setView(null);
           return;
@@ -223,7 +280,11 @@ export default function InvoicePage({ params }: { params: Promise<{ id: string }
     }
     setSending(true);
     try {
-      const res = await fetch(`/api/invoices/${view.id}/send`, { method: "POST" });
+      const res = await fetch(`/api/invoices/${view.id}/send`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ includePaymentLink }),
+      });
       const body = await res.json().catch(() => ({}));
       if (!res.ok || body?.ok === false) {
         throw new Error(body?.error ?? `Send failed (${res.status})`);
@@ -237,6 +298,18 @@ export default function InvoicePage({ params }: { params: Promise<{ id: string }
       setSendError(err instanceof Error ? err.message : "Could not send invoice.");
     } finally {
       setSending(false);
+    }
+  }
+
+  async function handleCopyPaymentHandle(key: string, value: string) {
+    try {
+      if (typeof window !== "undefined" && navigator.clipboard) {
+        await navigator.clipboard.writeText(value);
+      }
+      setCopiedHandle(key);
+      setTimeout(() => setCopiedHandle(null), 2000);
+    } catch {
+      setSendError("Could not copy to clipboard.");
     }
   }
 
@@ -444,23 +517,60 @@ export default function InvoicePage({ params }: { params: Promise<{ id: string }
             <p className="text-[10px] font-bold uppercase tracking-widest text-text-tertiary mb-2.5">
               Payment Accepted Via
             </p>
-            <div className="flex gap-2">
-              {(isDemo ? DEMO_PAYMENT_METHODS : LIVE_PAYMENT_METHODS).map((method) => (
-                <div
-                  key={method.name}
-                  className={`flex flex-1 flex-col items-center gap-1 rounded-xl p-2.5 ${method.color}`}
-                >
-                  <method.icon size={16} />
-                  <p className="text-[11px] font-bold">{method.name}</p>
-                  <p className="text-[9px] font-medium opacity-80 text-center leading-tight">{method.handle}</p>
+            {(() => {
+              const methods = isDemo ? DEMO_PAYMENT_METHODS : buildLivePaymentMethods(business);
+              if (methods.length === 0) {
+                return (
+                  <div className="rounded-xl border border-dashed border-border bg-surface-secondary p-3 text-center">
+                    <p className="text-[12px] font-semibold text-text-primary">
+                      No payment methods configured
+                    </p>
+                    <p className="mt-1 text-[11px] text-text-secondary">
+                      Add your handles in{" "}
+                      <Link href="/settings" className="font-semibold text-primary hover:underline">
+                        Settings &rarr; Payment Methods
+                      </Link>{" "}
+                      to display them here.
+                    </p>
+                  </div>
+                );
+              }
+              return (
+                <div className="grid grid-cols-2 gap-2">
+                  {methods.map((method) => {
+                    const isCopied = copiedHandle === method.key;
+                    return (
+                      <button
+                        type="button"
+                        key={method.key}
+                        onClick={() => handleCopyPaymentHandle(method.key, method.handle)}
+                        className={`group flex items-center gap-2 rounded-xl p-2.5 text-left transition-all ${method.color} hover:opacity-90 active:scale-[0.97]`}
+                      >
+                        <method.icon size={16} className="shrink-0" />
+                        <div className="flex-1 min-w-0">
+                          <p className="text-[11px] font-bold leading-none">{method.name}</p>
+                          <p className="text-[10px] font-medium opacity-80 truncate mt-0.5">{method.handle}</p>
+                        </div>
+                        {isCopied ? (
+                          <Check size={13} className="shrink-0" strokeWidth={2.5} />
+                        ) : (
+                          <Copy size={12} className="shrink-0 opacity-70" />
+                        )}
+                      </button>
+                    );
+                  })}
                 </div>
-              ))}
-            </div>
-            {!isDemo && (
-              <p className="mt-2 text-[10px] text-text-tertiary text-center">
-                Pay your tech directly at the time of service.
-              </p>
-            )}
+              );
+            })()}
+            {(() => {
+              const methods = isDemo ? DEMO_PAYMENT_METHODS : buildLivePaymentMethods(business);
+              if (methods.length === 0) return null;
+              return (
+                <p className="mt-2 text-[10px] text-text-tertiary text-center">
+                  {isDemo ? "Pay your tech directly at the time of service." : "Tap a method to copy the handle."}
+                </p>
+              );
+            })()}
           </div>
         </Card>
 

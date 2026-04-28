@@ -27,6 +27,8 @@ import {
   Search,
   Plus,
   Crosshair,
+  DollarSign,
+  Smartphone,
 } from "lucide-react";
 import { useDemoMode } from "@/lib/useDemoMode";
 import type { ServiceCity } from "@/components/ServiceAreaMap";
@@ -154,6 +156,17 @@ export default function SettingsPage() {
     email: true,
   });
 
+  // Payment methods — backed by BusinessProfile
+  const [venmoHandle, setVenmoHandle] = useState("");
+  const [zelleHandle, setZelleHandle] = useState("");
+  const [cashappHandle, setCashappHandle] = useState("");
+  const [paypalEmail, setPaypalEmail] = useState("");
+  const venmoSavedRef = useRef("");
+  const zelleSavedRef = useRef("");
+  const cashappSavedRef = useRef("");
+  const paypalSavedRef = useRef("");
+  const [savedPayment, setSavedPayment] = useState<"venmo" | "zelle" | "cashapp" | "paypal" | null>(null);
+
   // Delete-account flow
   const [deleteOpen, setDeleteOpen] = useState(false);
   const [deleteConfirmText, setDeleteConfirmText] = useState("");
@@ -232,6 +245,14 @@ export default function SettingsPage() {
           if (business.notifyPrefs && typeof business.notifyPrefs === "object") {
             setNotifyPrefs((prev) => ({ ...prev, ...(business.notifyPrefs as NotifyPrefs) }));
           }
+          const v = business.venmoHandle ?? "";
+          const z = business.zelleHandle ?? "";
+          const c = business.cashappHandle ?? "";
+          const p = business.paypalEmail ?? "";
+          setVenmoHandle(v); venmoSavedRef.current = v;
+          setZelleHandle(z); zelleSavedRef.current = z;
+          setCashappHandle(c); cashappSavedRef.current = c;
+          setPaypalEmail(p); paypalSavedRef.current = p;
         } else if (me?.phone) {
           setPhone(me.phone);
         }
@@ -571,6 +592,45 @@ export default function SettingsPage() {
     });
   }
 
+  async function savePaymentField(
+    key: "venmo" | "zelle" | "cashapp" | "paypal",
+    raw: string,
+  ) {
+    const trimmed = raw.trim();
+    const refMap = {
+      venmo: venmoSavedRef,
+      zelle: zelleSavedRef,
+      cashapp: cashappSavedRef,
+      paypal: paypalSavedRef,
+    } as const;
+    const apiKey =
+      key === "venmo" ? "venmoHandle"
+      : key === "zelle" ? "zelleHandle"
+      : key === "cashapp" ? "cashappHandle"
+      : "paypalEmail";
+
+    if (refMap[key].current === trimmed) return; // no-op
+    if (isDemo) {
+      refMap[key].current = trimmed;
+      setSavedPayment(key);
+      setTimeout(() => setSavedPayment(null), 1800);
+      return;
+    }
+    try {
+      const res = await fetch("/api/admin/business", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ [apiKey]: trimmed || null }),
+      });
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      refMap[key].current = trimmed;
+      setSavedPayment(key);
+      setTimeout(() => setSavedPayment(null), 1800);
+    } catch (e) {
+      toast.error("Couldn't save payment handle: " + (e instanceof Error ? e.message : String(e)));
+    }
+  }
+
   const labelCls = "block text-[12px] font-semibold uppercase tracking-wider text-text-secondary mb-1.5";
   const allMapCities: ServiceCity[] = [...DFW_CITIES, ...customCities];
   const activeCityList = allMapCities.filter((c) => activeCities.has(c.id));
@@ -826,6 +886,125 @@ export default function SettingsPage() {
               </div>
             </div>
           )}
+        </section>
+
+        {/* ── SECTION: Payment Methods ── */}
+        <section>
+          <div className="flex items-center gap-2 mb-3">
+            <CreditCard size={15} className="text-text-tertiary" />
+            <h2 className="text-[12px] font-bold uppercase tracking-wider text-text-secondary">Payment Methods</h2>
+          </div>
+          <Card padding="md" className="space-y-4">
+            <p className="text-[12px] text-text-secondary -mt-1">
+              These appear on invoices so customers know how to pay you. Leave blank to hide.
+            </p>
+
+            {/* Venmo */}
+            <div>
+              <label className={labelCls}>Venmo</label>
+              <div className="flex items-center gap-2">
+                <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-[#E8F4FC] text-[#3D95CE]">
+                  <Smartphone size={16} />
+                </div>
+                <div className="flex-1 relative">
+                  <span className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-[14px] font-semibold text-text-tertiary">@</span>
+                  <input
+                    type="text"
+                    value={venmoHandle.replace(/^@/, "")}
+                    onChange={(e) => setVenmoHandle(e.target.value.replace(/^@/, ""))}
+                    onBlur={(e) => savePaymentField("venmo", e.target.value.replace(/^@/, ""))}
+                    placeholder="username"
+                    autoCapitalize="none"
+                    autoCorrect="off"
+                    spellCheck={false}
+                    className="w-full rounded-xl border border-border bg-surface pl-7 pr-9 py-2.5 text-[14px] text-text-primary placeholder:text-text-tertiary focus:outline-none focus:border-primary"
+                  />
+                  {savedPayment === "venmo" && (
+                    <Check size={14} className="absolute right-3 top-1/2 -translate-y-1/2 text-success" />
+                  )}
+                </div>
+              </div>
+            </div>
+
+            {/* Zelle */}
+            <div>
+              <label className={labelCls}>Zelle</label>
+              <div className="flex items-center gap-2">
+                <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-[#F3EAFD] text-[#6D1ED4]">
+                  <DollarSign size={16} />
+                </div>
+                <div className="flex-1 relative">
+                  <input
+                    type="text"
+                    value={zelleHandle}
+                    onChange={(e) => setZelleHandle(e.target.value)}
+                    onBlur={(e) => savePaymentField("zelle", e.target.value)}
+                    placeholder="email or phone"
+                    autoCapitalize="none"
+                    autoCorrect="off"
+                    spellCheck={false}
+                    className="w-full rounded-xl border border-border bg-surface px-3 pr-9 py-2.5 text-[14px] text-text-primary placeholder:text-text-tertiary focus:outline-none focus:border-primary"
+                  />
+                  {savedPayment === "zelle" && (
+                    <Check size={14} className="absolute right-3 top-1/2 -translate-y-1/2 text-success" />
+                  )}
+                </div>
+              </div>
+            </div>
+
+            {/* Cash App */}
+            <div>
+              <label className={labelCls}>Cash App</label>
+              <div className="flex items-center gap-2">
+                <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-success-light text-success">
+                  <DollarSign size={16} />
+                </div>
+                <div className="flex-1 relative">
+                  <span className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-[14px] font-semibold text-text-tertiary">$</span>
+                  <input
+                    type="text"
+                    value={cashappHandle.replace(/^\$/, "")}
+                    onChange={(e) => setCashappHandle(e.target.value.replace(/^\$/, ""))}
+                    onBlur={(e) => savePaymentField("cashapp", e.target.value.replace(/^\$/, ""))}
+                    placeholder="cashtag"
+                    autoCapitalize="none"
+                    autoCorrect="off"
+                    spellCheck={false}
+                    className="w-full rounded-xl border border-border bg-surface pl-7 pr-9 py-2.5 text-[14px] text-text-primary placeholder:text-text-tertiary focus:outline-none focus:border-primary"
+                  />
+                  {savedPayment === "cashapp" && (
+                    <Check size={14} className="absolute right-3 top-1/2 -translate-y-1/2 text-success" />
+                  )}
+                </div>
+              </div>
+            </div>
+
+            {/* PayPal */}
+            <div>
+              <label className={labelCls}>PayPal</label>
+              <div className="flex items-center gap-2">
+                <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-[#E8F4FC] text-[#0070BA]">
+                  <Mail size={16} />
+                </div>
+                <div className="flex-1 relative">
+                  <input
+                    type="email"
+                    value={paypalEmail}
+                    onChange={(e) => setPaypalEmail(e.target.value)}
+                    onBlur={(e) => savePaymentField("paypal", e.target.value)}
+                    placeholder="you@example.com"
+                    autoCapitalize="none"
+                    autoCorrect="off"
+                    spellCheck={false}
+                    className="w-full rounded-xl border border-border bg-surface px-3 pr-9 py-2.5 text-[14px] text-text-primary placeholder:text-text-tertiary focus:outline-none focus:border-primary"
+                  />
+                  {savedPayment === "paypal" && (
+                    <Check size={14} className="absolute right-3 top-1/2 -translate-y-1/2 text-success" />
+                  )}
+                </div>
+              </div>
+            </div>
+          </Card>
         </section>
 
         {/* ── SECTION: Availability ── */}
