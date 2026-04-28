@@ -22,7 +22,13 @@ export async function proxy(req: NextRequest) {
     publicExact.has(pathname) ||
     publicPaths.some((p) => pathname.startsWith(p)) ||
     pathname.startsWith("/_next") ||
-    pathname.startsWith("/favicon")
+    pathname.startsWith("/favicon") ||
+    pathname === "/manifest.webmanifest" ||
+    pathname === "/icon" ||
+    pathname === "/apple-icon" ||
+    pathname.startsWith("/icon-") ||
+    pathname.startsWith("/uploads/") ||
+    /\.(png|jpg|jpeg|svg|webp|gif|ico)$/i.test(pathname)
   ) {
     return NextResponse.next();
   }
