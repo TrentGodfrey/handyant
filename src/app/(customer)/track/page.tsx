@@ -4,6 +4,7 @@ import { useState, useEffect } from "react";
 import Link from "next/link";
 import Card from "@/components/Card";
 import Button from "@/components/Button";
+import Spinner from "@/components/Spinner";
 import {
   ArrowLeft, Phone, MessageCircle, Star, ChevronDown, ChevronUp,
   CheckCircle2, MapPin, Clock, Share2, Truck, Check,
@@ -429,7 +430,7 @@ export default function TrackPage() {
           </div>
         </div>
         <div className="flex items-center justify-center py-20">
-          <div className="h-6 w-6 border-2 border-primary border-t-transparent rounded-full animate-spin" />
+          <Spinner size="md" />
         </div>
       </div>
     );

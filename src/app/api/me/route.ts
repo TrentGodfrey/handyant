@@ -1,19 +1,14 @@
 import { NextRequest } from "next/server";
-import { getServerSession } from "next-auth";
 import { compare } from "bcryptjs";
-import { authOptions } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
+import { requireUser, unauthorized, notFound, badRequest } from "@/lib/session";
 
 export async function GET() {
-  const session = await getServerSession(authOptions);
-  if (!session?.user) {
-    return Response.json({ error: "Unauthorized" }, { status: 401 });
-  }
+  const user = await requireUser();
+  if (!user) return unauthorized();
 
-  const userId = (session.user as Record<string, unknown>).id as string;
-
-  const user = await prisma.user.findUnique({
-    where: { id: userId },
+  const dbUser = await prisma.user.findUnique({
+    where: { id: user.id },
     include: {
       homes: true,
       subscriptions: { where: { status: "active" }, take: 1 },
@@ -21,21 +16,17 @@ export async function GET() {
     },
   });
 
-  if (!user) {
-    return Response.json({ error: "User not found" }, { status: 404 });
-  }
+  if (!dbUser) return notFound("User not found");
 
-  const { passwordHash: _, ...safeUser } = user;
+  const { passwordHash: _, ...safeUser } = dbUser;
   return Response.json(safeUser);
 }
 
 export async function PATCH(req: NextRequest) {
-  const session = await getServerSession(authOptions);
-  if (!session?.user) {
-    return Response.json({ error: "Unauthorized" }, { status: 401 });
-  }
+  const user = await requireUser();
+  if (!user) return unauthorized();
 
-  const userId = (session.user as Record<string, unknown>).id as string;
+  const userId = user.id;
   const body = await req.json();
 
   const allowedFields = ["name", "phone", "email", "avatarUrl"];
@@ -51,23 +42,17 @@ export async function PATCH(req: NextRequest) {
       where: { id: userId },
       select: { email: true, passwordHash: true },
     });
-    if (!current) return Response.json({ error: "User not found" }, { status: 404 });
+    if (!current) return notFound("User not found");
 
     const newEmail = (data.email as string).trim().toLowerCase();
     data.email = newEmail;
 
     if (newEmail !== (current.email ?? "").toLowerCase()) {
       if (!body.currentPassword || typeof body.currentPassword !== "string") {
-        return Response.json(
-          { error: "currentPassword required to change email" },
-          { status: 400 }
-        );
+        return badRequest("currentPassword required to change email");
       }
       if (!current.passwordHash) {
-        return Response.json(
-          { error: "Cannot change email: account has no password set" },
-          { status: 400 }
-        );
+        return badRequest("Cannot change email: account has no password set");
       }
       const ok = await compare(body.currentPassword, current.passwordHash);
       if (!ok) {
@@ -84,22 +69,20 @@ export async function PATCH(req: NextRequest) {
     }
   }
 
-  const user = await prisma.user.update({
+  const updated = await prisma.user.update({
     where: { id: userId },
     data,
   });
 
-  const { passwordHash: _, ...safeUser } = user;
+  const { passwordHash: _, ...safeUser } = updated;
   return Response.json(safeUser);
 }
 
 export async function DELETE() {
-  const session = await getServerSession(authOptions);
-  if (!session?.user) {
-    return Response.json({ error: "Unauthorized" }, { status: 401 });
-  }
+  const user = await requireUser();
+  if (!user) return unauthorized();
 
-  const userId = (session.user as Record<string, unknown>).id as string;
+  const userId = user.id;
 
   // Hard delete — relies on Prisma cascade on related rows (homes, etc.).
   // Bookings and conversations have onDelete: NoAction so we anonymize first

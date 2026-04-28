@@ -10,6 +10,7 @@ import {
   Calendar, Clock, Wrench, MessageCircle, Star, Shield, Edit2,
 } from "lucide-react";
 import { useDemoMode } from "@/lib/useDemoMode";
+import { demoCustomerBy } from "@/lib/demoData";
 
 interface PastJob {
   date: string;
@@ -40,7 +41,7 @@ export default function AccountPage() {
   const [pastJobs, setPastJobs] = useState<PastJob[]>([]);
   const [showAllJobs, setShowAllJobs] = useState(false);
 
-  const userName = !mounted ? "User" : isDemo ? "Sarah Mitchell" : session?.user?.name || "User";
+  const userName = !mounted ? "User" : isDemo ? (demoCustomerBy("Sarah Mitchell")?.name ?? "User") : session?.user?.name || "User";
   const userInitials = userName.split(" ").map((n) => n[0]).join("").toUpperCase().slice(0, 2);
 
   useEffect(() => {

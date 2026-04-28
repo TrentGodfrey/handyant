@@ -1,19 +1,13 @@
 import { NextRequest } from "next/server";
-import { getServerSession } from "next-auth";
-import { authOptions } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
+import { requireUser, unauthorized } from "@/lib/session";
 
 export async function GET() {
-  const session = await getServerSession(authOptions);
-  if (!session?.user) {
-    return Response.json({ error: "Unauthorized" }, { status: 401 });
-  }
-
-  const userId = (session.user as Record<string, unknown>).id as string;
-  const role = (session.user as Record<string, unknown>).role as string;
+  const user = await requireUser();
+  if (!user) return unauthorized();
 
   const bookings = await prisma.booking.findMany({
-    where: role === "tech" ? { techId: userId } : { customerId: userId },
+    where: user.role === "tech" ? { techId: user.id } : { customerId: user.id },
     include: {
       home: true,
       customer: { select: { id: true, name: true, phone: true, avatarUrl: true } },
@@ -28,17 +22,13 @@ export async function GET() {
 }
 
 export async function POST(req: NextRequest) {
-  const session = await getServerSession(authOptions);
-  if (!session?.user) {
-    return Response.json({ error: "Unauthorized" }, { status: 401 });
-  }
+  const user = await requireUser();
+  if (!user) return unauthorized();
 
-  const userId = (session.user as Record<string, unknown>).id as string;
-  const role = (session.user as Record<string, unknown>).role as string;
   const body = await req.json();
 
-  const isTechCreating = role === "tech" && typeof body.customerId === "string" && body.customerId.length > 0;
-  const customerId = isTechCreating ? (body.customerId as string) : userId;
+  const isTechCreating = user.role === "tech" && typeof body.customerId === "string" && body.customerId.length > 0;
+  const customerId = isTechCreating ? (body.customerId as string) : user.id;
 
   // Normalize parts payload — accept string[] of items, drop blanks.
   const partItems: string[] = Array.isArray(body.parts)
@@ -51,7 +41,7 @@ export async function POST(req: NextRequest) {
   const booking = await prisma.booking.create({
     data: {
       customerId,
-      techId: isTechCreating ? userId : null,
+      techId: isTechCreating ? user.id : null,
       homeId: body.homeId ?? null,
       scheduledDate: new Date(body.scheduledDate),
       scheduledTime: new Date(`1970-01-01T${body.scheduledTime}`),

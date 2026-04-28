@@ -2,6 +2,7 @@
 
 import { useState, useEffect, use, useRef } from "react";
 import Link from "next/link";
+import Image from "next/image";
 import Button from "@/components/Button";
 import Card from "@/components/Card";
 import StatusBadge from "@/components/StatusBadge";
@@ -12,6 +13,8 @@ import {
 } from "lucide-react";
 import { useDemoMode } from "@/lib/useDemoMode";
 import { toast } from "@/components/Toaster";
+import { demoCustomerBy } from "@/lib/demoData";
+import Spinner from "@/components/Spinner";
 
 // ── Types ────────────────────────────────────────────────────────────────────
 
@@ -54,7 +57,7 @@ function apiStatusToUi(s: string): UiStatus {
 
 const DEMO_JOBS: Record<string, JobDetail> = {
   "1": {
-    id: "1", client: "Sarah Mitchell", address: "4821 Oak Hollow Dr, Plano TX 75024",
+    id: "1", client: demoCustomerBy("1")!.name, address: "4821 Oak Hollow Dr, Plano TX 75024",
     phone: "(972) 555-0142", date: "Today", time: "9:00 AM", status: "confirmed",
     estimate: "$340",
     tasks: [
@@ -75,7 +78,7 @@ const DEMO_JOBS: Record<string, JobDetail> = {
     customerNotes: "Kitchen faucet has been leaking worse this week. Garage door closes then reopens immediately.",
   },
   "2": {
-    id: "2", client: "Robert Chen", address: "1205 Elm Creek Ct, Frisco TX 75034",
+    id: "2", client: demoCustomerBy("2")!.name, address: "1205 Elm Creek Ct, Frisco TX 75034",
     phone: "(469) 555-0298", date: "Today", time: "11:30 AM", status: "confirmed",
     estimate: "$280",
     tasks: [
@@ -88,7 +91,7 @@ const DEMO_JOBS: Record<string, JobDetail> = {
     customerNotes: "New construction, outlets have been sparking slightly when plugging in.",
   },
   "3": {
-    id: "3", client: "Maria Garcia", address: "890 Sunset Ridge, Roanoke TX 76262",
+    id: "3", client: demoCustomerBy("3")!.name, address: "890 Sunset Ridge, Roanoke TX 76262",
     phone: "(817) 555-0377", date: "Today", time: "2:00 PM", status: "pending",
     estimate: "$190",
     tasks: [
@@ -545,7 +548,7 @@ export default function JobDetailPage({ params }: { params: Promise<{ id: string
   if (loading) {
     return (
       <div className="min-h-screen bg-background flex items-center justify-center">
-        <div className="h-6 w-6 border-2 border-primary border-t-transparent rounded-full animate-spin" />
+        <Spinner size="md" />
       </div>
     );
   }
@@ -770,14 +773,15 @@ export default function JobDetailPage({ params }: { params: Promise<{ id: string
             {photos.map((photo) => (
               <div
                 key={photo.id}
-                className="aspect-square rounded-xl bg-surface-secondary border border-border flex flex-col items-center justify-center gap-1.5 overflow-hidden"
+                className="relative aspect-square rounded-xl bg-surface-secondary border border-border flex flex-col items-center justify-center gap-1.5 overflow-hidden"
               >
                 {photo.url ? (
-                  // eslint-disable-next-line @next/next/no-img-element
-                  <img
+                  <Image
                     src={photo.url}
                     alt={photo.label}
-                    className="h-full w-full object-cover"
+                    fill
+                    sizes="(max-width: 640px) 33vw, 200px"
+                    className="object-cover"
                   />
                 ) : (
                   <>

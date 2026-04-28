@@ -1,15 +1,12 @@
 import { NextRequest } from "next/server";
-import { getServerSession } from "next-auth";
-import { authOptions } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
+import { requireUser, unauthorized, notFound } from "@/lib/session";
 
 export async function GET(req: NextRequest) {
-  const session = await getServerSession(authOptions);
-  if (!session?.user) {
-    return Response.json({ error: "Unauthorized" }, { status: 401 });
-  }
+  const user = await requireUser();
+  if (!user) return unauthorized();
 
-  const userId = (session.user as Record<string, unknown>).id as string;
+  const userId = user.id;
   const conversationId = req.nextUrl.searchParams.get("conversationId");
 
   if (conversationId) {
@@ -20,9 +17,7 @@ export async function GET(req: NextRequest) {
         OR: [{ customerId: userId }, { techId: userId }],
       },
     });
-    if (!convo) {
-      return Response.json({ error: "Not found" }, { status: 404 });
-    }
+    if (!convo) return notFound();
 
     const messages = await prisma.message.findMany({
       where: { conversationId },
@@ -64,12 +59,10 @@ export async function GET(req: NextRequest) {
 }
 
 export async function POST(req: NextRequest) {
-  const session = await getServerSession(authOptions);
-  if (!session?.user) {
-    return Response.json({ error: "Unauthorized" }, { status: 401 });
-  }
+  const user = await requireUser();
+  if (!user) return unauthorized();
 
-  const userId = (session.user as Record<string, unknown>).id as string;
+  const userId = user.id;
   const body = await req.json();
 
   // Verify user is part of this conversation

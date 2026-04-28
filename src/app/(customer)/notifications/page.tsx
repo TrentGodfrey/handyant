@@ -8,6 +8,7 @@ import {
   DollarSign, CreditCard, Bell, BellOff, AlertTriangle, RotateCw,
 } from "lucide-react";
 import { useDemoMode } from "@/lib/useDemoMode";
+import Spinner from "@/components/Spinner";
 
 type NotifType = "appointment" | "message" | "parts" | "completed" | "invoice" | "billing";
 type FilterType = "all" | "unread" | "appointments" | "messages" | "updates";
@@ -344,7 +345,7 @@ export default function NotificationsPage() {
       <div className="py-2">
         {loading ? (
           <div className="flex items-center justify-center py-20">
-            <div className="h-6 w-6 border-2 border-primary border-t-transparent rounded-full animate-spin" />
+            <Spinner size="md" />
           </div>
         ) : filtered.length === 0 ? (
           <div className="flex flex-col items-center justify-center px-8 py-20 text-center">

@@ -6,6 +6,7 @@ import { signOut } from "next-auth/react";
 import dynamic from "next/dynamic";
 import Card from "@/components/Card";
 import Button from "@/components/Button";
+import Spinner from "@/components/Spinner";
 import {
   ChevronLeft,
   Check,
@@ -39,7 +40,7 @@ const ServiceAreaMap = dynamic(() => import("@/components/ServiceAreaMap"), {
   ssr: false,
   loading: () => (
     <div className="flex h-[320px] items-center justify-center bg-[#E8EDF2] rounded-xl">
-      <div className="h-6 w-6 border-2 border-primary border-t-transparent rounded-full animate-spin" />
+      <Spinner size="md" />
     </div>
   ),
 });
@@ -647,7 +648,7 @@ export default function SettingsPage() {
   if (!mounted || loading) {
     return (
       <div className="min-h-screen bg-background flex items-center justify-center">
-        <div className="h-8 w-8 border-2 border-primary border-t-transparent rounded-full animate-spin" />
+        <Spinner className="h-8 w-8" />
       </div>
     );
   }

@@ -25,6 +25,7 @@ import {
   AlertCircle,
 } from "lucide-react";
 import { toast } from "@/components/Toaster";
+import Spinner from "@/components/Spinner";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -777,7 +778,7 @@ export default function OnboardingPage() {
           }`}>
             {areaStatus === "checking" && (
               <div className="flex items-center gap-3">
-                <div className="h-5 w-5 animate-spin rounded-full border-2 border-primary border-t-transparent" />
+                <Spinner className="h-5 w-5" />
                 <span className="text-[14px] font-medium text-text-secondary">Checking your address…</span>
               </div>
             )}

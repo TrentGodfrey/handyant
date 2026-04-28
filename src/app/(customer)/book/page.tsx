@@ -5,6 +5,7 @@ import { useSearchParams, useRouter } from "next/navigation";
 import { useSession } from "next-auth/react";
 import Card from "@/components/Card";
 import Button from "@/components/Button";
+import Spinner from "@/components/Spinner";
 import {
   Calendar, Clock, Camera, ChevronLeft, ChevronRight,
   Upload, X, Check, Repeat, Zap, Info, Sun, Sunset,
@@ -546,7 +547,7 @@ function BookingPageInner() {
 
                 {slotsLoading ? (
                   <div className="flex items-center justify-center py-8">
-                    <div className="h-6 w-6 border-2 border-primary border-t-transparent rounded-full animate-spin" />
+                    <Spinner size="md" />
                   </div>
                 ) : slotsError ? (
                   <div className="rounded-xl border border-error/20 bg-error/5 px-4 py-3 text-[13px] text-error">

@@ -4,6 +4,7 @@ import {
   Droplet, Zap, Hammer, PaintBucket, Square, Refrigerator, Trees, Wifi,
   CalendarPlus, MessageCircle, Sparkles, MapPin, ChevronRight,
 } from "lucide-react";
+import { DEMO_TECH } from "@/lib/demoData";
 
 const categories = [
   { name: "Plumbing", icon: Droplet, color: "text-blue-500", bg: "bg-blue-50" },
@@ -167,7 +168,7 @@ export default function LandingPage() {
                           <span className="text-[11px] font-bold text-white">A</span>
                         </div>
                         <div className="flex-1 min-w-0">
-                          <p className="text-[11px] font-semibold text-text-primary">Anthony Bell</p>
+                          <p className="text-[11px] font-semibold text-text-primary">{DEMO_TECH.name}</p>
                           <p className="text-[9px] text-text-secondary mt-0.5">Tuesday · 9:00 AM</p>
                         </div>
                         <div className="rounded-full bg-success-light px-1.5 py-0.5">

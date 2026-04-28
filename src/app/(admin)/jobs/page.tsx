@@ -22,6 +22,8 @@ import {
 } from "lucide-react";
 import { useDemoMode } from "@/lib/useDemoMode";
 import { toast } from "@/components/Toaster";
+import { demoCustomerBy } from "@/lib/demoData";
+import Spinner from "@/components/Spinner";
 
 // ── Types ────────────────────────────────────────────────────────────────────
 
@@ -132,7 +134,7 @@ function parseDollars(s: string): number {
 const DEMO_JOBS: Job[] = [
   {
     id: "1",
-    client: "Sarah Mitchell",
+    client: demoCustomerBy("1")!.name,
     address: "4821 Oak Hollow Dr, Plano",
     date: "Today, 9:00 AM",
     dateGroup: "today",
@@ -144,7 +146,7 @@ const DEMO_JOBS: Job[] = [
   },
   {
     id: "2",
-    client: "Robert Chen",
+    client: demoCustomerBy("2")!.name,
     address: "1205 Elm Creek Ct, Frisco",
     date: "Today, 11:30 AM",
     dateGroup: "today",
@@ -156,7 +158,7 @@ const DEMO_JOBS: Job[] = [
   },
   {
     id: "3",
-    client: "Maria Garcia",
+    client: demoCustomerBy("3")!.name,
     address: "890 Sunset Ridge, Roanoke",
     date: "Today, 2:00 PM",
     dateGroup: "today",
@@ -168,7 +170,7 @@ const DEMO_JOBS: Job[] = [
   },
   {
     id: "4",
-    client: "James Wilson",
+    client: demoCustomerBy("4")!.name,
     address: "2200 Heritage Trail, McKinney",
     date: "Apr 1, 10:00 AM",
     dateGroup: "this-week",
@@ -180,7 +182,7 @@ const DEMO_JOBS: Job[] = [
   },
   {
     id: "5",
-    client: "Angela Torres",
+    client: demoCustomerBy("5")!.name,
     address: "1100 Prairie Creek, Waxahachie",
     date: "Apr 2, 8:30 AM",
     dateGroup: "this-week",
@@ -1022,7 +1024,7 @@ export default function JobsPage() {
       {/* ── Loading state ─────────────────────────────────────────────────────── */}
       {loading && (
         <div className="flex items-center justify-center py-16">
-          <div className="h-6 w-6 border-2 border-primary border-t-transparent rounded-full animate-spin" />
+          <Spinner size="md" />
         </div>
       )}
 

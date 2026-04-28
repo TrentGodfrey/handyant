@@ -5,6 +5,7 @@ import Card from "@/components/Card";
 import StatusBadge from "@/components/StatusBadge";
 import Button from "@/components/Button";
 import NotificationPanel from "@/components/NotificationPanel";
+import Spinner from "@/components/Spinner";
 import Link from "next/link";
 import { useSession } from "next-auth/react";
 import {
@@ -25,6 +26,7 @@ import {
   Settings,
 } from "lucide-react";
 import { useDemoMode } from "@/lib/useDemoMode";
+import { demoCustomerBy } from "@/lib/demoData";
 
 type ScheduleItem = {
   id: string | number;
@@ -114,7 +116,7 @@ const demoTodaySchedule: ScheduleItem[] = [
     id: 1,
     time: "9:00 AM",
     duration: "2h",
-    client: "Sarah Mitchell",
+    client: demoCustomerBy("1")!.name,
     address: "4821 Oak Hollow Dr, Plano",
     tasks: ["Replace kitchen faucet", "Fix garage door sensor"],
     status: "confirmed",
@@ -124,7 +126,7 @@ const demoTodaySchedule: ScheduleItem[] = [
     id: 2,
     time: "11:30 AM",
     duration: "1.5h",
-    client: "Robert Chen",
+    client: demoCustomerBy("2")!.name,
     address: "1205 Elm Creek Ct, Frisco",
     tasks: ["Install smart thermostat", "Replace 3 outlets"],
     status: "confirmed",
@@ -134,7 +136,7 @@ const demoTodaySchedule: ScheduleItem[] = [
     id: 3,
     time: "2:00 PM",
     duration: "2h",
-    client: "Maria Garcia",
+    client: demoCustomerBy("3")!.name,
     address: "890 Sunset Ridge, Roanoke",
     tasks: ["Drywall repair (2 holes)", "Touch-up paint"],
     status: "pending",
@@ -155,7 +157,7 @@ const demoTodaySchedule: ScheduleItem[] = [
 const demoPendingOffers = [
   {
     id: "demo-1",
-    client: "James Wilson",
+    client: demoCustomerBy("4")!.name,
     service: "Full bathroom wallpaper removal",
     date: "Apr 3",
     area: "McKinney",
@@ -613,7 +615,7 @@ export default function AdminDashboard() {
   if (!mounted || loading) {
     return (
       <div className="px-5 pt-14 lg:pt-8 pb-24 flex items-center justify-center min-h-[60vh]">
-        <div className="h-8 w-8 border-2 border-primary border-t-transparent rounded-full animate-spin" />
+        <Spinner className="h-8 w-8" />
       </div>
     );
   }

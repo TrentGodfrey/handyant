@@ -19,6 +19,8 @@ import {
   Smartphone,
 } from "lucide-react";
 import { useDemoMode } from "@/lib/useDemoMode";
+import { demoCustomerBy } from "@/lib/demoData";
+import Spinner from "@/components/Spinner";
 
 const TAX_RATE = 8.25;
 
@@ -93,13 +95,16 @@ const DEMO_INVOICE = {
   number: "INV-2026-031",
   date: "Mar 29, 2026",
   dueDate: "Apr 5, 2026",
-  client: {
-    name: "Sarah Mitchell",
-    address: "4821 Oak Hollow Dr",
-    city: "Plano, TX 75024",
-    phone: "(972) 555-0142",
-    email: "sarah.mitchell@gmail.com",
-  },
+  client: (() => {
+    const c = demoCustomerBy("1")!;
+    return {
+      name: c.name,
+      address: c.address,
+      city: `${c.city}, ${c.state} ${c.zip}`,
+      phone: c.phone ?? "",
+      email: c.email ?? "",
+    };
+  })(),
   lineItems: [
     { description: "Labor — Kitchen faucet replacement + garage door sensor", detail: "3 hrs @ $80/hr", amount: 240 },
     { description: "Materials — Moen 7594ESRS Arbor Faucet", detail: "Brushed nickel", amount: 75 },
@@ -373,7 +378,7 @@ export default function InvoicePage({ params }: { params: Promise<{ id: string }
   if (loading) {
     return (
       <div className="min-h-screen bg-background flex items-center justify-center">
-        <div className="h-6 w-6 border-2 border-primary border-t-transparent rounded-full animate-spin" />
+        <Spinner size="md" />
       </div>
     );
   }
@@ -664,7 +669,7 @@ export default function InvoicePage({ params }: { params: Promise<{ id: string }
               ) : sending ? (
                 <>
                   <div className="flex h-10 w-10 items-center justify-center rounded-full bg-primary-50">
-                    <div className="h-5 w-5 border-2 border-primary border-t-transparent rounded-full animate-spin" />
+                    <Spinner className="h-5 w-5" />
                   </div>
                   <p className="text-[13px] font-bold text-text-primary">Sending…</p>
                 </>

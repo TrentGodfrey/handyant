@@ -8,10 +8,8 @@ export default function RoleSwitcher() {
   const pathname = usePathname();
   const { data: session } = useSession();
 
-  const role = (session?.user as Record<string, unknown> | undefined)?.role as string | undefined;
-
   // Only show switcher for tech users who can access both views
-  if (role !== "tech") return null;
+  if (session?.user?.role !== "tech") return null;
 
   const adminPrefixes = ["/dashboard", "/schedule", "/jobs", "/homes", "/admin-messages", "/reports", "/settings"];
   const isAdmin = adminPrefixes.some((p) => pathname.startsWith(p));

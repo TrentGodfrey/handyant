@@ -9,6 +9,7 @@ import {
 } from "lucide-react";
 import Button from "@/components/Button";
 import Card from "@/components/Card";
+import Spinner from "@/components/Spinner";
 import { useDemoMode } from "@/lib/useDemoMode";
 
 const steps = [
@@ -340,7 +341,7 @@ function RealConfirmation() {
     return (
       <div className="min-h-screen bg-background flex items-center justify-center">
         <div className="flex flex-col items-center gap-3">
-          <div className="h-7 w-7 border-2 border-primary border-t-transparent rounded-full animate-spin" />
+          <Spinner className="h-7 w-7" />
           <p className="text-[13px] text-text-secondary">Loading your booking…</p>
         </div>
       </div>

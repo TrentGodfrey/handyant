@@ -20,6 +20,7 @@ import {
   CalendarDays,
 } from "lucide-react";
 import { useDemoMode } from "@/lib/useDemoMode";
+import { DEMO_CUSTOMERS } from "@/lib/demoData";
 
 type Mode = "job" | "block";
 
@@ -36,13 +37,15 @@ interface ClientView extends Client {
   initials: string;
 }
 
-const DEMO_CLIENTS: ClientView[] = [
-  { id: "1", name: "Sarah Mitchell", email: null, phone: null, primaryHome: null, address: "4821 Oak Hollow Dr, Plano", initials: "SM" },
-  { id: "2", name: "Robert Chen", email: null, phone: null, primaryHome: null, address: "1205 Elm Creek Ct, Frisco", initials: "RC" },
-  { id: "3", name: "Maria Garcia", email: null, phone: null, primaryHome: null, address: "890 Sunset Ridge, Roanoke", initials: "MG" },
-  { id: "4", name: "James Wilson", email: null, phone: null, primaryHome: null, address: "2200 Heritage Trail, McKinney", initials: "JW" },
-  { id: "5", name: "Angela Torres", email: null, phone: null, primaryHome: null, address: "1100 Prairie Creek, Waxahachie", initials: "AT" },
-];
+const DEMO_CLIENTS: ClientView[] = DEMO_CUSTOMERS.map((c) => ({
+  id: c.id,
+  name: c.name,
+  email: c.email,
+  phone: c.phone,
+  primaryHome: null,
+  address: `${c.address}, ${c.city}`,
+  initials: c.initials,
+}));
 
 const DURATIONS = ["1h", "1.5h", "2h", "2.5h", "3h", "4h+"];
 const BLOCK_REASONS = ["Personal", "Supplies Run", "Admin", "Lunch", "Travel", "Other"];

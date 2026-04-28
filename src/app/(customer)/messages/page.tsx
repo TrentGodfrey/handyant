@@ -166,7 +166,7 @@ export default function MessagesPage() {
     setTimeout(() => setToast(null), 2200);
   }
 
-  const userId = (session?.user as Record<string, unknown> | undefined)?.id as string | undefined;
+  const userId: string | undefined = session?.user?.id;
 
   const loadThreads = useCallback(async () => {
     if (isDemo) {

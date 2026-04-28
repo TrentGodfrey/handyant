@@ -4,6 +4,7 @@ import { useEffect, useMemo, useState } from "react";
 import Card from "@/components/Card";
 import StatusBadge from "@/components/StatusBadge";
 import Button from "@/components/Button";
+import Spinner from "@/components/Spinner";
 import Link from "next/link";
 import {
   ChevronLeft,
@@ -18,6 +19,7 @@ import {
   Sun,
 } from "lucide-react";
 import { useDemoMode } from "@/lib/useDemoMode";
+import { demoCustomerBy } from "@/lib/demoData";
 
 const demoWeekDays = [
   { day: "Mon", date: 30, month: "Mar", jobs: 4, hours: 7.5 },
@@ -47,10 +49,10 @@ interface ScheduleItem {
 const demoScheduleByDay: Record<number, ScheduleItem[]> = {
   30: [
     { time: "8:00 AM", label: "Part Shopping", type: "block", duration: "45 min", details: "Home Depot — Broan fan motor, caulk" },
-    { time: "9:00 AM", label: "Sarah Mitchell", type: "job", duration: "2h", address: "4821 Oak Hollow Dr, Plano", status: "confirmed", tasks: 2, homeId: 1 },
-    { time: "11:30 AM", label: "Robert Chen", type: "job", duration: "1.5h", address: "1205 Elm Creek Ct, Frisco", status: "confirmed", tasks: 3, homeId: 2 },
+    { time: "9:00 AM", label: demoCustomerBy("1")!.name, type: "job", duration: "2h", address: "4821 Oak Hollow Dr, Plano", status: "confirmed", tasks: 2, homeId: 1 },
+    { time: "11:30 AM", label: demoCustomerBy("2")!.name, type: "job", duration: "1.5h", address: "1205 Elm Creek Ct, Frisco", status: "confirmed", tasks: 3, homeId: 2 },
     { time: "1:00 PM", label: "Lunch Break", type: "block", duration: "1h", details: "" },
-    { time: "2:00 PM", label: "Maria Garcia", type: "job", duration: "2h", address: "890 Sunset Ridge, Roanoke", status: "pending", tasks: 2, homeId: 3 },
+    { time: "2:00 PM", label: demoCustomerBy("3")!.name, type: "job", duration: "2h", address: "890 Sunset Ridge, Roanoke", status: "pending", tasks: 2, homeId: 3 },
     { time: "4:30 PM", label: "Team Meeting", type: "block", duration: "30 min", details: "Weekly sync — Zoom" },
   ],
   31: [
@@ -451,7 +453,7 @@ export default function SchedulePage() {
       {/* ── Loading State ── */}
       {!isDemo && loading && (
         <div className="flex items-center justify-center py-12">
-          <div className="h-6 w-6 border-2 border-primary border-t-transparent rounded-full animate-spin" />
+          <Spinner size="md" />
         </div>
       )}
 

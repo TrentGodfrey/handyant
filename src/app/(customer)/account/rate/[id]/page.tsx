@@ -8,13 +8,14 @@ import Card from "@/components/Card";
 import Button from "@/components/Button";
 import { useDemoMode } from "@/lib/useDemoMode";
 import { initialsOf } from "@/lib/initials";
+import { DEMO_TECH_LEGACY_NAME } from "@/lib/demoData";
 
 const DEMO_JOB = {
   id: "1",
   service: "Kitchen Faucet Repair + Garbage Disposal",
   date: "March 15, 2026",
-  tech: "Anthony Torres",
-  techInitials: "AT",
+  tech: DEMO_TECH_LEGACY_NAME,
+  techInitials: initialsOf(DEMO_TECH_LEGACY_NAME),
   hours: "2.5 hours",
   tasks: ["Replaced kitchen faucet cartridge", "Fixed garbage disposal jam", "Caulked kitchen sink"],
 };

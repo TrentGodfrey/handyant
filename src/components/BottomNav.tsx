@@ -31,8 +31,7 @@ export default function BottomNav({ variant = "customer" }: { variant?: "custome
   const tabs = variant === "admin" ? adminTabs : customerTabs;
   const isAdmin = variant === "admin";
 
-  const role = (session?.user as Record<string, unknown> | undefined)?.role as string | undefined;
-  const isTech = role === "tech";
+  const isTech = session?.user?.role === "tech";
 
   const userName = session?.user?.name || "User";
   const userInitials = userName

@@ -2,9 +2,11 @@
 
 import { useState, useMemo, useEffect } from "react";
 import Card from "@/components/Card";
+import Spinner from "@/components/Spinner";
 import Link from "next/link";
 import { Search, MapPin, Calendar, Wrench, Plus, Home, UserPlus, Building2, AlertTriangle, RotateCw } from "lucide-react";
 import { useDemoMode } from "@/lib/useDemoMode";
+import { demoCustomerBy } from "@/lib/demoData";
 
 interface ApiHome {
   id: string;
@@ -42,53 +44,53 @@ interface HomeRow {
 const DEMO_HOMES: HomeRow[] = [
   {
     id: "1",
-    name: "Sarah Mitchell",
+    name: demoCustomerBy("1")!.name,
     address: "4821 Oak Hollow Dr, Plano",
     type: "Subscription",
     lastVisit: "Mar 15",
     openTasks: 4,
     totalVisits: 12,
-    initials: "SM",
+    initials: demoCustomerBy("1")!.initials,
   },
   {
     id: "2",
-    name: "Robert Chen",
+    name: demoCustomerBy("2")!.name,
     address: "1205 Elm Creek Ct, Frisco",
     type: "Subscription",
     lastVisit: "Mar 20",
     openTasks: 2,
     totalVisits: 8,
-    initials: "RC",
+    initials: demoCustomerBy("2")!.initials,
   },
   {
     id: "3",
-    name: "Maria Garcia",
+    name: demoCustomerBy("3")!.name,
     address: "890 Sunset Ridge, Roanoke",
     type: "One-Time",
     lastVisit: "Mar 10",
     openTasks: 2,
     totalVisits: 3,
-    initials: "MG",
+    initials: demoCustomerBy("3")!.initials,
   },
   {
     id: "4",
-    name: "James Wilson",
+    name: demoCustomerBy("4")!.name,
     address: "2200 Heritage Trail, McKinney",
     type: "One-Time",
     lastVisit: "Feb 22",
     openTasks: 1,
     totalVisits: 1,
-    initials: "JW",
+    initials: demoCustomerBy("4")!.initials,
   },
   {
     id: "5",
-    name: "Angela Torres",
+    name: demoCustomerBy("5")!.name,
     address: "1100 Prairie Creek, Waxahachie",
     type: "Subscription",
     lastVisit: "Mar 25",
     openTasks: 6,
     totalVisits: 15,
-    initials: "AT",
+    initials: demoCustomerBy("5")!.initials,
   },
   {
     id: "6",
@@ -263,7 +265,7 @@ export default function HomesPage() {
       {/* Loading state */}
       {loading && !showClientList && (
         <div className="flex items-center justify-center py-16">
-          <div className="h-6 w-6 border-2 border-primary border-t-transparent rounded-full animate-spin" />
+          <Spinner size="md" />
         </div>
       )}
 

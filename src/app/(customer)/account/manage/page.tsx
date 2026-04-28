@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useRef, useCallback } from "react";
 import Link from "next/link";
+import Image from "next/image";
 import Card from "@/components/Card";
 import Button from "@/components/Button";
 import { useSession, signOut } from "next-auth/react";
@@ -12,12 +13,12 @@ import {
 } from "lucide-react";
 import { useDemoMode } from "@/lib/useDemoMode";
 import { PLANS, planMeta as sharedPlanMeta } from "@/lib/plans";
+import { demoCustomerBy } from "@/lib/demoData";
 
-const DEMO_USER = {
-  name: "Sarah Mitchell",
-  email: "sarah.mitchell@gmail.com",
-  phone: "(972) 555-0142",
-};
+const DEMO_USER = (() => {
+  const c = demoCustomerBy("Sarah Mitchell")!;
+  return { name: c.name, email: c.email ?? "", phone: c.phone ?? "" };
+})();
 
 interface Prefs {
   jobReminders: boolean;
@@ -658,8 +659,7 @@ export default function AccountManagePage() {
           >
             <div className="relative h-16 w-16 rounded-full bg-primary text-white flex items-center justify-center text-[20px] font-bold overflow-hidden shadow-[0_2px_12px_rgba(37,99,235,0.3)]">
               {avatarUrl ? (
-                // eslint-disable-next-line @next/next/no-img-element
-                <img src={avatarUrl} alt="" className="h-full w-full object-cover" />
+                <Image src={avatarUrl} alt="" fill sizes="64px" className="object-cover" />
               ) : (
                 <span>{userInitials}</span>
               )}

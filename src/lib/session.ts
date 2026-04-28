@@ -11,10 +11,9 @@ export interface SessionUser {
 export async function requireUser(): Promise<SessionUser | null> {
   const session = await getServerSession(authOptions);
   if (!session?.user) return null;
-  const u = session.user as Record<string, unknown>;
   return {
-    id: u.id as string,
-    role: (u.role as "customer" | "tech") ?? "customer",
+    id: session.user.id,
+    role: session.user.role ?? "customer",
     name: session.user.name,
     email: session.user.email,
   };

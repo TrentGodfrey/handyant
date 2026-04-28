@@ -16,6 +16,8 @@ import {
   Calendar,
 } from "lucide-react";
 import { useDemoMode } from "@/lib/useDemoMode";
+import { demoCustomerBy } from "@/lib/demoData";
+import Spinner from "@/components/Spinner";
 
 /* ── Demo data ── */
 
@@ -32,10 +34,10 @@ const demoServiceCategories = [
 ];
 
 const demoTopClients = [
-  { name: "Sarah Mitchell", visits: 4, total: 1340, rating: 5.0 },
-  { name: "Robert Chen", visits: 3, total: 840, rating: 4.9 },
-  { name: "Maria Garcia", visits: 2, total: 380, rating: 5.0 },
-  { name: "James Wilson", visits: 2, total: 560, rating: 4.8 },
+  { name: demoCustomerBy("1")!.name, visits: 4, total: 1340, rating: 5.0 },
+  { name: demoCustomerBy("2")!.name, visits: 3, total: 840, rating: 4.9 },
+  { name: demoCustomerBy("3")!.name, visits: 2, total: 380, rating: 5.0 },
+  { name: demoCustomerBy("4")!.name, visits: 2, total: 560, rating: 4.8 },
 ];
 
 const demoServiceAreas = [
@@ -563,7 +565,7 @@ export default function ReportsPage() {
   if (!mounted || loading) {
     return (
       <div className="px-5 pt-14 lg:pt-8 pb-28 flex items-center justify-center min-h-[60vh]">
-        <div className="h-8 w-8 border-2 border-primary border-t-transparent rounded-full animate-spin" />
+        <Spinner className="h-8 w-8" />
       </div>
     );
   }

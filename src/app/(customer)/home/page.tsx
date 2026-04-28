@@ -5,6 +5,7 @@ import { useSession } from "next-auth/react";
 import Link from "next/link";
 import Card from "@/components/Card";
 import StatusBadge from "@/components/StatusBadge";
+import Spinner from "@/components/Spinner";
 import { useDemoMode } from "@/lib/useDemoMode";
 import {
   Search, MapPin, Clock, Star, ArrowRight, Camera,
@@ -235,7 +236,7 @@ export default function CustomerHome() {
           {loading ? (
             <Card className="border border-border">
               <div className="flex items-center justify-center py-8">
-                <div className="h-6 w-6 border-2 border-primary border-t-transparent rounded-full animate-spin" />
+                <Spinner size="md" />
               </div>
             </Card>
           ) : nextBooking ? (

@@ -1,16 +1,12 @@
 import { NextRequest } from "next/server";
-import { getServerSession } from "next-auth";
-import { authOptions } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
+import { requireUser, unauthorized } from "@/lib/session";
 
 export async function GET() {
-  const session = await getServerSession(authOptions);
-  if (!session?.user) {
-    return Response.json({ error: "Unauthorized" }, { status: 401 });
-  }
-  const userId = (session.user as Record<string, unknown>).id as string;
+  const user = await requireUser();
+  if (!user) return unauthorized();
   const homes = await prisma.home.findMany({
-    where: { customerId: userId },
+    where: { customerId: user.id },
     include: { photos: true },
     orderBy: { createdAt: "desc" },
   });
@@ -18,15 +14,12 @@ export async function GET() {
 }
 
 export async function POST(req: NextRequest) {
-  const session = await getServerSession(authOptions);
-  if (!session?.user) {
-    return Response.json({ error: "Unauthorized" }, { status: 401 });
-  }
-  const userId = (session.user as Record<string, unknown>).id as string;
+  const user = await requireUser();
+  if (!user) return unauthorized();
   const body = await req.json();
   const home = await prisma.home.create({
     data: {
-      customerId: userId,
+      customerId: user.id,
       address: body.address,
       city: body.city ?? null,
       state: body.state ?? "TX",

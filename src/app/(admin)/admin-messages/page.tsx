@@ -4,6 +4,8 @@ import { useState, useRef, useEffect, useCallback, Suspense } from "react";
 import { useSearchParams } from "next/navigation";
 import { Send, Camera, Paperclip, ArrowLeft, MoreVertical, Search, Plus, X } from "lucide-react";
 import { useDemoMode } from "@/lib/useDemoMode";
+import { demoCustomerBy } from "@/lib/demoData";
+import Spinner from "@/components/Spinner";
 
 interface Message {
   id: string;
@@ -32,8 +34,8 @@ interface Conversation {
 const demoConversations: Conversation[] = [
   {
     id: "c1",
-    client: "Sarah Mitchell",
-    initials: "SM",
+    client: demoCustomerBy("1")!.name,
+    initials: demoCustomerBy("1")!.initials,
     lastMessage: "Can't wait! Also, the faucet is dripping from the base now too",
     time: "11:20 AM",
     unread: 2,
@@ -52,8 +54,8 @@ const demoConversations: Conversation[] = [
   },
   {
     id: "c2",
-    client: "Robert Chen",
-    initials: "RC",
+    client: demoCustomerBy("2")!.name,
+    initials: demoCustomerBy("2")!.initials,
     lastMessage: "Perfect, I'll make sure someone is home",
     time: "9:15 AM",
     unread: 0,
@@ -67,8 +69,8 @@ const demoConversations: Conversation[] = [
   },
   {
     id: "c3",
-    client: "Maria Garcia",
-    initials: "MG",
+    client: demoCustomerBy("3")!.name,
+    initials: demoCustomerBy("3")!.initials,
     lastMessage: "The paint color is SW Alabaster from the garage shelf",
     time: "Yesterday",
     unread: 0,
@@ -82,8 +84,8 @@ const demoConversations: Conversation[] = [
   },
   {
     id: "c4",
-    client: "James Wilson",
-    initials: "JW",
+    client: demoCustomerBy("4")!.name,
+    initials: demoCustomerBy("4")!.initials,
     lastMessage: "Confirmed for April 1st, thanks!",
     time: "Mar 27",
     unread: 0,
@@ -745,7 +747,7 @@ function AdminMessagesPageInner() {
         <div className="flex-1 overflow-y-auto px-4 py-4 space-y-3">
           {loadingThread && messages.length === 0 ? (
             <div className="flex items-center justify-center pt-12">
-              <div className="h-6 w-6 border-2 border-primary border-t-transparent rounded-full animate-spin" />
+              <Spinner size="md" />
             </div>
           ) : (
             messages.map((msg) => {
@@ -874,7 +876,7 @@ function AdminMessagesPageInner() {
       <div className="px-5 py-2 space-y-1">
         {loadingList ? (
           <div className="flex items-center justify-center py-10">
-            <div className="h-6 w-6 border-2 border-primary border-t-transparent rounded-full animate-spin" />
+            <Spinner size="md" />
           </div>
         ) : filtered.length === 0 ? (
           <div className="text-center py-10">
@@ -949,7 +951,7 @@ function AdminMessagesPageInner() {
             <div className="flex-1 overflow-y-auto px-3 pb-3">
               {clientsLoading ? (
                 <div className="flex items-center justify-center py-10">
-                  <div className="h-6 w-6 border-2 border-primary border-t-transparent rounded-full animate-spin" />
+                  <Spinner size="md" />
                 </div>
               ) : filteredClients.length === 0 ? (
                 <div className="text-center py-10">
