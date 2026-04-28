@@ -7,32 +7,107 @@ datasource db {
   provider = "postgresql"
 }
 
-model User {
-  id                 String         @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
-  email              String?        @unique
-  passwordHash       String?        @map("password_hash")
-  name               String
-  phone              String?
-  avatarUrl          String?        @map("avatar_url")
-  role               String         @default("customer")
-  googleId           String?        @unique @map("google_id")
-  emailVerified      Boolean?       @default(false) @map("email_verified")
-  createdAt          DateTime?      @default(now()) @map("created_at") @db.Timestamptz(6)
-  updatedAt          DateTime?      @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(6)
-  bookingsAsCustomer Booking[]      @relation("CustomerBookings")
-  bookingsAsTech     Booking[]      @relation("TechBookings")
-  convosAsCustomer   Conversation[] @relation("CustomerConversations")
-  convosAsTech       Conversation[] @relation("TechConversations")
-  homes              Home[]
-  invoices           Invoice[]
-  sentMessages       Message[]
-  notifications      Notification[]
-  reviewsGiven       Review[]       @relation("CustomerReviews")
-  reviewsReceived    Review[]       @relation("TechReviews")
-  serviceAreas       ServiceArea[]
-  subscriptions      Subscription[]
-  notifyPrefs        Json?          @map("notify_prefs")
+enum BookingStatus {
+  pending
+  confirmed
+  in_progress
+  completed
+  cancelled
 
+  @@map("booking_status")
+}
+
+enum InvoiceStatus {
+  draft
+  sent
+  paid
+  overdue
+  cancelled
+
+  @@map("invoice_status")
+}
+
+enum SubscriptionStatus {
+  active
+  cancelled
+  paused
+
+  @@map("subscription_status")
+}
+
+enum SubscriptionPlan {
+  free
+  pro
+  premium
+
+  @@map("subscription_plan")
+}
+
+enum NotificationType {
+  info
+  success
+  warning
+  error
+  booking
+  invoice
+  message
+  review
+
+  @@map("notification_type")
+}
+
+enum TodoPriority {
+  low
+  medium
+  high
+
+  @@map("todo_priority")
+}
+
+enum UserRole {
+  customer
+  tech
+
+  @@map("user_role")
+}
+
+model User {
+  id                       String         @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  email                    String?        @unique
+  passwordHash             String?        @map("password_hash")
+  name                     String
+  phone                    String?
+  avatarUrl                String?        @map("avatar_url")
+  role                     UserRole       @default(customer)
+  googleId                 String?        @unique @map("google_id")
+  emailVerified            Boolean?       @default(false) @map("email_verified")
+  passwordResetToken       String?        @map("password_reset_token")
+  passwordResetExpires     DateTime?      @map("password_reset_expires") @db.Timestamptz(6)
+  emailVerificationToken   String?        @map("email_verification_token")
+  emailVerificationExpires DateTime?      @map("email_verification_expires") @db.Timestamptz(6)
+  pendingEmail             String?        @map("pending_email")
+  lastSeenAt               DateTime?      @map("last_seen_at") @db.Timestamptz(6)
+  createdAt                DateTime?      @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt                DateTime?      @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(6)
+  bookingsAsCustomer       Booking[]      @relation("CustomerBookings")
+  bookingsAsTech           Booking[]      @relation("TechBookings")
+  convosAsCustomer         Conversation[] @relation("CustomerConversations")
+  convosAsTech             Conversation[] @relation("TechConversations")
+  homes                    Home[]
+  invoices                 Invoice[]
+  sentMessages             Message[]
+  notifications            Notification[]
+  reviewsGiven             Review[]       @relation("CustomerReviews")
+  reviewsReceived          Review[]       @relation("TechReviews")
+  serviceAreas             ServiceArea[]
+  subscriptions            Subscription[]
+  bookingNotes             BookingNote[]  @relation("AuthoredBookingNotes")
+  notifyPrefs              Json?          @map("notify_prefs")
+
+  @@index([passwordResetToken], map: "idx_users_password_reset_token")
+  @@index([emailVerificationToken], map: "idx_users_email_verification_token")
+  @@index([role], map: "idx_users_role")
+  @@index([lastSeenAt], map: "idx_users_last_seen_at")
   @@map("users")
 }
 
@@ -82,7 +157,7 @@ model HomeTodo {
   id          String  @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
   homeId      String  @map("home_id") @db.Uuid
   task        String
-  priority    String  @default("medium")
+  priority    TodoPriority @default(medium)
   status      String  @default("pending")
   parts       String?
   partStatus  String? @map("part_status")
@@ -127,7 +202,7 @@ model Booking {
   customerId      String            @map("customer_id") @db.Uuid
   homeId          String?           @map("home_id") @db.Uuid
   techId          String?           @map("tech_id") @db.Uuid
-  status          String            @default("pending")
+  status          BookingStatus     @default(pending)
   scheduledDate   DateTime          @map("scheduled_date") @db.Date
   scheduledTime   DateTime          @map("scheduled_time") @db.Time(6)
   durationMinutes Int?              @default(120) @map("duration_minutes")
@@ -148,6 +223,7 @@ model Booking {
   photos          Photo[]
   reviews         Review[]
   tasks           Task[]
+  bookingNotes    BookingNote[]
 
   @@index([customerId], map: "idx_bookings_customer")
   @@index([techId], map: "idx_bookings_tech")
@@ -201,6 +277,8 @@ model Photo {
   booking    Booking?  @relation(fields: [bookingId], references: [id], onDelete: Cascade, onUpdate: NoAction)
   home       Home?     @relation(fields: [homeId], references: [id], onDelete: Cascade, onUpdate: NoAction)
 
+  @@index([bookingId], map: "idx_photos_booking")
+  @@index([homeId], map: "idx_photos_home")
   @@map("photos")
 }
 
@@ -214,6 +292,8 @@ model Conversation {
   tech          User      @relation("TechConversations", fields: [techId], references: [id], onDelete: NoAction, onUpdate: NoAction)
   messages      Message[]
 
+  @@index([customerId], map: "idx_conversations_customer")
+  @@index([techId], map: "idx_conversations_tech")
   @@map("conversations")
 }
 
@@ -245,24 +325,28 @@ model Review {
   customer   User      @relation("CustomerReviews", fields: [customerId], references: [id], onDelete: NoAction, onUpdate: NoAction)
   tech       User      @relation("TechReviews", fields: [techId], references: [id], onDelete: NoAction, onUpdate: NoAction)
 
+  @@index([techId], map: "idx_reviews_tech")
+  @@index([bookingId], map: "idx_reviews_booking")
   @@map("reviews")
 }
 
 model Invoice {
-  id         String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
-  bookingId  String    @map("booking_id") @db.Uuid
-  customerId String    @map("customer_id") @db.Uuid
-  number     String    @unique
-  subtotal   Decimal   @db.Decimal(10, 2)
-  tax        Decimal?  @default(0) @db.Decimal(10, 2)
-  total      Decimal   @db.Decimal(10, 2)
-  status     String?   @default("draft")
-  sentAt     DateTime? @map("sent_at") @db.Timestamptz(6)
-  paidAt     DateTime? @map("paid_at") @db.Timestamptz(6)
-  createdAt  DateTime? @default(now()) @map("created_at") @db.Timestamptz(6)
-  booking    Booking   @relation(fields: [bookingId], references: [id], onDelete: NoAction, onUpdate: NoAction)
-  customer   User      @relation(fields: [customerId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  id         String         @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  bookingId  String         @map("booking_id") @db.Uuid
+  customerId String         @map("customer_id") @db.Uuid
+  number     String         @unique
+  subtotal   Decimal        @db.Decimal(10, 2)
+  tax        Decimal?       @default(0) @db.Decimal(10, 2)
+  total      Decimal        @db.Decimal(10, 2)
+  status     InvoiceStatus  @default(draft)
+  sentAt     DateTime?      @map("sent_at") @db.Timestamptz(6)
+  paidAt     DateTime?      @map("paid_at") @db.Timestamptz(6)
+  createdAt  DateTime?      @default(now()) @map("created_at") @db.Timestamptz(6)
+  booking    Booking        @relation(fields: [bookingId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  customer   User           @relation(fields: [customerId], references: [id], onDelete: NoAction, onUpdate: NoAction)
 
+  @@index([customerId], map: "idx_invoices_customer")
+  @@index([bookingId], map: "idx_invoices_booking")
   @@map("invoices")
 }
 
@@ -280,28 +364,28 @@ model ServiceArea {
 }
 
 model Notification {
-  id        String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
-  userId    String    @map("user_id") @db.Uuid
+  id        String           @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  userId    String           @map("user_id") @db.Uuid
   title     String
   body      String?
-  type      String?   @default("info")
-  read      Boolean?  @default(false)
+  type      NotificationType @default(info)
+  read      Boolean?         @default(false)
   link      String?
-  createdAt DateTime? @default(now()) @map("created_at") @db.Timestamptz(6)
-  user      User      @relation(fields: [userId], references: [id], onDelete: Cascade, onUpdate: NoAction)
+  createdAt DateTime?        @default(now()) @map("created_at") @db.Timestamptz(6)
+  user      User             @relation(fields: [userId], references: [id], onDelete: Cascade, onUpdate: NoAction)
 
-  @@index([userId, read], map: "idx_notifications_user")
+  @@index([userId, createdAt], map: "idx_notifications_user_created")
   @@map("notifications")
 }
 
 model Subscription {
-  id         String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
-  customerId String    @map("customer_id") @db.Uuid
-  plan       String    @default("basic")
-  status     String?   @default("active")
-  startedAt  DateTime? @default(now()) @map("started_at") @db.Timestamptz(6)
-  endsAt     DateTime? @map("ends_at") @db.Timestamptz(6)
-  customer   User      @relation(fields: [customerId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  id         String              @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  customerId String              @map("customer_id") @db.Uuid
+  plan       SubscriptionPlan    @default(free)
+  status     SubscriptionStatus? @default(active)
+  startedAt  DateTime?           @default(now()) @map("started_at") @db.Timestamptz(6)
+  endsAt     DateTime?           @map("ends_at") @db.Timestamptz(6)
+  customer   User                @relation(fields: [customerId], references: [id], onDelete: NoAction, onUpdate: NoAction)
 
   @@map("subscriptions")
 }
@@ -330,4 +414,18 @@ model AvailabilityBlock {
 
   @@index([techId, startAt], map: "idx_availability_tech")
   @@map("availability_blocks")
+}
+
+model BookingNote {
+  id        String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  bookingId String   @map("booking_id") @db.Uuid
+  authorId  String   @map("author_id") @db.Uuid
+  text      String
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  booking   Booking  @relation(fields: [bookingId], references: [id], onDelete: Cascade, onUpdate: NoAction)
+  author    User     @relation("AuthoredBookingNotes", fields: [authorId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+
+  @@index([bookingId], map: "idx_booking_notes_booking")
+  @@map("booking_notes")
 }

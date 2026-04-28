@@ -10,8 +10,8 @@ export async function GET() {
   const convos = await prisma.conversation.findMany({
     where,
     include: {
-      customer: { select: { id: true, name: true, avatarUrl: true } },
-      tech: { select: { id: true, name: true, avatarUrl: true } },
+      customer: { select: { id: true, name: true, avatarUrl: true, lastSeenAt: true } },
+      tech: { select: { id: true, name: true, avatarUrl: true, lastSeenAt: true } },
       messages: {
         orderBy: { createdAt: "desc" },
         take: 1,

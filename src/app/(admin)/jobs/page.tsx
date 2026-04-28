@@ -17,9 +17,11 @@ import {
   LayoutGrid,
   List,
   ChevronDown,
-  GripVertical,
+  AlertTriangle,
+  RotateCw,
 } from "lucide-react";
 import { useDemoMode } from "@/lib/useDemoMode";
+import { toast } from "@/components/Toaster";
 
 // ── Types ────────────────────────────────────────────────────────────────────
 
@@ -466,7 +468,6 @@ function JobCardList({
           </div>
           <div className="flex flex-col items-end gap-1 shrink-0">
             <span className="text-[16px] font-bold text-text-primary">{job.estimate}</span>
-            <GripVertical size={14} className="text-text-tertiary/40" />
           </div>
         </div>
 
@@ -667,6 +668,8 @@ export default function JobsPage() {
   const [view, setView] = useState<"list" | "board">("list");
   const [jobData, setJobData] = useState<Job[]>([]);
   const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState<string | null>(null);
+  const [reloadKey, setReloadKey] = useState(0);
 
   // Filter panel state
   const [showFilterPanel, setShowFilterPanel] = useState(false);
@@ -694,12 +697,16 @@ export default function JobsPage() {
       return;
     }
     setLoading(true);
+    setLoadError(null);
     const url =
       activeStage === "all"
         ? "/api/admin/bookings"
         : `/api/admin/bookings?status=${uiStatusToApi(activeStage)}`;
     fetch(url)
-      .then((r) => r.json())
+      .then(async (r) => {
+        if (!r.ok) throw new Error(`Failed to load jobs (${r.status})`);
+        return r.json();
+      })
       .then((data) => {
         if (Array.isArray(data)) {
           setJobData(data.map(bookingToJob));
@@ -707,25 +714,37 @@ export default function JobsPage() {
           setJobData([]);
         }
       })
-      .catch(() => setJobData([]))
+      .catch((e: unknown) => {
+        setLoadError(e instanceof Error ? e.message : "Failed to load jobs");
+        setJobData([]);
+      })
       .finally(() => setLoading(false));
-  }, [isDemo, activeStage, mounted]);
+  }, [isDemo, activeStage, mounted, reloadKey]);
 
-  // Move handler — optimistic update + PATCH
+  // Move handler — optimistic update + PATCH (with revert on failure)
   const handleMove = (jobId: string, newStage: PipelineStage) => {
-    setJobData((prev) =>
-      prev.map((j) =>
+    let prevSnapshot: Job[] = [];
+    setJobData((prev) => {
+      prevSnapshot = prev;
+      return prev.map((j) =>
         j.id === jobId
           ? { ...j, status: newStage as JobStatus, partsNeeded: newStage === "pending" ? j.partsNeeded : false }
           : j
-      )
-    );
+      );
+    });
     if (isDemo) return;
     fetch(`/api/bookings/${jobId}`, {
       method: "PATCH",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ status: uiStatusToApi(newStage) }),
-    }).catch(() => {});
+    })
+      .then((r) => {
+        if (!r.ok) throw new Error(`HTTP ${r.status}`);
+      })
+      .catch((e) => {
+        toast.error("Couldn't move job: " + (e instanceof Error ? e.message : String(e)));
+        setJobData(prevSnapshot);
+      });
   };
 
   // Compute stage counts & revenue from full data (before search filter)
@@ -963,6 +982,25 @@ export default function JobsPage() {
             </div>
           </div>
         </Card>
+      )}
+
+      {/* Load error banner */}
+      {loadError && (
+        <div className="mb-4 flex items-start gap-3 rounded-xl border border-error/30 bg-error-light p-3.5">
+          <AlertTriangle size={18} className="mt-0.5 shrink-0 text-error" />
+          <div className="flex-1 min-w-0">
+            <p className="text-[13px] font-semibold text-error">Couldn&rsquo;t load jobs</p>
+            <p className="mt-0.5 text-[12px] text-error/80 break-words">{loadError}</p>
+          </div>
+          <button
+            type="button"
+            onClick={() => setReloadKey((k) => k + 1)}
+            className="shrink-0 inline-flex items-center gap-1.5 rounded-lg bg-error px-3 py-1.5 text-[12px] font-semibold text-white hover:bg-red-700 transition-colors"
+          >
+            <RotateCw size={12} />
+            Retry
+          </button>
+        </div>
       )}
 
       {/* Pipeline summary (visible in both views) */}

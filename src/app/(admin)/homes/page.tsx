@@ -3,7 +3,7 @@
 import { useState, useMemo, useEffect } from "react";
 import Card from "@/components/Card";
 import Link from "next/link";
-import { Search, MapPin, Calendar, Wrench, Plus, Home, UserPlus, Building2 } from "lucide-react";
+import { Search, MapPin, Calendar, Wrench, Plus, Home, UserPlus, Building2, AlertTriangle, RotateCw } from "lucide-react";
 import { useDemoMode } from "@/lib/useDemoMode";
 
 interface ApiHome {
@@ -137,6 +137,8 @@ export default function HomesPage() {
   const [search, setSearch] = useState("");
   const [homes, setHomes] = useState<HomeRow[]>([]);
   const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState<string | null>(null);
+  const [reloadKey, setReloadKey] = useState(0);
 
   const { isDemo, mounted } = useDemoMode();
 
@@ -148,10 +150,14 @@ export default function HomesPage() {
       return;
     }
     setLoading(true);
+    setLoadError(null);
     const url = search.trim() ? `/api/admin/homes?q=${encodeURIComponent(search.trim())}` : "/api/admin/homes";
     const ctrl = new AbortController();
     fetch(url, { signal: ctrl.signal })
-      .then((r) => r.json())
+      .then(async (r) => {
+        if (!r.ok) throw new Error(`Failed to load homes (${r.status})`);
+        return r.json();
+      })
       .then((data) => {
         if (Array.isArray(data)) {
           setHomes(data.map(apiHomeToRow));
@@ -160,11 +166,13 @@ export default function HomesPage() {
         }
       })
       .catch((err) => {
-        if (err?.name !== "AbortError") setHomes([]);
+        if (err?.name === "AbortError") return;
+        setLoadError(err instanceof Error ? err.message : "Failed to load homes");
+        setHomes([]);
       })
       .finally(() => setLoading(false));
     return () => ctrl.abort();
-  }, [isDemo, search, mounted]);
+  }, [isDemo, search, mounted, reloadKey]);
 
   const filtered = useMemo(() => {
     // For demo mode, do client-side filtering. For API mode, results already filtered server-side.
@@ -218,6 +226,25 @@ export default function HomesPage() {
           </button>
         )}
       </div>
+
+      {/* Load error banner */}
+      {loadError && (
+        <div className="mb-4 flex items-start gap-3 rounded-xl border border-error/30 bg-error-light p-3.5">
+          <AlertTriangle size={18} className="mt-0.5 shrink-0 text-error" />
+          <div className="flex-1 min-w-0">
+            <p className="text-[13px] font-semibold text-error">Couldn&rsquo;t load homes</p>
+            <p className="mt-0.5 text-[12px] text-error/80 break-words">{loadError}</p>
+          </div>
+          <button
+            type="button"
+            onClick={() => setReloadKey((k) => k + 1)}
+            className="shrink-0 inline-flex items-center gap-1.5 rounded-lg bg-error px-3 py-1.5 text-[12px] font-semibold text-white hover:bg-red-700 transition-colors"
+          >
+            <RotateCw size={12} />
+            Retry
+          </button>
+        </div>
+      )}
 
       {/* Summary row — only show when there are results */}
       {showClientList && (

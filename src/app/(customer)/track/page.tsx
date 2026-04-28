@@ -604,17 +604,14 @@ export default function TrackPage() {
               >
                 <MessageCircle size={17} className="text-primary" />
               </Link>
-              {booking.techPhone ? (
+              {booking.techPhone && (
                 <a
                   href={`tel:${booking.techPhone}`}
                   className="h-10 w-10 rounded-xl border border-border bg-surface flex items-center justify-center active:scale-95 active:bg-surface-secondary transition-all"
+                  aria-label="Call your tech"
                 >
                   <Phone size={17} className="text-success" />
                 </a>
-              ) : (
-                <button className="h-10 w-10 rounded-xl border border-border bg-surface flex items-center justify-center active:scale-95 active:bg-surface-secondary transition-all">
-                  <Phone size={17} className="text-success" />
-                </button>
               )}
             </div>
           </div>

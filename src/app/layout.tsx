@@ -2,6 +2,7 @@ import type { Metadata, Viewport } from "next";
 import { Inter } from "next/font/google";
 import RoleSwitcher from "@/components/RoleSwitcher";
 import Providers from "@/components/Providers";
+import Toaster from "@/components/Toaster";
 import "./globals.css";
 
 const inter = Inter({
@@ -39,6 +40,7 @@ export default function RootLayout({
         <Providers>
           <RoleSwitcher />
           {children}
+          <Toaster />
         </Providers>
       </body>
     </html>

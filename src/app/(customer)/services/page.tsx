@@ -1,18 +1,21 @@
 "use client";
 
-import { useState, useMemo } from "react";
+import { useState, useMemo, useEffect } from "react";
 import Card from "@/components/Card";
-import Button from "@/components/Button";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import {
   Search, Wrench, Droplets, Lightbulb, PaintBucket, Hammer, Zap, Layers,
-  ChevronDown, MapPin, X, ArrowRight, Wallpaper, CheckCircle2,
+  ChevronDown, MapPin, X, ArrowRight, Wallpaper, CheckCircle2, Square,
+  Refrigerator, Trees, Wifi, Loader2, LucideIcon,
 } from "lucide-react";
+import { useDemoMode } from "@/lib/useDemoMode";
 
-// ─── Data ───────────────────────────────────────────────────────────────────
+// =====================================================================
+// Demo data (preserved)
+// =====================================================================
 
-const categories = [
+const demoCategories = [
   {
     icon: Wrench,
     name: "General Repairs",
@@ -151,12 +154,121 @@ const serviceAreas = [
   { name: "Southlake", primary: true },
 ];
 
-// ─── Component ───────────────────────────────────────────────────────────────
+// =====================================================================
+// Real-mode helpers
+// =====================================================================
+
+interface ServiceCategoryRecord {
+  id: string;
+  name: string;
+  icon: string | null;
+  sortOrder: number | null;
+}
+
+// Map seeded icon names + a few fallbacks to lucide components.
+const ICON_MAP: Record<string, LucideIcon> = {
+  Droplet: Droplets,
+  Droplets,
+  Zap,
+  Hammer,
+  PaintBucket,
+  Square,
+  Refrigerator,
+  Trees,
+  Wifi,
+  Wrench,
+  Lightbulb,
+  Wallpaper,
+  Layers,
+};
+
+// Stable color/bg styling derived from category index, so the page stays
+// colorful even when icon names change.
+const COLOR_PALETTE = [
+  { color: "text-[#0EA5E9]", bg: "bg-[#F0F9FF]", iconBg: "bg-[#E0F2FE]" },
+  { color: "text-warning", bg: "bg-warning-light", iconBg: "bg-[#FEF3C7]" },
+  { color: "text-accent-coral", bg: "bg-[#FFF7ED]", iconBg: "bg-[#FFEDD5]" },
+  { color: "text-accent-purple", bg: "bg-[#F5F3FF]", iconBg: "bg-[#EDE9FE]" },
+  { color: "text-success", bg: "bg-success-light", iconBg: "bg-[#DCFCE7]" },
+  { color: "text-primary", bg: "bg-primary-50", iconBg: "bg-primary-100" },
+  { color: "text-accent-teal", bg: "bg-[#F0FDFA]", iconBg: "bg-[#CCFBF1]" },
+  { color: "text-[#F97316]", bg: "bg-[#FFF7ED]", iconBg: "bg-[#FFEDD5]" },
+];
+
+function descFor(name: string): string {
+  const lower = name.toLowerCase();
+  if (lower.includes("plumb")) return "Faucets, toilets, drains & water heaters";
+  if (lower.includes("electric")) return "Switches, outlets, fixtures & smart home";
+  if (lower.includes("carpentry")) return "Shelving, trim, furniture & custom builds";
+  if (lower.includes("paint")) return "Interior painting, walls & touch-ups";
+  if (lower.includes("drywall")) return "Patches, repairs & finishing";
+  if (lower.includes("appliance")) return "Install, repair & maintenance";
+  if (lower.includes("outdoor")) return "Decks, fences & yard projects";
+  if (lower.includes("smart")) return "Thermostats, locks, cameras & hubs";
+  return "Tap to book this service";
+}
+
+// =====================================================================
+// Page
+// =====================================================================
 
 export default function ServicesPage() {
+  const { isDemo, mounted } = useDemoMode();
   const router = useRouter();
   const [expanded, setExpanded] = useState<string | null>(null);
   const [query, setQuery] = useState("");
+
+  // Real-mode categories
+  const [realCats, setRealCats] = useState<ServiceCategoryRecord[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (!mounted) return;
+    if (isDemo) {
+      setLoading(false);
+      return;
+    }
+    let cancelled = false;
+    async function load() {
+      setLoading(true);
+      setError(null);
+      try {
+        const res = await fetch("/api/services");
+        if (!res.ok) throw new Error("Failed to load services");
+        const data = (await res.json()) as ServiceCategoryRecord[];
+        if (!cancelled) setRealCats(Array.isArray(data) ? data : []);
+      } catch (e: unknown) {
+        if (!cancelled) setError(e instanceof Error ? e.message : "Failed to load services");
+      } finally {
+        if (!cancelled) setLoading(false);
+      }
+    }
+    load();
+    return () => { cancelled = true; };
+  }, [isDemo, mounted]);
+
+  // Build the unified category list rendered by the grid below.
+  // In demo mode, we use the rich curated catalog. In real mode, we project
+  // ServiceCategory rows onto the same shape (no sub-services — the click
+  // takes the user straight to /book?category=<name>).
+  const categories = useMemo(() => {
+    if (isDemo) return demoCategories;
+    return realCats.map((c, i) => {
+      const palette = COLOR_PALETTE[i % COLOR_PALETTE.length];
+      const Icon = (c.icon && ICON_MAP[c.icon]) || Wrench;
+      return {
+        id: c.id,
+        icon: Icon,
+        name: c.name,
+        desc: descFor(c.name),
+        color: palette.color,
+        bg: palette.bg,
+        iconBg: palette.iconBg,
+        services: [] as { name: string; popular: boolean }[],
+      };
+    });
+  }, [isDemo, realCats]);
 
   const filtered = useMemo(() => {
     const q = query.toLowerCase().trim();
@@ -170,7 +282,7 @@ export default function ServicesPage() {
         return null;
       })
       .filter(Boolean) as typeof categories;
-  }, [query]);
+  }, [query, categories]);
 
   const toggle = (name: string) => {
     setExpanded((prev) => (prev === name ? null : name));
@@ -212,108 +324,148 @@ export default function ServicesPage() {
 
       <div className="px-5 pt-4">
 
-        {/* ── Service Count ─────────────────────────────────────────── */}
-        {query && (
-          <p className="text-[12px] text-text-tertiary mb-3">
-            {filtered.length === 0
-              ? "No services found"
-              : `${filtered.reduce((a, c) => a + c.services.length, 0)} services found`}
-          </p>
-        )}
+        {/* ── Loading state ────────────────────────────────────────── */}
+        {!mounted || loading ? (
+          <div className="flex justify-center py-10">
+            <Loader2 size={20} className="animate-spin text-text-tertiary" />
+          </div>
+        ) : error ? (
+          <div className="rounded-xl border border-error/30 bg-error/5 p-4 text-center">
+            <p className="text-[13px] text-error">{error}</p>
+          </div>
+        ) : (
+          <>
+            {/* ── Service Count ─────────────────────────────────────────── */}
+            {query && (
+              <p className="text-[12px] text-text-tertiary mb-3">
+                {filtered.length === 0
+                  ? "No services found"
+                  : `${filtered.length} ${filtered.length === 1 ? "category" : "categories"} found`}
+              </p>
+            )}
 
-        {/* ── Category Cards ────────────────────────────────────────── */}
-        <div className="space-y-2.5">
-          {filtered.map((cat) => {
-            const isOpen = expanded === cat.name || (!!query && cat.services.length > 0);
-            return (
-              <div key={cat.name}>
-                <Card
-                  padding="md"
-                  onClick={() => !query && toggle(cat.name)}
-                  className={`${isOpen && !query ? "rounded-b-none border-b-0" : ""}`}
-                >
-                  <div className="flex items-center gap-3.5">
-                    {/* Icon */}
-                    <div className={`h-12 w-12 shrink-0 rounded-2xl ${cat.bg} flex items-center justify-center`}>
-                      <cat.icon size={22} className={cat.color} />
-                    </div>
+            {/* ── Category Cards ────────────────────────────────────────── */}
+            <div className="space-y-2.5">
+              {filtered.map((cat) => {
+                const hasSubServices = cat.services.length > 0;
+                const isOpen = hasSubServices && (expanded === cat.name || (!!query && cat.services.length > 0));
 
-                    {/* Text */}
-                    <div className="flex-1 min-w-0">
-                      <p className="text-[15px] font-semibold text-text-primary">{cat.name}</p>
-                      <p className="text-[12px] text-text-tertiary mt-0.5">{cat.desc}</p>
-                      <p className="text-[11px] font-medium text-text-secondary mt-1">
-                        {cat.services.length} services
-                      </p>
-                    </div>
+                // For real-mode (no sub-services), the whole card navigates to /book
+                if (!hasSubServices) {
+                  const href = `/book?category=${encodeURIComponent(cat.name)}`;
+                  return (
+                    <Card
+                      key={cat.name}
+                      padding="md"
+                      onClick={() => router.push(href)}
+                    >
+                      <div className="flex items-center gap-3.5">
+                        <div className={`h-12 w-12 shrink-0 rounded-2xl ${cat.bg} flex items-center justify-center`}>
+                          <cat.icon size={22} className={cat.color} />
+                        </div>
+                        <div className="flex-1 min-w-0">
+                          <p className="text-[15px] font-semibold text-text-primary">{cat.name}</p>
+                          <p className="text-[12px] text-text-tertiary mt-0.5">{cat.desc}</p>
+                        </div>
+                        <ArrowRight size={18} className="text-primary shrink-0" />
+                      </div>
+                    </Card>
+                  );
+                }
 
-                    {/* Chevron */}
-                    {!query && (
-                      <ChevronDown
-                        size={18}
-                        className={`text-text-tertiary shrink-0 transition-transform duration-200 ${isOpen ? "rotate-180" : ""}`}
-                      />
+                // Demo-mode expanded sub-service tree
+                return (
+                  <div key={cat.name}>
+                    <Card
+                      padding="md"
+                      onClick={() => !query && toggle(cat.name)}
+                      className={`${isOpen && !query ? "rounded-b-none border-b-0" : ""}`}
+                    >
+                      <div className="flex items-center gap-3.5">
+                        <div className={`h-12 w-12 shrink-0 rounded-2xl ${cat.bg} flex items-center justify-center`}>
+                          <cat.icon size={22} className={cat.color} />
+                        </div>
+                        <div className="flex-1 min-w-0">
+                          <p className="text-[15px] font-semibold text-text-primary">{cat.name}</p>
+                          <p className="text-[12px] text-text-tertiary mt-0.5">{cat.desc}</p>
+                          <p className="text-[11px] font-medium text-text-secondary mt-1">
+                            {cat.services.length} services
+                          </p>
+                        </div>
+                        {!query && (
+                          <ChevronDown
+                            size={18}
+                            className={`text-text-tertiary shrink-0 transition-transform duration-200 ${isOpen ? "rotate-180" : ""}`}
+                          />
+                        )}
+                      </div>
+                    </Card>
+
+                    {isOpen && (
+                      <div className="bg-surface rounded-b-xl border border-t-0 border-border shadow-[0_4px_16px_rgba(0,0,0,0.04)] overflow-hidden">
+                        {cat.services.map((svc, i) => (
+                          <button
+                            key={svc.name}
+                            onClick={() => router.push(`/book?service=${encodeURIComponent(svc.name)}&category=${encodeURIComponent(cat.name)}`)}
+                            className={`flex w-full items-center justify-between px-4 py-3.5 text-left transition-colors active:bg-surface-secondary hover:bg-primary-50
+                              ${i < cat.services.length - 1 ? "border-b border-border-light" : ""}`}
+                          >
+                            <div className="flex items-center gap-3">
+                              <div className={`h-7 w-7 rounded-lg ${cat.iconBg} flex items-center justify-center shrink-0`}>
+                                <cat.icon size={14} className={cat.color} />
+                              </div>
+                              <span className="text-[13px] font-medium text-text-primary">{svc.name}</span>
+                              {svc.popular && (
+                                <span className="rounded-full bg-primary-50 px-2 py-0.5 text-[10px] font-semibold text-primary">
+                                  Popular
+                                </span>
+                              )}
+                            </div>
+                            <ArrowRight size={14} className="text-primary shrink-0 ml-2" />
+                          </button>
+                        ))}
+
+                        <div className="px-4 py-3 bg-surface-secondary">
+                          <Link
+                            href={`/book?category=${encodeURIComponent(cat.name)}`}
+                            className="flex w-full items-center justify-center gap-2 rounded-xl bg-primary py-2.5 text-[13px] font-semibold text-white active:bg-primary-dark transition-colors"
+                          >
+                            Book {cat.name}
+                            <ArrowRight size={14} />
+                          </Link>
+                        </div>
+                      </div>
                     )}
                   </div>
-                </Card>
+                );
+              })}
+            </div>
 
-                {/* Expanded Services */}
-                {isOpen && (
-                  <div className="bg-surface rounded-b-xl border border-t-0 border-border shadow-[0_4px_16px_rgba(0,0,0,0.04)] overflow-hidden">
-                    {cat.services.map((svc, i) => (
-                      <button
-                        key={svc.name}
-                        onClick={() => router.push(`/book?service=${encodeURIComponent(svc.name)}&category=${encodeURIComponent(cat.name)}`)}
-                        className={`flex w-full items-center justify-between px-4 py-3.5 text-left transition-colors active:bg-surface-secondary hover:bg-primary-50
-                          ${i < cat.services.length - 1 ? "border-b border-border-light" : ""}`}
-                      >
-                        <div className="flex items-center gap-3">
-                          <div className={`h-7 w-7 rounded-lg ${cat.iconBg} flex items-center justify-center shrink-0`}>
-                            <cat.icon size={14} className={cat.color} />
-                          </div>
-                          <span className="text-[13px] font-medium text-text-primary">{svc.name}</span>
-                          {svc.popular && (
-                            <span className="rounded-full bg-primary-50 px-2 py-0.5 text-[10px] font-semibold text-primary">
-                              Popular
-                            </span>
-                          )}
-                        </div>
-                        <ArrowRight size={14} className="text-primary shrink-0 ml-2" />
-                      </button>
-                    ))}
-
-                    {/* CTA inside expanded */}
-                    <div className="px-4 py-3 bg-surface-secondary">
-                      <Link
-                        href={`/book?category=${encodeURIComponent(cat.name)}`}
-                        className="flex w-full items-center justify-center gap-2 rounded-xl bg-primary py-2.5 text-[13px] font-semibold text-white active:bg-primary-dark transition-colors"
-                      >
-                        Book {cat.name}
-                        <ArrowRight size={14} />
-                      </Link>
-                    </div>
-                  </div>
+            {/* ── No Results ────────────────────────────────────────────── */}
+            {filtered.length === 0 && (
+              <div className="flex flex-col items-center justify-center py-16 text-center">
+                <div className="h-14 w-14 rounded-2xl bg-surface-secondary flex items-center justify-center mb-3">
+                  <Wrench size={24} className="text-text-tertiary" />
+                </div>
+                <p className="text-[15px] font-semibold text-text-primary">
+                  {categories.length === 0 ? "No services yet" : "No services found"}
+                </p>
+                <p className="text-[13px] text-text-secondary mt-1">
+                  {categories.length === 0
+                    ? "Categories will appear here once they're set up"
+                    : "Try a different search term"}
+                </p>
+                {query && (
+                  <button
+                    onClick={() => setQuery("")}
+                    className="mt-4 text-[13px] font-semibold text-primary"
+                  >
+                    Clear search
+                  </button>
                 )}
               </div>
-            );
-          })}
-        </div>
-
-        {/* ── No Results ────────────────────────────────────────────── */}
-        {filtered.length === 0 && (
-          <div className="flex flex-col items-center justify-center py-16 text-center">
-            <div className="h-14 w-14 rounded-2xl bg-surface-secondary flex items-center justify-center mb-3">
-              <Wrench size={24} className="text-text-tertiary" />
-            </div>
-            <p className="text-[15px] font-semibold text-text-primary">No services found</p>
-            <p className="text-[13px] text-text-secondary mt-1">Try a different search term</p>
-            <button
-              onClick={() => setQuery("")}
-              className="mt-4 text-[13px] font-semibold text-primary"
-            >
-              Clear search
-            </button>
-          </div>
+            )}
+          </>
         )}
 
         {/* ── Service Areas ─────────────────────────────────────────── */}

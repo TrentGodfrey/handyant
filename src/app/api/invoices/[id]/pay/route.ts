@@ -28,7 +28,7 @@ export async function POST(_req: NextRequest, ctx: { params: Promise<{ id: strin
         userId: invoice.booking.techId,
         title: "Payment received",
         body: `Invoice ${invoice.number} has been paid`,
-        type: "payment",
+        type: "invoice",
         link: "/admin",
       },
     });

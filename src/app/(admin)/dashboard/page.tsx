@@ -4,6 +4,7 @@ import { useState, useEffect } from "react";
 import Card from "@/components/Card";
 import StatusBadge from "@/components/StatusBadge";
 import Button from "@/components/Button";
+import NotificationPanel from "@/components/NotificationPanel";
 import Link from "next/link";
 import { useSession } from "next-auth/react";
 import {
@@ -449,6 +450,7 @@ export default function AdminDashboard() {
   const [loading, setLoading] = useState(true);
   const [unreadCount, setUnreadCount] = useState(0);
   const [dismissedOfferIds, setDismissedOfferIds] = useState<Set<string>>(new Set());
+  const [notifPanelOpen, setNotifPanelOpen] = useState(false);
 
   const { isDemo, mounted } = useDemoMode();
   const { data: session } = useSession();
@@ -610,7 +612,12 @@ export default function AdminDashboard() {
           >
             <Settings size={18} className="text-text-secondary" />
           </Link>
-          <button className="relative flex h-10 w-10 items-center justify-center rounded-full bg-surface border border-border shadow-[0_1px_4px_rgba(0,0,0,0.08)] active:bg-surface-secondary transition-colors">
+          <button
+            type="button"
+            onClick={() => setNotifPanelOpen(true)}
+            className="relative flex h-10 w-10 items-center justify-center rounded-full bg-surface border border-border shadow-[0_1px_4px_rgba(0,0,0,0.08)] active:bg-surface-secondary transition-colors"
+            aria-label="Notifications"
+          >
             <Bell size={19} className="text-text-secondary" />
             {notifBadge > 0 && (
               <span className="absolute -right-1 -top-1 flex h-[18px] min-w-[18px] items-center justify-center rounded-full bg-primary px-1 text-[9px] font-bold text-white shadow-sm">
@@ -620,6 +627,23 @@ export default function AdminDashboard() {
           </button>
         </div>
       </div>
+
+      <NotificationPanel
+        open={notifPanelOpen}
+        onClose={() => {
+          setNotifPanelOpen(false);
+          // Refresh unread count after the user closed the panel — they may
+          // have marked things read inside it.
+          if (!isDemo) {
+            fetch("/api/notifications?unread=true")
+              .then((r) => (r.ok ? r.json() : []))
+              .then((d) => {
+                if (Array.isArray(d)) setUnreadCount(d.length);
+              })
+              .catch(() => {});
+          }
+        }}
+      />
 
       {/* ── KPI Cards ── */}
       <div className="mb-6 grid grid-cols-4 gap-2.5">

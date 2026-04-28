@@ -1,12 +1,15 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import Link from "next/link";
-import { ChevronLeft, Star, Camera, ThumbsUp, ThumbsDown, Check, X } from "lucide-react";
+import { useParams, useRouter } from "next/navigation";
+import { ChevronLeft, Star, Camera, ThumbsUp, ThumbsDown, Check, X, Loader2, AlertTriangle } from "lucide-react";
 import Card from "@/components/Card";
 import Button from "@/components/Button";
+import { useDemoMode } from "@/lib/useDemoMode";
+import { initialsOf } from "@/lib/initials";
 
-const JOB_DATA = {
+const DEMO_JOB = {
   id: "1",
   service: "Kitchen Faucet Repair + Garbage Disposal",
   date: "March 15, 2026",
@@ -28,13 +31,36 @@ const CONFETTI_COLORS = [
   "bg-accent-purple", "bg-info",
 ];
 
+const STAR_LABELS = ["", "Poor", "Fair", "Good", "Great", "Amazing!"];
+
+interface BookingTask { id: string; label: string; done: boolean | null }
+interface BookingTech { id: string; name: string; avatarUrl: string | null }
+
+interface BookingRecord {
+  id: string;
+  status: string;
+  scheduledDate: string;
+  durationMinutes: number | null;
+  description: string | null;
+  techId: string | null;
+  tech: BookingTech | null;
+  tasks: BookingTask[];
+}
+
+function formatBookingDate(iso: string): string {
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return iso;
+  return d.toLocaleDateString("en-US", { year: "numeric", month: "long", day: "numeric" });
+}
+
+function formatHours(minutes: number | null): string {
+  if (!minutes) return "—";
+  const h = Math.round((minutes / 60) * 10) / 10;
+  return `${h} ${h === 1 ? "hour" : "hours"}`;
+}
+
 function StarRow({
-  count,
-  size = 32,
-  value,
-  onChange,
-  hovered,
-  onHover,
+  count, size = 32, value, onChange, hovered, onHover,
 }: {
   count: 5;
   size?: number;
@@ -73,9 +99,18 @@ function StarRow({
   );
 }
 
-const STAR_LABELS = ["", "Poor", "Fair", "Good", "Great", "Amazing!"];
-
 export default function RateJobPage() {
+  const params = useParams<{ id: string }>();
+  const router = useRouter();
+  const { isDemo, mounted } = useDemoMode();
+
+  const bookingId = typeof params?.id === "string" ? params.id : "";
+
+  // Real-mode booking
+  const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState<string | null>(null);
+  const [booking, setBooking] = useState<BookingRecord | null>(null);
+
   const [overallRating, setOverallRating] = useState(0);
   const [overallHovered, setOverallHovered] = useState(0);
   const [categoryRatings, setCategoryRatings] = useState<Record<string, number>>({});
@@ -83,9 +118,44 @@ export default function RateJobPage() {
   const [review, setReview] = useState("");
   const [recommend, setRecommend] = useState<boolean | null>(null);
   const [photos, setPhotos] = useState<string[]>([]);
+  const [submitting, setSubmitting] = useState(false);
+  const [submitError, setSubmitError] = useState<string | null>(null);
   const [submitted, setSubmitted] = useState(false);
 
   const showCategories = overallRating >= 1;
+
+  useEffect(() => {
+    if (!mounted) return;
+    if (isDemo) {
+      setLoading(false);
+      return;
+    }
+    if (!bookingId) {
+      setLoadError("Missing booking id");
+      setLoading(false);
+      return;
+    }
+    let cancelled = false;
+    async function load() {
+      setLoading(true);
+      setLoadError(null);
+      try {
+        const res = await fetch(`/api/bookings/${bookingId}`);
+        if (!res.ok) {
+          if (res.status === 404) throw new Error("Booking not found");
+          throw new Error("Failed to load booking");
+        }
+        const data = (await res.json()) as BookingRecord;
+        if (!cancelled) setBooking(data);
+      } catch (e: unknown) {
+        if (!cancelled) setLoadError(e instanceof Error ? e.message : "Failed to load booking");
+      } finally {
+        if (!cancelled) setLoading(false);
+      }
+    }
+    load();
+    return () => { cancelled = true; };
+  }, [bookingId, isDemo, mounted]);
 
   function setCatRating(id: string, value: number) {
     setCategoryRatings((prev) => ({ ...prev, [id]: value }));
@@ -95,24 +165,137 @@ export default function RateJobPage() {
   }
 
   function handlePhotoAdd() {
-    // Simulate adding a photo
     const id = Math.random().toString(36).slice(2);
     setPhotos((prev) => [...prev, id]);
   }
 
-  function handleSubmit() {
+  async function handleSubmit() {
     if (overallRating === 0) return;
-    setSubmitted(true);
+
+    if (isDemo) {
+      setSubmitted(true);
+      return;
+    }
+
+    if (!booking) return;
+    if (booking.status !== "completed") {
+      setSubmitError("Only completed bookings can be rated");
+      return;
+    }
+
+    setSubmitting(true);
+    setSubmitError(null);
+    try {
+      // Build category list from non-zero ratings (e.g. ["quality:5","timeliness:4"])
+      const categoryEntries = Object.entries(categoryRatings)
+        .filter(([, v]) => v > 0)
+        .map(([k, v]) => `${k}:${v}`);
+
+      const res = await fetch("/api/reviews", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          bookingId: booking.id,
+          rating: overallRating,
+          comment: review.trim() || null,
+          categories: categoryEntries,
+        }),
+      });
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({}));
+        throw new Error(err.error ?? "Failed to submit review");
+      }
+      setSubmitted(true);
+    } catch (e: unknown) {
+      setSubmitError(e instanceof Error ? e.message : "Failed to submit review");
+    } finally {
+      setSubmitting(false);
+    }
   }
 
+  // ============ Render guards ============
+
+  if (!mounted || (loading && !isDemo)) {
+    return (
+      <div className="min-h-screen bg-background pb-28 flex items-center justify-center">
+        <Loader2 size={20} className="animate-spin text-text-tertiary" />
+      </div>
+    );
+  }
+
+  // Real-mode load error or non-completed booking guard
+  if (!isDemo) {
+    if (loadError || !booking) {
+      return (
+        <div className="min-h-screen bg-background pb-28 px-5 pt-14">
+          <Link href="/account" className="mb-4 inline-flex items-center gap-1.5 text-[13px] font-medium text-text-secondary">
+            <ChevronLeft size={16} />
+            Account
+          </Link>
+          <Card>
+            <div className="flex items-start gap-3">
+              <AlertTriangle size={18} className="text-error mt-0.5" />
+              <div>
+                <p className="text-[14px] font-semibold text-text-primary">Couldn&apos;t load this booking</p>
+                <p className="text-[12px] text-text-secondary mt-1">{loadError ?? "Unknown error"}</p>
+              </div>
+            </div>
+          </Card>
+        </div>
+      );
+    }
+    if (booking.status !== "completed") {
+      return (
+        <div className="min-h-screen bg-background pb-28 px-5 pt-14">
+          <Link href="/account" className="mb-4 inline-flex items-center gap-1.5 text-[13px] font-medium text-text-secondary">
+            <ChevronLeft size={16} />
+            Account
+          </Link>
+          <Card>
+            <div className="flex items-start gap-3">
+              <AlertTriangle size={18} className="text-warning mt-0.5" />
+              <div>
+                <p className="text-[14px] font-semibold text-text-primary">This booking isn&apos;t complete yet</p>
+                <p className="text-[12px] text-text-secondary mt-1">
+                  You can rate this visit after the technician marks it complete.
+                </p>
+                <Link href="/account" className="mt-3 inline-block text-[13px] font-semibold text-primary">
+                  Back to account
+                </Link>
+              </div>
+            </div>
+          </Card>
+        </div>
+      );
+    }
+  }
+
+  // ============ Display values ============
+
+  const techName = isDemo
+    ? DEMO_JOB.tech
+    : booking?.tech?.name ?? "Your technician";
+  const techFirstName = techName.split(" ")[0];
+  const techInitials = isDemo ? DEMO_JOB.techInitials : initialsOf(techName);
+  const dateLabel = isDemo
+    ? DEMO_JOB.date
+    : booking ? formatBookingDate(booking.scheduledDate) : "";
+  const hoursLabel = isDemo
+    ? DEMO_JOB.hours
+    : booking ? formatHours(booking.durationMinutes) : "";
+  const taskList: string[] = isDemo
+    ? DEMO_JOB.tasks
+    : (booking?.tasks ?? []).map((t) => t.label);
+  const description = isDemo
+    ? null
+    : booking?.description ?? null;
+
   const displayRating = overallHovered || overallRating;
-  const allCatsFilled = CATEGORY_RATINGS.every((c) => (categoryRatings[c.id] ?? 0) > 0);
 
   // --- Thank you state ---
   if (submitted) {
     return (
       <div className="min-h-screen bg-background flex flex-col items-center justify-center px-8 pt-14 pb-28">
-        {/* Confetti burst */}
         <div className="relative mb-6">
           {Array.from({ length: 24 }).map((_, i) => {
             const color = CONFETTI_COLORS[i % CONFETTI_COLORS.length];
@@ -149,10 +332,9 @@ export default function RateJobPage() {
 
         <h1 className="text-[28px] font-bold text-text-primary text-center">Thank you!</h1>
         <p className="text-[15px] text-text-secondary text-center mt-2 leading-relaxed max-w-[260px]">
-          Your review helps us keep Anthony's work excellent and improve the service.
+          Your review helps us keep {techFirstName}&apos;s work excellent and improve the service.
         </p>
 
-        {/* Star display */}
         <div className="mt-5 flex items-center gap-1.5">
           {Array.from({ length: 5 }).map((_, i) => (
             <Star
@@ -163,16 +345,19 @@ export default function RateJobPage() {
           ))}
         </div>
         <p className="text-[13px] text-text-secondary mt-1">
-          You rated Anthony {overallRating} out of 5 stars
+          You rated {techFirstName} {overallRating} out of 5 stars
         </p>
 
         <div className="mt-8 w-full space-y-3 max-w-sm">
           <Link href="/messages" className="block">
-            <Button variant="primary" fullWidth>Message Anthony</Button>
+            <Button variant="primary" fullWidth>Message {techFirstName}</Button>
           </Link>
-          <Link href="/" className="block">
-            <Button variant="outline" fullWidth>Back to Home</Button>
-          </Link>
+          <button
+            onClick={() => router.push("/account")}
+            className="w-full"
+          >
+            <Button variant="outline" fullWidth>Back to Account</Button>
+          </button>
         </div>
       </div>
     );
@@ -198,33 +383,43 @@ export default function RateJobPage() {
         <Card padding="md">
           <div className="flex items-center gap-3.5 mb-3.5">
             <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-full bg-primary text-[14px] font-bold text-white shadow-sm">
-              {JOB_DATA.techInitials}
+              {techInitials}
             </div>
             <div className="flex-1 min-w-0">
-              <p className="text-[15px] font-bold text-text-primary">{JOB_DATA.tech}</p>
-              <p className="text-[12px] text-text-secondary">{JOB_DATA.date} · {JOB_DATA.hours}</p>
+              <p className="text-[15px] font-bold text-text-primary truncate">{techName}</p>
+              <p className="text-[12px] text-text-secondary">
+                {dateLabel}{hoursLabel ? ` · ${hoursLabel}` : ""}
+              </p>
             </div>
             <span className="shrink-0 rounded-full bg-surface-secondary px-2.5 py-1 text-[10px] font-semibold text-text-secondary">
               Completed
             </span>
           </div>
           <div className="h-px bg-border mb-3.5" />
-          <p className="text-[12px] font-semibold uppercase tracking-wider text-text-tertiary mb-2">Work completed</p>
-          <ul className="space-y-1.5">
-            {JOB_DATA.tasks.map((task) => (
-              <li key={task} className="flex items-center gap-2">
-                <Check size={12} className="text-success shrink-0" strokeWidth={2.5} />
-                <span className="text-[13px] text-text-secondary">{task}</span>
-              </li>
-            ))}
-          </ul>
+          <p className="text-[12px] font-semibold uppercase tracking-wider text-text-tertiary mb-2">
+            Work completed
+          </p>
+          {taskList.length > 0 ? (
+            <ul className="space-y-1.5">
+              {taskList.map((task, i) => (
+                <li key={`${task}-${i}`} className="flex items-center gap-2">
+                  <Check size={12} className="text-success shrink-0" strokeWidth={2.5} />
+                  <span className="text-[13px] text-text-secondary">{task}</span>
+                </li>
+              ))}
+            </ul>
+          ) : description ? (
+            <p className="text-[13px] text-text-secondary">{description}</p>
+          ) : (
+            <p className="text-[13px] text-text-tertiary italic">No tasks recorded</p>
+          )}
         </Card>
 
         {/* Overall star rating */}
         <Card padding="lg">
           <p className="text-[15px] font-bold text-text-primary text-center mb-1">Overall Rating</p>
           <p className="text-[12px] text-text-secondary text-center mb-5">
-            How was your experience with {JOB_DATA.tech.split(" ")[0]}?
+            How was your experience with {techFirstName}?
           </p>
 
           <div className="flex justify-center mb-3">
@@ -249,7 +444,7 @@ export default function RateJobPage() {
           </div>
         </Card>
 
-        {/* Category ratings — shown after overall is selected */}
+        {/* Category ratings */}
         {showCategories && (
           <Card padding="md">
             <p className="text-[13px] font-bold text-text-primary mb-4">Rate specific areas</p>
@@ -286,8 +481,9 @@ export default function RateJobPage() {
             <textarea
               value={review}
               onChange={(e) => setReview(e.target.value)}
-              placeholder={`Tell others about your experience with ${JOB_DATA.tech.split(" ")[0]}…`}
+              placeholder={`Tell others about your experience with ${techFirstName}…`}
               rows={4}
+              maxLength={500}
               className="w-full resize-none rounded-xl border border-border bg-surface-secondary px-4 py-3 text-[13px] text-text-primary placeholder:text-text-tertiary focus:border-primary focus:outline-none focus:bg-surface transition-all leading-relaxed"
             />
             <p className="text-[11px] text-text-tertiary mt-2 text-right">
@@ -296,7 +492,7 @@ export default function RateJobPage() {
           </Card>
         )}
 
-        {/* Photo upload */}
+        {/* Photo upload (local-only stub for now) */}
         {showCategories && (
           <Card padding="md">
             <div className="flex items-center justify-between mb-3">
@@ -369,15 +565,26 @@ export default function RateJobPage() {
           </Card>
         )}
 
+        {submitError && (
+          <p className="text-center text-[12px] text-error -mt-2">{submitError}</p>
+        )}
+
         {/* Submit */}
         <Button
           variant="primary"
           fullWidth
           size="lg"
-          disabled={overallRating === 0}
+          disabled={overallRating === 0 || submitting}
           onClick={handleSubmit}
         >
-          Submit Review
+          {submitting ? (
+            <span className="inline-flex items-center gap-2">
+              <Loader2 size={16} className="animate-spin" />
+              Submitting…
+            </span>
+          ) : (
+            "Submit Review"
+          )}
         </Button>
 
         {overallRating === 0 && (

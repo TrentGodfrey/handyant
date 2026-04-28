@@ -11,6 +11,7 @@ import {
   Plus, AlertTriangle, Check, Package, Star,
 } from "lucide-react";
 import { useDemoMode } from "@/lib/useDemoMode";
+import { toast } from "@/components/Toaster";
 
 // ── Types ────────────────────────────────────────────────────────────────────
 
@@ -18,6 +19,7 @@ type UiStatus = "confirmed" | "pending" | "needs-parts" | "in-progress" | "sched
 
 interface JobDetail {
   id: string;
+  customerId?: string;
   client: string;
   address: string;
   phone: string;
@@ -131,6 +133,7 @@ function bookingToDetail(b: ApiBooking): JobDetail {
 
   return {
     id: b.id,
+    customerId: b.customer?.id,
     client: b.customer?.name ?? "Customer",
     address: homeStr,
     phone: b.customer?.phone ?? "",
@@ -235,7 +238,8 @@ export default function JobDetailPage({ params }: { params: Promise<{ id: string
       method: "PATCH",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ done: newDone }),
-    }).catch(() => {
+    }).catch((e) => {
+      toast.error("Failed to update task: " + (e instanceof Error ? e.message : String(e)));
       // revert on failure
       setTasks((prev) => prev.map((t) => t.id === taskId ? { ...t, done: !newDone } : t));
     });
@@ -316,7 +320,9 @@ export default function JobDetailPage({ params }: { params: Promise<{ id: string
       method: "PATCH",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ techNotes: updated }),
-    }).catch(() => {});
+    }).catch((e) => {
+      toast.error("Failed to save note: " + (e instanceof Error ? e.message : String(e)));
+    });
   }
 
   async function completeJob() {
@@ -456,7 +462,14 @@ export default function JobDetailPage({ params }: { params: Promise<{ id: string
             <Phone size={14} />
             Call
           </a>
-          <Link href="/messages" className="flex flex-1 items-center justify-center gap-1.5 rounded-xl border border-border bg-surface py-2.5 text-[13px] font-semibold text-text-primary hover:bg-surface-secondary transition-colors">
+          <Link
+            href={
+              job.customerId
+                ? `/admin-messages?customerId=${encodeURIComponent(job.customerId)}`
+                : "/admin-messages"
+            }
+            className="flex flex-1 items-center justify-center gap-1.5 rounded-xl border border-border bg-surface py-2.5 text-[13px] font-semibold text-text-primary hover:bg-surface-secondary transition-colors"
+          >
             <MessageCircle size={14} />
             Message
           </Link>

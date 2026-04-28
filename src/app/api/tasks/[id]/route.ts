@@ -12,16 +12,26 @@ export async function PATCH(req: NextRequest, ctx: { params: Promise<{ id: strin
     include: { booking: true },
   });
   if (!task) return notFound("Task not found");
-  if (task.booking.customerId !== user.id && task.booking.techId !== user.id && user.role !== "tech") {
-    return forbidden();
-  }
+
+  const isCustomerOwner = task.booking.customerId === user.id;
+  const isAssignedTech = user.role === "tech" && task.booking.techId === user.id;
+  if (!isCustomerOwner && !isAssignedTech) return forbidden();
 
   const body = await req.json();
   const data: Record<string, unknown> = {};
-  if (body.done !== undefined) data.done = body.done;
-  if (body.label !== undefined) data.label = body.label;
-  if (body.notes !== undefined) data.notes = body.notes;
-  if (body.sortOrder !== undefined) data.sortOrder = body.sortOrder;
+
+  if (isAssignedTech) {
+    if (body.done !== undefined) data.done = body.done;
+    if (body.label !== undefined) data.label = body.label;
+    if (body.notes !== undefined) data.notes = body.notes;
+    if (body.sortOrder !== undefined) data.sortOrder = body.sortOrder;
+  } else {
+    // Customers may only toggle `done`; label/notes/sortOrder are tech-owned.
+    if (body.done !== undefined) data.done = body.done;
+    if (body.label !== undefined || body.notes !== undefined || body.sortOrder !== undefined) {
+      return forbidden();
+    }
+  }
 
   const updated = await prisma.task.update({ where: { id }, data });
   return Response.json(updated);
@@ -37,9 +47,11 @@ export async function DELETE(_req: NextRequest, ctx: { params: Promise<{ id: str
     include: { booking: true },
   });
   if (!task) return notFound("Task not found");
-  if (task.booking.customerId !== user.id && task.booking.techId !== user.id && user.role !== "tech") {
-    return forbidden();
-  }
+
+  // Only the assigned tech can delete a task entirely; customers can untick
+  // via PATCH but should never remove tasks.
+  const isAssignedTech = user.role === "tech" && task.booking.techId === user.id;
+  if (!isAssignedTech) return forbidden();
 
   await prisma.task.delete({ where: { id } });
   return Response.json({ ok: true });

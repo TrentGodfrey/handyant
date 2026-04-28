@@ -1,13 +1,16 @@
 import { NextRequest } from "next/server";
 import { prisma } from "@/lib/prisma";
-import { requireUser, unauthorized, badRequest } from "@/lib/session";
+import { requireUser, unauthorized, badRequest, forbidden } from "@/lib/session";
 
 export async function GET() {
   const user = await requireUser();
   if (!user) return unauthorized();
 
   const invoices = await prisma.invoice.findMany({
-    where: user.role === "tech" ? {} : { customerId: user.id },
+    where:
+      user.role === "tech"
+        ? { booking: { techId: user.id } }
+        : { customerId: user.id },
     include: {
       booking: {
         include: {
@@ -37,6 +40,7 @@ export async function POST(req: NextRequest) {
     include: { parts: true },
   });
   if (!booking) return Response.json({ error: "Booking not found" }, { status: 404 });
+  if (booking.techId !== user.id) return forbidden();
 
   const subtotal = body.subtotal ?? Number(booking.estimatedCost ?? 0);
   const tax = body.tax ?? 0;

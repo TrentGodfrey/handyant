@@ -27,6 +27,7 @@ import {
 } from "lucide-react";
 import Link from "next/link";
 import { useDemoMode } from "@/lib/useDemoMode";
+import { toast } from "@/components/Toaster";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -407,7 +408,9 @@ export default function HomeDetailPage({ params }: { params: Promise<{ id: strin
     // Optimistic
     setHome({ ...home, techNotes: home.techNotes.filter((n) => n.id !== noteId) });
     if (!isDemo) {
-      await fetch(`/api/homes/${id}/notes/${noteId}`, { method: "DELETE" }).catch(() => {});
+      await fetch(`/api/homes/${id}/notes/${noteId}`, { method: "DELETE" }).catch((e) => {
+        toast.error("Failed to delete note: " + (e instanceof Error ? e.message : String(e)));
+      });
     }
   }
 
@@ -463,7 +466,9 @@ export default function HomeDetailPage({ params }: { params: Promise<{ id: strin
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ status: newStatus }),
-      }).catch(() => {});
+      }).catch((e) => {
+        toast.error("Failed to update task: " + (e instanceof Error ? e.message : String(e)));
+      });
     }
   }
 
@@ -471,7 +476,9 @@ export default function HomeDetailPage({ params }: { params: Promise<{ id: strin
     if (!home) return;
     setHome({ ...home, todos: home.todos.filter((t) => t.id !== todoId) });
     if (!isDemo) {
-      await fetch(`/api/homes/${id}/todos/${todoId}`, { method: "DELETE" }).catch(() => {});
+      await fetch(`/api/homes/${id}/todos/${todoId}`, { method: "DELETE" }).catch((e) => {
+        toast.error("Failed to delete task: " + (e instanceof Error ? e.message : String(e)));
+      });
     }
   }
 

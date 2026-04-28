@@ -1,6 +1,6 @@
 import { NextRequest } from "next/server";
 import { prisma } from "@/lib/prisma";
-import { requireUser, unauthorized, notFound, forbidden } from "@/lib/session";
+import { requireUser, unauthorized, notFound, forbidden, badRequest } from "@/lib/session";
 
 export async function GET(_req: NextRequest, ctx: { params: Promise<{ id: string }> }) {
   const user = await requireUser();
@@ -24,8 +24,9 @@ export async function GET(_req: NextRequest, ctx: { params: Promise<{ id: string
 
   if (!booking) return notFound("Booking not found");
 
-  const isOwner = booking.customerId === user.id || booking.techId === user.id;
-  if (!isOwner && user.role !== "tech") return forbidden();
+  const isCustomerOwner = booking.customerId === user.id;
+  const isAssignedTech = user.role === "tech" && booking.techId === user.id;
+  if (!isCustomerOwner && !isAssignedTech) return forbidden();
 
   return Response.json(booking);
 }
@@ -39,13 +40,23 @@ export async function PATCH(req: NextRequest, ctx: { params: Promise<{ id: strin
   if (!existing) return notFound("Booking not found");
 
   const isCustomer = existing.customerId === user.id;
-  const isTech = user.role === "tech";
+  const isTech = user.role === "tech" && existing.techId === user.id;
   if (!isCustomer && !isTech) return forbidden();
 
   const body = await req.json();
   const data: Record<string, unknown> = {};
 
-  if (body.status !== undefined) data.status = body.status;
+  if (body.status !== undefined) {
+    if (isTech) {
+      data.status = body.status;
+    } else if (isCustomer) {
+      // Customers may only cancel their own bookings.
+      if (body.status !== "cancelled") {
+        return badRequest("Customers may only set status to 'cancelled'");
+      }
+      data.status = "cancelled";
+    }
+  }
   if (body.techId !== undefined && isTech) data.techId = body.techId;
   if (body.scheduledDate !== undefined) data.scheduledDate = new Date(body.scheduledDate);
   if (body.scheduledTime !== undefined) data.scheduledTime = new Date(`1970-01-01T${body.scheduledTime}`);
@@ -77,7 +88,9 @@ export async function DELETE(_req: NextRequest, ctx: { params: Promise<{ id: str
 
   const existing = await prisma.booking.findUnique({ where: { id } });
   if (!existing) return notFound("Booking not found");
-  if (existing.customerId !== user.id && user.role !== "tech") return forbidden();
+  const isCustomer = existing.customerId === user.id;
+  const isTech = user.role === "tech" && existing.techId === user.id;
+  if (!isCustomer && !isTech) return forbidden();
 
   await prisma.booking.update({ where: { id }, data: { status: "cancelled" } });
   return Response.json({ ok: true });

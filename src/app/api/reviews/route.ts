@@ -36,6 +36,21 @@ export async function POST(req: NextRequest) {
   if (!booking) return Response.json({ error: "Booking not found" }, { status: 404 });
   if (booking.customerId !== user.id) return Response.json({ error: "Forbidden" }, { status: 403 });
   if (!booking.techId) return badRequest("Booking has no assigned tech");
+  if (booking.status !== "completed") {
+    return badRequest("Can only review completed bookings");
+  }
+
+  // Enforce one review per (booking, customer).
+  const existing = await prisma.review.findFirst({
+    where: { bookingId: body.bookingId, customerId: user.id },
+    select: { id: true },
+  });
+  if (existing) {
+    return Response.json(
+      { error: "You have already reviewed this booking" },
+      { status: 409 }
+    );
+  }
 
   const review = await prisma.review.create({
     data: {

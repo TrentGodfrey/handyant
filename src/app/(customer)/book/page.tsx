@@ -77,20 +77,35 @@ function buildCalendar(start: Date, weeksCount: number): CalendarDay[][] {
 const WEEKS_TOTAL = 10;
 const WEEKS_PER_PAGE = 3;
 
-const morningSlots = [
+// Demo-mode time slots — kept hardcoded so the demo doesn't hit the API.
+const demoMorningSlots = [
   { time: "8:00 AM", available: true },
   { time: "9:00 AM", available: true },
   { time: "10:00 AM", available: true },
   { time: "11:00 AM", available: true },
 ];
 
-const afternoonSlots = [
+const demoAfternoonSlots = [
   { time: "12:00 PM", available: false },
   { time: "1:00 PM", available: true },
   { time: "2:00 PM", available: true },
   { time: "3:00 PM", available: false },
   { time: "4:00 PM", available: true },
 ];
+
+interface ApiSlot { time: string; available: boolean; }
+interface DisplaySlot { time: string; available: boolean; }
+
+// Convert "08:30" → "8:30 AM" / "13:00" → "1:00 PM" for display.
+function hhmmToDisplay(hhmm: string): string {
+  const [hStr, mStr] = hhmm.split(":");
+  const h = parseInt(hStr, 10);
+  const m = mStr ?? "00";
+  if (Number.isNaN(h)) return hhmm;
+  const period = h >= 12 ? "PM" : "AM";
+  const displayHour = h === 0 ? 12 : h > 12 ? h - 12 : h;
+  return `${displayHour}:${m} ${period}`;
+}
 
 const fallbackCategories = [
   "General Repair", "Plumbing", "Electrical",
@@ -157,6 +172,11 @@ function BookingPageInner() {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [submitError, setSubmitError] = useState<string | null>(null);
 
+  // Real-mode availability state — fetched per selected date.
+  const [slots, setSlots] = useState<DisplaySlot[]>([]);
+  const [slotsLoading, setSlotsLoading] = useState(false);
+  const [slotsError, setSlotsError] = useState<string | null>(null);
+
   // Build a dynamic calendar starting from today
   const allCalendarWeeks = useMemo(() => buildCalendar(new Date(), WEEKS_TOTAL), []);
 
@@ -187,6 +207,50 @@ function BookingPageInner() {
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+  // Fetch real availability whenever the customer picks a new date (real mode only).
+  useEffect(() => {
+    if (isDemo) return;
+    if (selectedDay === null || selectedMonth === null || selectedYear === null) {
+      setSlots([]);
+      setSlotsError(null);
+      return;
+    }
+    const isoDate = toISODate(selectedDay, selectedMonth, selectedYear);
+    let cancelled = false;
+    setSlotsLoading(true);
+    setSlotsError(null);
+    fetch(`/api/availability?date=${isoDate}`)
+      .then((res) => {
+        if (!res.ok) throw new Error(`Request failed (${res.status})`);
+        return res.json();
+      })
+      .then((data: { slots: ApiSlot[] }) => {
+        if (cancelled) return;
+        const display = (data.slots ?? []).map((s) => ({
+          time: hhmmToDisplay(s.time),
+          available: s.available,
+        }));
+        setSlots(display);
+        // Drop the previously-picked time if it's no longer offered or available.
+        setSelectedTime((prev) => {
+          if (!prev) return prev;
+          const match = display.find((s) => s.time === prev);
+          return match && match.available ? prev : null;
+        });
+      })
+      .catch((err) => {
+        if (cancelled) return;
+        setSlots([]);
+        setSlotsError(err instanceof Error ? err.message : "Could not load availability");
+      })
+      .finally(() => {
+        if (!cancelled) setSlotsLoading(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [selectedDay, selectedMonth, selectedYear, isDemo]);
 
   const calendarWeeks = allCalendarWeeks.slice(calendarPage * WEEKS_PER_PAGE, (calendarPage + 1) * WEEKS_PER_PAGE);
   const totalPages = Math.ceil(allCalendarWeeks.length / WEEKS_PER_PAGE);
@@ -243,6 +307,32 @@ function BookingPageInner() {
 
   const selectedLabel = selectedDay && selectedMonth ? `${selectedMonth} ${selectedDay}` : null;
   const canStep1Continue = selectedDay !== null && selectedTime !== null && selectedYear !== null;
+
+  // Build morning/afternoon arrays from either the API (real) or the demo set.
+  const { morningSlots, afternoonSlots } = useMemo(() => {
+    const source: DisplaySlot[] = isDemo
+      ? [...demoMorningSlots, ...demoAfternoonSlots]
+      : slots;
+    const morning: DisplaySlot[] = [];
+    const afternoon: DisplaySlot[] = [];
+    for (const s of source) {
+      const isPM = /PM$/.test(s.time);
+      const hourPart = parseInt(s.time.split(":")[0], 10);
+      // 12:xx PM = noon (afternoon). All other PM = afternoon. AM = morning.
+      if (isPM && hourPart !== 12) {
+        afternoon.push(s);
+      } else if (isPM && hourPart === 12) {
+        afternoon.push(s);
+      } else {
+        morning.push(s);
+      }
+    }
+    return { morningSlots: morning, afternoonSlots: afternoon };
+  }, [isDemo, slots]);
+
+  const noSlotsForDay =
+    !isDemo && !slotsLoading && !slotsError && slots.length > 0 && slots.every((s) => !s.available);
+  const dayClosed = !isDemo && !slotsLoading && !slotsError && slots.length === 0 && selectedDay !== null;
 
   async function handleConfirmBooking() {
     if (isDemo) {
@@ -454,63 +544,86 @@ function BookingPageInner() {
                   Pick a Time for {selectedLabel}
                 </p>
 
-                {/* Morning */}
-                <div className="mb-4">
-                  <div className="flex items-center gap-2 mb-2">
-                    <Sun size={14} className="text-warning" />
-                    <span className="text-[12px] font-semibold text-text-secondary">Morning</span>
+                {slotsLoading ? (
+                  <div className="flex items-center justify-center py-8">
+                    <div className="h-6 w-6 border-2 border-primary border-t-transparent rounded-full animate-spin" />
                   </div>
-                  <div className="grid grid-cols-4 gap-2">
-                    {morningSlots.map(({ time, available }) => {
-                      const isSelected = selectedTime === time;
-                      return (
-                        <button
-                          key={time}
-                          disabled={!available}
-                          onClick={() => setSelectedTime(time)}
-                          className={`rounded-xl py-3 text-[13px] font-semibold transition-all ${
-                            isSelected
-                              ? "bg-primary text-white shadow-[0_2px_8px_rgba(37,99,235,0.3)]"
-                              : available
-                              ? "bg-surface border border-border text-text-secondary hover:border-primary/40 hover:bg-primary-50"
-                              : "bg-surface-secondary text-text-tertiary/40 cursor-not-allowed"
-                          }`}
-                        >
-                          {time.replace(" AM", "a").replace(" PM", "p")}
-                        </button>
-                      );
-                    })}
+                ) : slotsError ? (
+                  <div className="rounded-xl border border-error/20 bg-error/5 px-4 py-3 text-[13px] text-error">
+                    {slotsError}
                   </div>
-                </div>
+                ) : dayClosed || noSlotsForDay ? (
+                  <div className="rounded-xl border border-border bg-surface-secondary px-4 py-6 text-center">
+                    <p className="text-[13px] font-medium text-text-primary">
+                      Anthony isn&apos;t available this day
+                    </p>
+                    <p className="mt-1 text-[12px] text-text-tertiary">Pick another date.</p>
+                  </div>
+                ) : (
+                  <>
+                    {/* Morning */}
+                    {morningSlots.length > 0 && (
+                      <div className="mb-4">
+                        <div className="flex items-center gap-2 mb-2">
+                          <Sun size={14} className="text-warning" />
+                          <span className="text-[12px] font-semibold text-text-secondary">Morning</span>
+                        </div>
+                        <div className="grid grid-cols-4 gap-2">
+                          {morningSlots.map(({ time, available }) => {
+                            const isSelected = selectedTime === time;
+                            return (
+                              <button
+                                key={time}
+                                disabled={!available}
+                                onClick={() => setSelectedTime(time)}
+                                className={`rounded-xl py-3 text-[13px] font-semibold transition-all ${
+                                  isSelected
+                                    ? "bg-primary text-white shadow-[0_2px_8px_rgba(37,99,235,0.3)]"
+                                    : available
+                                    ? "bg-surface border border-border text-text-secondary hover:border-primary/40 hover:bg-primary-50"
+                                    : "bg-surface-secondary text-text-tertiary/40 cursor-not-allowed"
+                                }`}
+                              >
+                                {time.replace(" AM", "a").replace(" PM", "p")}
+                              </button>
+                            );
+                          })}
+                        </div>
+                      </div>
+                    )}
 
-                {/* Afternoon */}
-                <div>
-                  <div className="flex items-center gap-2 mb-2">
-                    <Sunset size={14} className="text-accent-coral" />
-                    <span className="text-[12px] font-semibold text-text-secondary">Afternoon</span>
-                  </div>
-                  <div className="grid grid-cols-4 gap-2">
-                    {afternoonSlots.map(({ time, available }) => {
-                      const isSelected = selectedTime === time;
-                      return (
-                        <button
-                          key={time}
-                          disabled={!available}
-                          onClick={() => setSelectedTime(time)}
-                          className={`rounded-xl py-3 text-[13px] font-semibold transition-all ${
-                            isSelected
-                              ? "bg-primary text-white shadow-[0_2px_8px_rgba(37,99,235,0.3)]"
-                              : available
-                              ? "bg-surface border border-border text-text-secondary hover:border-primary/40 hover:bg-primary-50"
-                              : "bg-surface-secondary text-text-tertiary/40 cursor-not-allowed"
-                          }`}
-                        >
-                          {time.replace(" AM", "a").replace(" PM", "p")}
-                        </button>
-                      );
-                    })}
-                  </div>
-                </div>
+                    {/* Afternoon */}
+                    {afternoonSlots.length > 0 && (
+                      <div>
+                        <div className="flex items-center gap-2 mb-2">
+                          <Sunset size={14} className="text-accent-coral" />
+                          <span className="text-[12px] font-semibold text-text-secondary">Afternoon</span>
+                        </div>
+                        <div className="grid grid-cols-4 gap-2">
+                          {afternoonSlots.map(({ time, available }) => {
+                            const isSelected = selectedTime === time;
+                            return (
+                              <button
+                                key={time}
+                                disabled={!available}
+                                onClick={() => setSelectedTime(time)}
+                                className={`rounded-xl py-3 text-[13px] font-semibold transition-all ${
+                                  isSelected
+                                    ? "bg-primary text-white shadow-[0_2px_8px_rgba(37,99,235,0.3)]"
+                                    : available
+                                    ? "bg-surface border border-border text-text-secondary hover:border-primary/40 hover:bg-primary-50"
+                                    : "bg-surface-secondary text-text-tertiary/40 cursor-not-allowed"
+                                }`}
+                              >
+                                {time.replace(" AM", "a").replace(" PM", "p")}
+                              </button>
+                            );
+                          })}
+                        </div>
+                      </div>
+                    )}
+                  </>
+                )}
               </div>
             )}
 

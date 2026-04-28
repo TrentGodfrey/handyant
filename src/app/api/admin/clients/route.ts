@@ -55,14 +55,28 @@ export async function POST(req: NextRequest) {
     return Response.json({ error: "Name is required" }, { status: 400 });
   }
 
-  const client = await prisma.user.create({
-    data: {
-      name: body.name,
-      email: body.email ?? null,
-      phone: body.phone ?? null,
-      role: "customer",
-    },
-  });
+  // Dedupe by email or phone — return existing customer rather than creating
+  // a duplicate User row (techs frequently re-add a client they've forgotten).
+  const dedupeOr: Array<Record<string, unknown>> = [];
+  if (body.email) dedupeOr.push({ email: body.email });
+  if (body.phone) dedupeOr.push({ phone: body.phone });
+
+  let client = dedupeOr.length
+    ? await prisma.user.findFirst({
+        where: { role: "customer", OR: dedupeOr },
+      })
+    : null;
+
+  if (!client) {
+    client = await prisma.user.create({
+      data: {
+        name: body.name,
+        email: body.email ?? null,
+        phone: body.phone ?? null,
+        role: "customer",
+      },
+    });
+  }
 
   if (body.address) {
     await prisma.home.create({

@@ -2,6 +2,7 @@
 
 import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
+import { signOut } from "next-auth/react";
 import dynamic from "next/dynamic";
 import Card from "@/components/Card";
 import Button from "@/components/Button";
@@ -29,6 +30,7 @@ import {
 } from "lucide-react";
 import { useDemoMode } from "@/lib/useDemoMode";
 import type { ServiceCity } from "@/components/ServiceAreaMap";
+import { toast } from "@/components/Toaster";
 
 // Lazy-loaded Leaflet map (no SSR — Leaflet needs `window`)
 const ServiceAreaMap = dynamic(() => import("@/components/ServiceAreaMap"), {
@@ -151,6 +153,29 @@ export default function SettingsPage() {
     sms: true,
     email: true,
   });
+
+  // Delete-account flow
+  const [deleteOpen, setDeleteOpen] = useState(false);
+  const [deleteConfirmText, setDeleteConfirmText] = useState("");
+  const [deleting, setDeleting] = useState(false);
+  const [deleteError, setDeleteError] = useState<string | null>(null);
+
+  async function confirmDeleteAccount() {
+    if (deleteConfirmText.trim() !== "DELETE") return;
+    setDeleting(true);
+    setDeleteError(null);
+    try {
+      const res = await fetch("/api/me", { method: "DELETE" });
+      if (!res.ok) {
+        const body = await res.json().catch(() => ({}));
+        throw new Error(body?.error ?? `Failed (${res.status})`);
+      }
+      await signOut({ callbackUrl: "/login" });
+    } catch (err) {
+      setDeleteError(err instanceof Error ? err.message : "Could not delete account");
+      setDeleting(false);
+    }
+  }
 
   useEffect(() => {
     if (!mounted) return;
@@ -462,13 +487,14 @@ export default function SettingsPage() {
   async function persistWorkingHours(next: WorkingHours) {
     if (isDemo) return;
     try {
-      await fetch("/api/admin/business", {
+      const res = await fetch("/api/admin/business", {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ workingHours: next }),
       });
-    } catch {
-      /* swallow */
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    } catch (e) {
+      toast.error("Couldn't save working hours: " + (e instanceof Error ? e.message : String(e)));
     }
   }
 
@@ -526,13 +552,14 @@ export default function SettingsPage() {
   async function persistNotifyPrefs(next: NotifyPrefs) {
     if (isDemo) return;
     try {
-      await fetch("/api/admin/business", {
+      const res = await fetch("/api/admin/business", {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ notifyPrefs: next }),
       });
-    } catch {
-      /* swallow */
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    } catch (e) {
+      toast.error("Couldn't save preferences: " + (e instanceof Error ? e.message : String(e)));
     }
   }
 
@@ -1039,12 +1066,68 @@ export default function SettingsPage() {
             <p className="text-[12px] text-text-tertiary mb-3">
               These actions are permanent and cannot be undone.
             </p>
-            <Button variant="danger" size="sm">
+            <Button
+              variant="danger"
+              size="sm"
+              onClick={() => {
+                setDeleteOpen(true);
+                setDeleteConfirmText("");
+                setDeleteError(null);
+              }}
+            >
               Delete Account
             </Button>
           </Card>
         </section>
       </div>
+
+      {/* Delete-account confirmation modal */}
+      {deleteOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 px-4">
+          <button
+            aria-label="Close"
+            className="absolute inset-0 cursor-default"
+            onClick={() => !deleting && setDeleteOpen(false)}
+          />
+          <div className="relative w-full max-w-md rounded-2xl bg-white shadow-xl p-6">
+            <h2 className="text-[18px] font-bold text-text-primary">Delete Account</h2>
+            <p className="mt-2 text-[13px] text-text-secondary">
+              This permanently removes your account and signs you out. To confirm, type
+              <span className="font-bold text-error"> DELETE </span>
+              below.
+            </p>
+            <input
+              type="text"
+              value={deleteConfirmText}
+              onChange={(e) => setDeleteConfirmText(e.target.value)}
+              autoFocus
+              placeholder="Type DELETE to confirm"
+              className="mt-4 w-full rounded-xl border border-border bg-surface px-4 py-2.5 text-[14px] text-text-primary placeholder:text-text-tertiary focus:border-error focus:outline-none"
+            />
+            {deleteError && (
+              <p className="mt-2 text-[12px] text-error">{deleteError}</p>
+            )}
+            <div className="mt-5 flex gap-2 justify-end">
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={() => setDeleteOpen(false)}
+                disabled={deleting}
+              >
+                Cancel
+              </Button>
+              <Button
+                variant="danger"
+                size="sm"
+                onClick={confirmDeleteAccount}
+                disabled={deleting || deleteConfirmText.trim() !== "DELETE"}
+              >
+                {deleting ? "Deleting…" : "Delete account"}
+              </Button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

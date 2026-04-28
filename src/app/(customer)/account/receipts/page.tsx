@@ -6,7 +6,7 @@ import { useSession } from "next-auth/react";
 import StatusBadge from "@/components/StatusBadge";
 import {
   ChevronLeft, Download, ChevronRight, Wrench, DollarSign,
-  FileText, CheckCircle, Loader2,
+  FileText, CheckCircle, Loader2, AlertTriangle, RotateCw,
 } from "lucide-react";
 import { useDemoMode } from "@/lib/useDemoMode";
 
@@ -89,6 +89,7 @@ export default function ReceiptsPage() {
   const [invoices, setInvoices] = useState<RealInvoice[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [reloadKey, setReloadKey] = useState(0);
   const [expanded, setExpanded] = useState<string | null>(null);
   const [paying, setPaying] = useState<string | null>(null);
   const [payError, setPayError] = useState<Record<string, string>>({});
@@ -115,7 +116,7 @@ export default function ReceiptsPage() {
         setInvoices([]);
       })
       .finally(() => setLoading(false));
-  }, [isDemo, mounted]);
+  }, [isDemo, mounted, reloadKey]);
 
   async function handlePay(invoiceId: string) {
     setPaying(invoiceId);
@@ -195,6 +196,24 @@ export default function ReceiptsPage() {
       </div>
 
       <div className="px-5 py-5 space-y-5">
+        {error && !isDemo && (
+          <div className="flex items-start gap-3 rounded-xl border border-error/30 bg-error-light p-3.5">
+            <AlertTriangle size={18} className="mt-0.5 shrink-0 text-error" />
+            <div className="flex-1 min-w-0">
+              <p className="text-[13px] font-semibold text-error">Couldn&rsquo;t load receipts</p>
+              <p className="mt-0.5 text-[12px] text-error/80 break-words">{error}</p>
+            </div>
+            <button
+              type="button"
+              onClick={() => setReloadKey((k) => k + 1)}
+              className="shrink-0 inline-flex items-center gap-1.5 rounded-lg bg-error px-3 py-1.5 text-[12px] font-semibold text-white hover:bg-red-700 transition-colors"
+            >
+              <RotateCw size={12} />
+              Retry
+            </button>
+          </div>
+        )}
+
         {/* Summary card */}
         <div className="grid grid-cols-3 gap-2">
           {[

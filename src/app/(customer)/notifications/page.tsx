@@ -5,7 +5,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import {
   ChevronLeft, Calendar, MessageCircle, Package, CheckCircle2,
-  DollarSign, CreditCard, Bell, BellOff,
+  DollarSign, CreditCard, Bell, BellOff, AlertTriangle, RotateCw,
 } from "lucide-react";
 import { useDemoMode } from "@/lib/useDemoMode";
 
@@ -198,6 +198,8 @@ export default function NotificationsPage() {
   const [notifications, setNotifications] = useState<Notification[]>([]);
   const [activeFilter, setActiveFilter] = useState<FilterType>("all");
   const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState<string | null>(null);
+  const [reloadKey, setReloadKey] = useState(0);
 
   useEffect(() => {
     if (!mounted) return;
@@ -206,8 +208,13 @@ export default function NotificationsPage() {
       setLoading(false);
       return;
     }
+    setLoading(true);
+    setLoadError(null);
     fetch("/api/notifications")
-      .then((r) => r.json())
+      .then(async (r) => {
+        if (!r.ok) throw new Error(`Failed to load notifications (${r.status})`);
+        return r.json();
+      })
       .then((data) => {
         if (Array.isArray(data)) {
           setNotifications(data.map(adapt));
@@ -215,9 +222,12 @@ export default function NotificationsPage() {
           setNotifications([]);
         }
       })
-      .catch(() => setNotifications([]))
+      .catch((e: unknown) => {
+        setLoadError(e instanceof Error ? e.message : "Failed to load notifications");
+        setNotifications([]);
+      })
       .finally(() => setLoading(false));
-  }, [isDemo, mounted]);
+  }, [isDemo, mounted, reloadKey]);
 
   const unreadCount = notifications.filter((n) => !n.read).length;
 
@@ -310,6 +320,26 @@ export default function NotificationsPage() {
           })}
         </div>
       </div>
+
+      {loadError && (
+        <div className="px-5 pt-4">
+          <div className="flex items-start gap-3 rounded-xl border border-error/30 bg-error-light p-3.5">
+            <AlertTriangle size={18} className="mt-0.5 shrink-0 text-error" />
+            <div className="flex-1 min-w-0">
+              <p className="text-[13px] font-semibold text-error">Couldn&rsquo;t load notifications</p>
+              <p className="mt-0.5 text-[12px] text-error/80 break-words">{loadError}</p>
+            </div>
+            <button
+              type="button"
+              onClick={() => setReloadKey((k) => k + 1)}
+              className="shrink-0 inline-flex items-center gap-1.5 rounded-lg bg-error px-3 py-1.5 text-[12px] font-semibold text-white hover:bg-red-700 transition-colors"
+            >
+              <RotateCw size={12} />
+              Retry
+            </button>
+          </div>
+        </div>
+      )}
 
       <div className="py-2">
         {loading ? (

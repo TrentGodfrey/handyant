@@ -19,7 +19,17 @@ export async function POST(req: NextRequest) {
   if (!user) return unauthorized();
 
   const body = await req.json();
-  const plan = body.plan ?? "basic";
+  const plan = body.plan ?? "free";
+
+  // TODO: integrate Stripe before allowing customer upgrades
+  // For now, customers can only set themselves to the free tier. Promotion to
+  // pro/premium must come from a tech-side endpoint or a future Stripe webhook.
+  if (user.role !== "tech" && plan !== "free") {
+    return Response.json(
+      { error: "Paid plans are not yet available — Stripe integration pending" },
+      { status: 403 }
+    );
+  }
 
   await prisma.subscription.updateMany({
     where: { customerId: user.id, status: "active" },

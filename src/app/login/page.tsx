@@ -1,9 +1,19 @@
 "use client";
 
-import { useState } from "react";
+import { Suspense, useState } from "react";
 import { signIn } from "next-auth/react";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import Link from "next/link";
+
+function ResetNotice() {
+  const searchParams = useSearchParams();
+  if (searchParams.get("reset") !== "1") return null;
+  return (
+    <div className="p-3 rounded-lg bg-green-50 text-green-700 text-sm">
+      Password reset. You can sign in with your new password.
+    </div>
+  );
+}
 
 export default function LoginPage() {
   const router = useRouter();
@@ -67,6 +77,10 @@ export default function LoginPage() {
 
         {/* Email form */}
         <form onSubmit={handleSubmit} className="space-y-4">
+          <Suspense fallback={null}>
+            <ResetNotice />
+          </Suspense>
+
           {error && (
             <div className="p-3 rounded-lg bg-red-50 text-red-600 text-sm">
               {error}
@@ -95,6 +109,14 @@ export default function LoginPage() {
               className="w-full px-4 py-3 rounded-xl border border-border bg-white text-foreground focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary"
               placeholder="••••••••"
             />
+            <div className="mt-1.5 text-right">
+              <Link
+                href="/forgot-password"
+                className="text-xs font-medium text-primary hover:underline"
+              >
+                Forgot password?
+              </Link>
+            </div>
           </div>
 
           <button

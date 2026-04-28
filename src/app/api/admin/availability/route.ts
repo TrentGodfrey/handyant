@@ -1,6 +1,6 @@
 import { NextRequest } from "next/server";
 import { prisma } from "@/lib/prisma";
-import { requireTech, unauthorized, badRequest } from "@/lib/session";
+import { requireTech, unauthorized, badRequest, notFound, forbidden } from "@/lib/session";
 
 export async function GET(req: NextRequest) {
   const tech = await requireTech();
@@ -57,8 +57,15 @@ export async function DELETE(req: NextRequest) {
   const id = req.nextUrl.searchParams.get("id");
   if (!id) return badRequest("id required");
 
-  await prisma.availabilityBlock.deleteMany({
-    where: { id, techId: tech.id },
+  // Verify ownership before deleting; surface 404/403 instead of silently
+  // succeeding when the block doesn't exist or belongs to another tech.
+  const block = await prisma.availabilityBlock.findUnique({
+    where: { id },
+    select: { techId: true },
   });
+  if (!block) return notFound("Availability block not found");
+  if (block.techId !== tech.id) return forbidden();
+
+  await prisma.availabilityBlock.delete({ where: { id } });
   return Response.json({ ok: true });
 }

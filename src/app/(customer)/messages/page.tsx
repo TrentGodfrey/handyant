@@ -4,6 +4,7 @@ import { useState, useRef, useEffect, useCallback } from "react";
 import { useSession } from "next-auth/react";
 import { Send, Camera, Paperclip, ArrowLeft, Phone, MoreVertical, MessageSquare } from "lucide-react";
 import { useDemoMode } from "@/lib/useDemoMode";
+import { toast as appToast } from "@/components/Toaster";
 
 interface Message {
   id: string;
@@ -42,6 +43,16 @@ interface ApiConversationUser {
   id: string;
   name: string | null;
   avatarUrl?: string | null;
+  lastSeenAt?: string | null;
+}
+
+const ONLINE_THRESHOLD_MS = 2 * 60 * 1000;
+
+function isOnline(lastSeenAt: string | null | undefined): boolean {
+  if (!lastSeenAt) return false;
+  const t = new Date(lastSeenAt).getTime();
+  if (Number.isNaN(t)) return false;
+  return Date.now() - t < ONLINE_THRESHOLD_MS;
 }
 
 interface ApiConversation {
@@ -212,7 +223,7 @@ export default function MessagesPage() {
           lastMessage: lastMsg?.text ?? "",
           time: fmtTime(lastMsg?.createdAt ?? null),
           unread: 0,
-          online: false,
+          online: isOnline(other?.lastSeenAt),
           nextVisit: visit
             ? `${new Date(visit.scheduledDate).toLocaleDateString([], { weekday: "short", month: "short", day: "numeric" })}`
             : "",
@@ -288,7 +299,10 @@ export default function MessagesPage() {
           [activeThread.id]: data.map((m: ApiMessage) => adaptMessage(m, userId)),
         }));
       })
-      .catch(() => {});
+      .catch((e) => {
+        if (cancelled) return;
+        appToast.error("Couldn't load messages: " + (e instanceof Error ? e.message : String(e)));
+      });
     return () => { cancelled = true; };
   }, [activeThread, isDemo, userId]);
 

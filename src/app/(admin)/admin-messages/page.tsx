@@ -1,6 +1,7 @@
 "use client";
 
-import { useState, useRef, useEffect, useCallback } from "react";
+import { useState, useRef, useEffect, useCallback, Suspense } from "react";
+import { useSearchParams } from "next/navigation";
 import { Send, Camera, Paperclip, ArrowLeft, MoreVertical, Search, Plus, X } from "lucide-react";
 import { useDemoMode } from "@/lib/useDemoMode";
 
@@ -14,6 +15,7 @@ interface Message {
 
 interface Conversation {
   id: string;
+  customerId?: string;
   client: string;
   initials: string;
   lastMessage: string;
@@ -145,12 +147,21 @@ function formatTimestamp(iso: string): string {
 
 type ApiConvo = {
   id: string;
-  customer: { id: string; name: string | null; avatarUrl?: string | null } | null;
-  tech: { id: string; name: string | null; avatarUrl?: string | null } | null;
+  customer: { id: string; name: string | null; avatarUrl?: string | null; lastSeenAt?: string | null } | null;
+  tech: { id: string; name: string | null; avatarUrl?: string | null; lastSeenAt?: string | null } | null;
   lastMessage: { id: string; text: string; createdAt: string; senderId: string } | null;
   lastMessageAt: string | null;
   unreadCount: number;
 };
+
+const ONLINE_THRESHOLD_MS = 2 * 60 * 1000;
+
+function isOnline(lastSeenAt: string | null | undefined): boolean {
+  if (!lastSeenAt) return false;
+  const t = new Date(lastSeenAt).getTime();
+  if (Number.isNaN(t)) return false;
+  return Date.now() - t < ONLINE_THRESHOLD_MS;
+}
 
 type ApiMessage = {
   id: string;
@@ -193,7 +204,17 @@ function formatVisit(dateStr: string, timeStr: string): string {
 // ─── Component ──────────────────────────────────────────────────────────────
 
 export default function AdminMessagesPage() {
+  return (
+    <Suspense fallback={<div className="min-h-screen bg-background" />}>
+      <AdminMessagesPageInner />
+    </Suspense>
+  );
+}
+
+function AdminMessagesPageInner() {
   const { isDemo, mounted } = useDemoMode();
+  const searchParams = useSearchParams();
+  const customerIdParam = searchParams.get("customerId");
 
   const [conversations, setConversations] = useState<Conversation[]>([]);
   const [activeConvo, setActiveConvo] = useState<Conversation | null>(null);
@@ -208,7 +229,12 @@ export default function AdminMessagesPage() {
   const [clientsLoading, setClientsLoading] = useState(false);
   const [pickerSearch, setPickerSearch] = useState("");
   const [creating, setCreating] = useState(false);
+  const [hiddenConvoIds, setHiddenConvoIds] = useState<Set<string>>(new Set());
+  const [convoMenuOpen, setConvoMenuOpen] = useState(false);
+  const [uploadingPhoto, setUploadingPhoto] = useState(false);
   const bottomRef = useRef<HTMLDivElement>(null);
+  const fileInputRef = useRef<HTMLInputElement | null>(null);
+  const cameraInputRef = useRef<HTMLInputElement | null>(null);
 
   // ── Initial load ────────────────────────────────────────────────────────
   useEffect(() => {
@@ -252,6 +278,7 @@ export default function AdminMessagesPage() {
           const visit = c.customer ? visitByCustomer.get(c.customer.id) : undefined;
           return {
             id: c.id,
+            customerId: c.customer?.id,
             client: clientName,
             initials: initialsOf(clientName),
             lastMessage: c.lastMessage?.text ?? "",
@@ -259,7 +286,7 @@ export default function AdminMessagesPage() {
             unread: c.unreadCount ?? 0,
             nextVisit: visit ? formatVisit(visit.scheduledDate, visit.scheduledTime) : "",
             address: visit?.home?.address ?? "",
-            online: false,
+            online: isOnline(c.customer?.lastSeenAt),
             messages: [],
           };
         });
@@ -303,6 +330,62 @@ export default function AdminMessagesPage() {
   useEffect(() => {
     if (activeConvo) loadThread(activeConvo.id);
   }, [activeConvo, loadThread]);
+
+  // Deep-link: ?customerId=<id> auto-opens that customer's thread, creating one if needed.
+  const [autoOpened, setAutoOpened] = useState(false);
+  useEffect(() => {
+    if (autoOpened || !customerIdParam || loadingList) return;
+    const existing = conversations.find((c) => c.customerId === customerIdParam);
+    if (existing) {
+      setActiveConvo(existing);
+      setAutoOpened(true);
+      return;
+    }
+    if (isDemo) {
+      // Demo: nothing to look up — just bail.
+      setAutoOpened(true);
+      return;
+    }
+    // No existing conversation — create one. The POST response is just the raw
+    // Conversation row (no customer object), so we refetch the list to get the
+    // enriched form including customer name.
+    setAutoOpened(true);
+    fetch("/api/conversations", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ otherUserId: customerIdParam }),
+    })
+      .then((r) => (r.ok ? r.json() : null))
+      .then((convo: { id: string } | null) => {
+        if (!convo) return;
+        return fetch("/api/conversations")
+          .then((r) => (r.ok ? r.json() : []))
+          .then((list: ApiConvo[]) => {
+            const found = list.find((c) => c.id === convo.id);
+            if (!found) return;
+            const clientName = found.customer?.name ?? "Customer";
+            const fresh: Conversation = {
+              id: found.id,
+              customerId: found.customer?.id,
+              client: clientName,
+              initials: initialsOf(clientName),
+              lastMessage: found.lastMessage?.text ?? "",
+              time: formatRelative(found.lastMessageAt),
+              unread: found.unreadCount ?? 0,
+              nextVisit: "",
+              address: "",
+              online: isOnline(found.customer?.lastSeenAt),
+              messages: [],
+            };
+            setConversations((prev) =>
+              prev.some((c) => c.id === fresh.id) ? prev : [fresh, ...prev]
+            );
+            setMessagesByConvo((prev) => ({ ...prev, [fresh.id]: [] }));
+            setActiveConvo(fresh);
+          });
+      })
+      .catch(() => {});
+  }, [customerIdParam, conversations, loadingList, isDemo, autoOpened]);
 
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: "smooth" });
@@ -457,9 +540,121 @@ export default function AdminMessagesPage() {
     }
   }
 
-  const filtered = conversations.filter((c) =>
-    !search.trim() || c.client.toLowerCase().includes(search.toLowerCase())
-  );
+  // Photo upload from paperclip / camera buttons.
+  function readFileAsDataUrl(file: File): Promise<string> {
+    return new Promise((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onload = () => resolve(String(reader.result ?? ""));
+      reader.onerror = () => reject(new Error("Failed to read file"));
+      reader.readAsDataURL(file);
+    });
+  }
+
+  async function handlePhotoChange(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0];
+    e.target.value = ""; // allow re-selecting the same file
+    if (!file || !activeConvo) return;
+    setUploadingPhoto(true);
+
+    try {
+      if (isDemo) {
+        // Demo mode: append a local data-URL message.
+        const dataUrl = await readFileAsDataUrl(file);
+        setMessagesByConvo((prev) => ({
+          ...prev,
+          [activeConvo.id]: [
+            ...(prev[activeConvo.id] || []),
+            {
+              id: `tmp-${Date.now()}`,
+              text: `[photo] ${dataUrl}`,
+              sender: "tech",
+              timestamp: "Just now",
+              type: "photo",
+            },
+          ],
+        }));
+        return;
+      }
+
+      // Real mode: upload to /api/photos, then send the URL inline as a message.
+      // (Real attachments would need Message.attachmentUrl in the schema — out of scope.)
+      const dataUrl = await readFileAsDataUrl(file);
+      const photoRes = await fetch("/api/photos", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ dataUrl, label: file.name }),
+      });
+      if (!photoRes.ok) return;
+      const photo = await photoRes.json();
+      const url: string | undefined = photo?.url;
+      if (!url) return;
+
+      const text = `[photo] ${url}`;
+      const optimistic: Message = {
+        id: `tmp-${Date.now()}`,
+        text,
+        sender: "tech",
+        timestamp: "Just now",
+        type: "photo",
+      };
+      setMessagesByConvo((prev) => ({
+        ...prev,
+        [activeConvo.id]: [...(prev[activeConvo.id] || []), optimistic],
+      }));
+      const r = await fetch("/api/messages", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ conversationId: activeConvo.id, text }),
+      });
+      if (r.ok) {
+        const saved: ApiMessage = await r.json();
+        setMessagesByConvo((prev) => ({
+          ...prev,
+          [activeConvo.id]: (prev[activeConvo.id] || []).map((m) =>
+            m.id === optimistic.id
+              ? {
+                  id: saved.id,
+                  text: saved.text,
+                  sender: "tech",
+                  timestamp: formatTimestamp(saved.createdAt),
+                  type: "photo",
+                }
+              : m
+          ),
+        }));
+      }
+    } catch {
+      /* swallow — UI keeps optimistic state */
+    } finally {
+      setUploadingPhoto(false);
+    }
+  }
+
+  function archiveActiveConvo() {
+    if (!activeConvo) return;
+    // Local-only hide for now — the schema has no `archived` field on Conversation.
+    // TODO: when schema adds Conversation.archived, PATCH the conversation here.
+    setHiddenConvoIds((prev) => new Set(prev).add(activeConvo.id));
+    setActiveConvo(null);
+    setConvoMenuOpen(false);
+  }
+
+  function blockActiveConvo() {
+    if (!activeConvo) return;
+    if (typeof window !== "undefined" && !window.confirm(`Block ${activeConvo.client}? They won't be able to message you.`)) {
+      return;
+    }
+    // Local-only hide for now — same schema caveat as archive.
+    setHiddenConvoIds((prev) => new Set(prev).add(activeConvo.id));
+    setActiveConvo(null);
+    setConvoMenuOpen(false);
+  }
+
+  const filtered = conversations
+    .filter((c) => !hiddenConvoIds.has(c.id))
+    .filter((c) =>
+      !search.trim() || c.client.toLowerCase().includes(search.toLowerCase())
+    );
 
   const filteredClients = clients.filter((c) =>
     !pickerSearch.trim() ||
@@ -496,9 +691,41 @@ export default function AdminMessagesPage() {
               </p>
             </div>
           </div>
-          <button className="flex h-9 w-9 items-center justify-center rounded-full hover:bg-surface-secondary transition-colors">
-            <MoreVertical size={18} className="text-text-secondary" />
-          </button>
+          <div className="relative">
+            <button
+              type="button"
+              onClick={() => setConvoMenuOpen((v) => !v)}
+              className="flex h-9 w-9 items-center justify-center rounded-full hover:bg-surface-secondary transition-colors"
+              aria-label="Conversation options"
+            >
+              <MoreVertical size={18} className="text-text-secondary" />
+            </button>
+            {convoMenuOpen && (
+              <>
+                <button
+                  aria-label="Close menu"
+                  className="fixed inset-0 z-10 cursor-default"
+                  onClick={() => setConvoMenuOpen(false)}
+                />
+                <div className="absolute right-0 top-10 z-20 w-44 rounded-xl border border-border bg-white shadow-lg overflow-hidden">
+                  <button
+                    type="button"
+                    onClick={archiveActiveConvo}
+                    className="block w-full px-4 py-2.5 text-left text-[13px] text-text-primary hover:bg-surface-secondary transition-colors"
+                  >
+                    Archive conversation
+                  </button>
+                  <button
+                    type="button"
+                    onClick={blockActiveConvo}
+                    className="block w-full px-4 py-2.5 text-left text-[13px] text-error hover:bg-surface-secondary transition-colors"
+                  >
+                    Block client
+                  </button>
+                </div>
+              </>
+            )}
+          </div>
         </div>
 
         {/* Pinned Context */}
@@ -552,10 +779,37 @@ export default function AdminMessagesPage() {
         {/* Input */}
         <div className="bg-white border-t border-border px-4 py-3 pb-[env(safe-area-inset-bottom)] shrink-0">
           <div className="flex items-end gap-2">
-            <button className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full hover:bg-surface-secondary transition-colors">
+            <input
+              ref={fileInputRef}
+              type="file"
+              accept="image/*"
+              className="hidden"
+              onChange={handlePhotoChange}
+            />
+            <input
+              ref={cameraInputRef}
+              type="file"
+              accept="image/*"
+              capture="environment"
+              className="hidden"
+              onChange={handlePhotoChange}
+            />
+            <button
+              type="button"
+              onClick={() => fileInputRef.current?.click()}
+              disabled={uploadingPhoto}
+              className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full hover:bg-surface-secondary transition-colors disabled:opacity-50"
+              aria-label="Attach file"
+            >
               <Paperclip size={20} className="text-text-tertiary" />
             </button>
-            <button className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full hover:bg-surface-secondary transition-colors">
+            <button
+              type="button"
+              onClick={() => cameraInputRef.current?.click()}
+              disabled={uploadingPhoto}
+              className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full hover:bg-surface-secondary transition-colors disabled:opacity-50"
+              aria-label="Take photo"
+            >
               <Camera size={20} className="text-text-tertiary" />
             </button>
             <div className="flex-1 flex items-end gap-2 rounded-2xl border border-border bg-surface-secondary px-4 py-2.5">

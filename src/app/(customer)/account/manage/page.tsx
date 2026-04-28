@@ -11,6 +11,7 @@ import {
   Camera, X, AlertTriangle,
 } from "lucide-react";
 import { useDemoMode } from "@/lib/useDemoMode";
+import { PLANS, planMeta as sharedPlanMeta } from "@/lib/plans";
 
 const DEMO_USER = {
   name: "Sarah Mitchell",
@@ -48,20 +49,11 @@ interface SubscriptionRecord {
   endsAt: string | null;
 }
 
-const PLAN_PRESENTATION: Record<string, { label: string; price: string; details: string }> = {
-  basic: { label: "Basic", price: "$0/mo", details: "On-demand bookings · pay per visit" },
-  pro: { label: "Pro", price: "$149/mo", details: "2 visits/month · priority scheduling" },
-};
+// Plan presentation derived from shared PLANS source of truth (src/lib/plans.ts)
+const PLAN_PRESENTATION: Record<string, { label: string; price: string; details: string }> =
+  Object.fromEntries(PLANS.map((p) => [p.id, sharedPlanMeta(p.id)]));
 
-function planMeta(plan: string) {
-  return (
-    PLAN_PRESENTATION[plan] ?? {
-      label: plan.charAt(0).toUpperCase() + plan.slice(1),
-      price: "—",
-      details: "Custom plan",
-    }
-  );
-}
+const planMeta = sharedPlanMeta;
 
 function formatRenewalDate(iso: string | null): string | null {
   if (!iso) return null;
@@ -85,6 +77,12 @@ export default function AccountManagePage() {
   const [email, setEmail] = useState("");
   const [phone, setPhone] = useState("");
   const [avatarUrl, setAvatarUrl] = useState<string | null>(null);
+
+  // Email verification banner state (real mode only)
+  const [emailVerified, setEmailVerified] = useState<boolean | null>(null);
+  const [pendingEmail, setPendingEmail] = useState<string | null>(null);
+  const [verifySending, setVerifySending] = useState(false);
+  const [verifyMessage, setVerifyMessage] = useState<string | null>(null);
 
   // Address (from Home record in real mode)
   const [home, setHome] = useState<HomeRecord | null>(null);
@@ -168,6 +166,8 @@ export default function AccountManagePage() {
             setEmail(me.email ?? "");
             setPhone(me.phone ?? "");
             setAvatarUrl(me.avatarUrl ?? null);
+            setEmailVerified(me.emailVerified === true);
+            setPendingEmail(me.pendingEmail ?? null);
           }
         }
         if (homesRes.ok) {
@@ -351,6 +351,30 @@ export default function AccountManagePage() {
       setSubMessage(e instanceof Error ? e.message : "Failed to cancel subscription");
     } finally {
       setSubBusy(false);
+    }
+  }
+
+  // Resend email verification
+  async function handleResendVerification() {
+    if (isDemo) {
+      setVerifyMessage("Email verification disabled in demo mode");
+      setTimeout(() => setVerifyMessage(null), 3000);
+      return;
+    }
+    setVerifySending(true);
+    setVerifyMessage(null);
+    try {
+      const res = await fetch("/api/auth/verify-email/send", { method: "POST" });
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({}));
+        throw new Error(err.error ?? "Failed to send verification email");
+      }
+      setVerifyMessage("Verification email sent. Check your inbox.");
+      setTimeout(() => setVerifyMessage(null), 5000);
+    } catch (e: unknown) {
+      setVerifyMessage(e instanceof Error ? e.message : "Failed to send verification email");
+    } finally {
+      setVerifySending(false);
     }
   }
 
@@ -589,6 +613,40 @@ export default function AccountManagePage() {
 
       <div className="px-5 py-5 space-y-6">
 
+        {/* Email verification banner (real mode only, when unverified) */}
+        {!isDemo && emailVerified === false && (
+          <div className="rounded-xl border border-warning/30 bg-warning/10 p-3.5">
+            <div className="flex items-start gap-3">
+              <AlertTriangle size={18} className="text-warning mt-0.5 shrink-0" />
+              <div className="flex-1 min-w-0">
+                <p className="text-[13px] font-semibold text-text-primary">
+                  Email not verified
+                </p>
+                <p className="text-[12px] text-text-secondary mt-0.5">
+                  {pendingEmail
+                    ? `Confirm ${pendingEmail} to finish your email change.`
+                    : "Verify your email address to keep your account secure."}
+                </p>
+                <div className="mt-2 flex items-center gap-2">
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    onClick={handleResendVerification}
+                    disabled={verifySending}
+                  >
+                    {verifySending ? "Sending…" : "Resend verification"}
+                  </Button>
+                  {verifyMessage && (
+                    <span className="text-[12px] font-medium text-text-secondary">
+                      {verifyMessage}
+                    </span>
+                  )}
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
+
         {/* Avatar */}
         <div className="flex items-center gap-4">
           <button
@@ -640,7 +698,10 @@ export default function AccountManagePage() {
           <p className="mb-2 text-sm font-semibold uppercase tracking-wider text-text-secondary">Personal Information</p>
           <Card className="divide-y divide-border-light">
             <FieldRow label="Full Name" value={name} icon={User} field="name" onChange={setName} />
-            <FieldRow label="Email" value={email} icon={Mail} field="email" onChange={setEmail} readOnly />
+            {/* TODO: a parallel agent is wiring email-change-with-verification.
+                Hide the pencil for now by omitting onChange — FieldRow only renders
+                its edit button when an onChange handler is supplied. */}
+            <FieldRow label="Email" value={email} icon={Mail} field="email" readOnly />
             <FieldRow label="Phone" value={phone} icon={Phone} field="phone" onChange={setPhone} />
 
             {/* Service Address — inline editable (real + demo) */}

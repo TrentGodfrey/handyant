@@ -1,5 +1,6 @@
 import "dotenv/config";
 import { PrismaClient } from "../src/generated/prisma/client";
+import { BookingStatus, SubscriptionPlan } from "../src/generated/prisma/enums";
 import { PrismaPg } from "@prisma/adapter-pg";
 import { hash } from "bcryptjs";
 
@@ -49,13 +50,21 @@ async function main() {
   });
 
   // Customers + homes
-  const customerData = [
-    { name: "Sarah Mitchell", email: "sarah@example.com", phone: "(972) 555-0142", address: "4821 Oak Hollow Dr", city: "Plano", zip: "75024", plan: "pro" },
-    { name: "Robert Chen", email: "robert@example.com", phone: "(469) 555-0298", address: "1205 Elm Creek Ct", city: "Frisco", zip: "75034", plan: "pro" },
+  const customerData: Array<{
+    name: string;
+    email: string;
+    phone: string;
+    address: string;
+    city: string;
+    zip: string;
+    plan: SubscriptionPlan | null;
+  }> = [
+    { name: "Sarah Mitchell", email: "sarah@example.com", phone: "(972) 555-0142", address: "4821 Oak Hollow Dr", city: "Plano", zip: "75024", plan: SubscriptionPlan.pro },
+    { name: "Robert Chen", email: "robert@example.com", phone: "(469) 555-0298", address: "1205 Elm Creek Ct", city: "Frisco", zip: "75034", plan: SubscriptionPlan.pro },
     { name: "Maria Garcia", email: "maria@example.com", phone: "(817) 555-0377", address: "890 Sunset Ridge", city: "Roanoke", zip: "76262", plan: null },
     { name: "James Wilson", email: "james@example.com", phone: "(214) 555-0421", address: "2200 Heritage Trail", city: "McKinney", zip: "75070", plan: null },
-    { name: "Angela Torres", email: "angela@example.com", phone: "(972) 555-0188", address: "1100 Prairie Creek", city: "Waxahachie", zip: "75165", plan: "pro" },
-    { name: "Derek Nguyen", email: "derek@example.com", phone: "(469) 555-0512", address: "350 Creekside Blvd", city: "Allen", zip: "75002", plan: "pro" },
+    { name: "Angela Torres", email: "angela@example.com", phone: "(972) 555-0188", address: "1100 Prairie Creek", city: "Waxahachie", zip: "75165", plan: SubscriptionPlan.pro },
+    { name: "Derek Nguyen", email: "derek@example.com", phone: "(469) 555-0512", address: "350 Creekside Blvd", city: "Allen", zip: "75002", plan: SubscriptionPlan.pro },
   ];
 
   const customers: { id: string; name: string; homeId: string }[] = [];
@@ -202,7 +211,7 @@ async function main() {
         scheduledDate: day(b.dateOffset),
         scheduledTime: time(b.hour, b.minute ?? 0),
         durationMinutes: b.duration,
-        status: b.status,
+        status: b.status as BookingStatus,
         description: b.desc,
         estimatedCost: b.estimate,
         finalCost: b.finalCost ?? null,

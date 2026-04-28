@@ -176,6 +176,7 @@ export default function InvoicePage({ params }: { params: Promise<{ id: string }
   );
   const [sent, setSent] = useState<"text" | "email" | null>(null);
   const [copied, setCopied] = useState(false);
+  const [smsCopied, setSmsCopied] = useState(false);
 
   function loadInvoice() {
     if (isDemo) {
@@ -204,11 +205,11 @@ export default function InvoicePage({ params }: { params: Promise<{ id: string }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [jobId, isDemo, mounted]);
 
-  async function handleSend(method: "text" | "email") {
+  async function handleSendEmail() {
     if (!view) return;
     setSendError(null);
     if (isDemo) {
-      setSent(method);
+      setSent("email");
       setTimeout(() => setSent(null), 3500);
       return;
     }
@@ -216,21 +217,48 @@ export default function InvoicePage({ params }: { params: Promise<{ id: string }
       setSendError("Generate the invoice before sending.");
       return;
     }
+    if (!view.client.email) {
+      setSendError("Customer has no email address on file.");
+      return;
+    }
     setSending(true);
     try {
       const res = await fetch(`/api/invoices/${view.id}/send`, { method: "POST" });
-      if (!res.ok) {
-        const body = await res.json().catch(() => ({}));
+      const body = await res.json().catch(() => ({}));
+      if (!res.ok || body?.ok === false) {
         throw new Error(body?.error ?? `Send failed (${res.status})`);
       }
-      const updated = await res.json();
-      setView((prev) => (prev ? { ...prev, sentAt: updated?.sentAt ?? new Date().toISOString() } : prev));
-      setSent(method);
+      setView((prev) =>
+        prev ? { ...prev, sentAt: body?.sentAt ?? new Date().toISOString() } : prev
+      );
+      setSent("email");
       setTimeout(() => setSent(null), 3500);
     } catch (err) {
       setSendError(err instanceof Error ? err.message : "Could not send invoice.");
     } finally {
       setSending(false);
+    }
+  }
+
+  async function handleCopySmsLink() {
+    if (!view) return;
+    setSendError(null);
+    const phone = (view.client.phone ?? "").replace(/[^0-9+]/g, "");
+    const linkBase =
+      typeof window !== "undefined" ? window.location.origin : "https://handyant.jordangodfrey.com";
+    const link = `${linkBase}/account/receipts`;
+    const body = `Hi ${view.client.name.split(" ")[0] ?? ""}, here's your HandyAnt invoice ${view.number} for $${view.total.toFixed(2)}: ${link}`;
+    const smsHref = phone
+      ? `sms:${phone}?&body=${encodeURIComponent(body)}`
+      : `sms:?&body=${encodeURIComponent(body)}`;
+    try {
+      if (typeof window !== "undefined" && navigator.clipboard) {
+        await navigator.clipboard.writeText(smsHref);
+      }
+      setSmsCopied(true);
+      setTimeout(() => setSmsCopied(false), 2500);
+    } catch {
+      setSendError("Could not copy SMS link.");
     }
   }
 
@@ -479,20 +507,20 @@ export default function InvoicePage({ params }: { params: Promise<{ id: string }
           </p>
           <div className="grid grid-cols-2 gap-3">
             <button
-              onClick={() => handleSend("text")}
-              disabled={!view.exists || sending}
+              onClick={handleCopySmsLink}
+              disabled={!view.exists}
               className={`relative flex flex-col items-center gap-2.5 rounded-2xl border-2 px-4 py-4 transition-all duration-150 ${
-                sent === "text"
+                smsCopied
                   ? "border-success bg-success-light"
                   : "border-border bg-surface hover:border-primary/40 active:scale-[0.97] disabled:opacity-50"
               }`}
             >
-              {sent === "text" ? (
+              {smsCopied ? (
                 <>
                   <div className="flex h-10 w-10 items-center justify-center rounded-full bg-success">
                     <Check size={20} className="text-white" strokeWidth={2.5} />
                   </div>
-                  <p className="text-[13px] font-bold text-success">Sent!</p>
+                  <p className="text-[13px] font-bold text-success">SMS Link Copied!</p>
                 </>
               ) : (
                 <>
@@ -500,7 +528,7 @@ export default function InvoicePage({ params }: { params: Promise<{ id: string }
                     <MessageSquare size={20} className="text-primary" />
                   </div>
                   <div className="text-center">
-                    <p className="text-[13px] font-bold text-text-primary">Text Message</p>
+                    <p className="text-[13px] font-bold text-text-primary">Copy SMS Link</p>
                     <p className="text-[11px] text-text-tertiary">{view.client.phone || "—"}</p>
                   </div>
                 </>
@@ -508,7 +536,7 @@ export default function InvoicePage({ params }: { params: Promise<{ id: string }
             </button>
 
             <button
-              onClick={() => handleSend("email")}
+              onClick={handleSendEmail}
               disabled={!view.exists || sending}
               className={`relative flex flex-col items-center gap-2.5 rounded-2xl border-2 px-4 py-4 transition-all duration-150 ${
                 sent === "email"
@@ -522,6 +550,13 @@ export default function InvoicePage({ params }: { params: Promise<{ id: string }
                     <Check size={20} className="text-white" strokeWidth={2.5} />
                   </div>
                   <p className="text-[13px] font-bold text-success">Sent!</p>
+                </>
+              ) : sending ? (
+                <>
+                  <div className="flex h-10 w-10 items-center justify-center rounded-full bg-primary-50">
+                    <div className="h-5 w-5 border-2 border-primary border-t-transparent rounded-full animate-spin" />
+                  </div>
+                  <p className="text-[13px] font-bold text-text-primary">Sending…</p>
                 </>
               ) : (
                 <>
@@ -541,17 +576,17 @@ export default function InvoicePage({ params }: { params: Promise<{ id: string }
         </div>
 
         {/* ── Success banner ── */}
-        {sent && (
+        {sent === "email" && (
           <div className="flex items-center gap-3 rounded-2xl bg-success-light border border-success/20 px-4 py-3.5 animate-fade-in">
             <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-success">
               <Check size={18} className="text-white" strokeWidth={2.5} />
             </div>
             <div>
               <p className="text-[14px] font-bold text-success">
-                Invoice sent to {view.client.name}!
+                Invoice emailed to {view.client.name}!
               </p>
               <p className="text-[12px] text-success/80 mt-0.5">
-                Via {sent === "text" ? "text message" : "email"} · {view.number}
+                Sent to {view.client.email} · {view.number}
               </p>
             </div>
           </div>
@@ -564,10 +599,10 @@ export default function InvoicePage({ params }: { params: Promise<{ id: string }
             size="lg"
             fullWidth
             icon={<Send size={17} />}
-            onClick={() => handleSend("text")}
+            onClick={handleSendEmail}
             disabled={sending}
           >
-            {sending ? "Sending…" : `Send Invoice · $${view.total.toFixed(2)}`}
+            {sending ? "Sending…" : `Email Invoice · $${view.total.toFixed(2)}`}
           </Button>
         ) : (
           <Button
