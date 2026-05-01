@@ -30,7 +30,7 @@ const PLAN_VISUALS: Record<PlanId, {
     iconBg: "bg-primary-50",
     iconColor: "text-primary",
     borderActive: "border-primary",
-    headerBg: "bg-gradient-to-br from-primary-50 to-[#EFF6FF]",
+    headerBg: "bg-gradient-to-br from-primary-50 to-[#EAF4F4]",
   },
   premium: {
     icon: Crown,
@@ -257,7 +257,7 @@ export default function PlansPage() {
                   key={plan.id}
                   className={`rounded-2xl border-2 overflow-hidden transition-all duration-200 ${
                     isCurrent
-                      ? "border-primary shadow-[0_0_0_3px_rgba(37,99,235,0.1)]"
+                      ? "border-primary shadow-[0_0_0_3px_rgba(79,149,152,0.1)]"
                       : "border-border"
                   }`}
                 >

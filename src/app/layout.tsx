@@ -12,12 +12,12 @@ const inter = Inter({
 });
 
 export const metadata: Metadata = {
-  title: "Anthony's Handyman | DFW Home Services",
-  description: "Professional handyman services across DFW. Book online, manage your home, track repairs.",
+  title: "MCQ Home Co. | DFW Home Services",
+  description: "Meticulous Craftsman Quality. Professional handyman services across DFW. Book online, manage your home, track repairs.",
   appleWebApp: {
     capable: true,
     statusBarStyle: "default",
-    title: "Handyman",
+    title: "MCQ Home",
   },
 };
 

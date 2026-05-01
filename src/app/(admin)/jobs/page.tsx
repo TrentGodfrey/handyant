@@ -113,7 +113,7 @@ function bookingToJob(b: ApiBooking): Job {
 
 const STAGES: { key: PipelineStage; label: string; color: string; dotClass: string; borderClass: string; bgClass: string }[] = [
   { key: "pending", label: "Pending", color: "#F59E0B", dotClass: "bg-accent-amber", borderClass: "border-l-amber-400", bgClass: "bg-amber-50" },
-  { key: "confirmed", label: "Confirmed", color: "#2563EB", dotClass: "bg-primary", borderClass: "border-l-primary", bgClass: "bg-primary-50" },
+  { key: "confirmed", label: "Confirmed", color: "#4F9598", dotClass: "bg-primary", borderClass: "border-l-primary", bgClass: "bg-primary-50" },
   { key: "in-progress", label: "In Progress", color: "#8B5CF6", dotClass: "bg-[#8B5CF6]", borderClass: "border-l-[#8B5CF6]", bgClass: "bg-[#F5F3FF]" },
   { key: "completed", label: "Complete", color: "#16A34A", dotClass: "bg-success", borderClass: "border-l-success", bgClass: "bg-success-light" },
 ];
@@ -267,16 +267,16 @@ function JobsEmptyState({ hasSearch, searchQuery }: { hasSearch: boolean; search
       <div className="relative mb-5">
         <div className="flex h-24 w-24 items-center justify-center rounded-3xl bg-primary-50">
           <svg width="56" height="56" viewBox="0 0 56 56" fill="none" aria-hidden="true">
-            <rect x="8" y="14" width="36" height="30" rx="4" fill="#DBEAFE" stroke="#93C5FD" strokeWidth="1.5" />
-            <rect x="8" y="14" width="36" height="9" rx="4" fill="#2563EB" />
-            <rect x="18" y="10" width="3" height="8" rx="1.5" fill="#2563EB" />
-            <rect x="31" y="10" width="3" height="8" rx="1.5" fill="#2563EB" />
-            <circle cx="19" cy="30" r="2" fill="#93C5FD" />
-            <circle cx="28" cy="30" r="2" fill="#93C5FD" />
-            <circle cx="37" cy="30" r="2" fill="#93C5FD" />
-            <circle cx="19" cy="37" r="2" fill="#BFDBFE" />
-            <circle cx="28" cy="37" r="2" fill="#2563EB" />
-            <circle cx="37" cy="37" r="2" fill="#BFDBFE" />
+            <rect x="8" y="14" width="36" height="30" rx="4" fill="#D4E8E9" stroke="#A8CECF" strokeWidth="1.5" />
+            <rect x="8" y="14" width="36" height="9" rx="4" fill="#4F9598" />
+            <rect x="18" y="10" width="3" height="8" rx="1.5" fill="#4F9598" />
+            <rect x="31" y="10" width="3" height="8" rx="1.5" fill="#4F9598" />
+            <circle cx="19" cy="30" r="2" fill="#A8CECF" />
+            <circle cx="28" cy="30" r="2" fill="#A8CECF" />
+            <circle cx="37" cy="30" r="2" fill="#A8CECF" />
+            <circle cx="19" cy="37" r="2" fill="#B5D7D8" />
+            <circle cx="28" cy="37" r="2" fill="#4F9598" />
+            <circle cx="37" cy="37" r="2" fill="#B5D7D8" />
           </svg>
         </div>
         <div className="absolute -bottom-2 -right-2 flex h-9 w-9 items-center justify-center rounded-full bg-white shadow-[0_2px_8px_rgba(0,0,0,0.12)]">
@@ -289,7 +289,7 @@ function JobsEmptyState({ hasSearch, searchQuery }: { hasSearch: boolean; search
         Create your first job to start tracking visits and tasks.
       </p>
       <Link href="/schedule/new" className="mt-5">
-        <button className="flex items-center gap-2 rounded-xl bg-primary px-6 py-3 text-[14px] font-bold text-white shadow-[0_2px_8px_rgba(37,99,235,0.25)] active:bg-primary-dark transition-colors">
+        <button className="flex items-center gap-2 rounded-xl bg-primary px-6 py-3 text-[14px] font-bold text-white shadow-[0_2px_8px_rgba(79,149,152,0.25)] active:bg-primary-dark transition-colors">
           <Plus size={16} />
           Add New Job
         </button>

@@ -328,7 +328,7 @@ export default function AddNewClientPage() {
                     onClick={() => set("homeType", type)}
                     className={`flex-1 rounded-xl border-2 py-2.5 text-[13px] font-semibold transition-all duration-150 ${
                       form.homeType === type
-                        ? "border-primary bg-primary text-white shadow-[0_2px_8px_rgba(37,99,235,0.25)]"
+                        ? "border-primary bg-primary text-white shadow-[0_2px_8px_rgba(79,149,152,0.25)]"
                         : "border-border bg-surface text-text-secondary hover:border-primary/30"
                     }`}
                   >

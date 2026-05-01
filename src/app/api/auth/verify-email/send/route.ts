@@ -45,13 +45,13 @@ export async function POST() {
   const safeTarget = escapeHtml(target);
 
   const html = emailShell({
-    preheader: "Verify your HandyAnt email address",
+    preheader: "Verify your MCQ Home Co. email address",
     contentHtml: `
       <h1 style="margin:0 0 16px;font-size:20px;font-weight:700;">Verify your email</h1>
       <p style="margin:0 0 16px;">Hi ${safeName},</p>
       <p style="margin:0 0 16px;">Please confirm <strong>${safeTarget}</strong> is your email address. This link expires in 24 hours.</p>
       <p style="margin:24px 0;">
-        <a href="${safeUrl}" style="display:inline-block;background-color:#0a6ef0;color:#ffffff;text-decoration:none;padding:12px 22px;border-radius:10px;font-weight:600;">Verify email</a>
+        <a href="${safeUrl}" style="display:inline-block;background-color:#4F9598;color:#ffffff;text-decoration:none;padding:12px 22px;border-radius:10px;font-weight:600;">Verify email</a>
       </p>
       <p style="margin:0 0 8px;font-size:12px;color:#6a7280;">If the button doesn't work, paste this link into your browser:</p>
       <p style="margin:0;font-size:12px;color:#6a7280;word-break:break-all;">${safeUrl}</p>
@@ -61,9 +61,9 @@ export async function POST() {
 
   await sendEmail({
     to: target,
-    subject: "Verify your HandyAnt email address",
+    subject: "Verify your MCQ Home Co. email address",
     html,
-    text: `Verify your HandyAnt email: ${verifyUrl}\n\nThis link expires in 24 hours.`,
+    text: `Verify your MCQ Home Co. email: ${verifyUrl}\n\nThis link expires in 24 hours.`,
   });
 
   return Response.json({ ok: true });

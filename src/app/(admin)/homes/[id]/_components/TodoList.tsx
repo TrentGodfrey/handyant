@@ -57,7 +57,7 @@ export default function TodoList({
           </button>
           <button
             onClick={() => setShowAddTask((v) => !v)}
-            className="flex items-center gap-1 rounded-lg bg-primary px-2.5 py-1.5 text-[11px] font-semibold text-white active:bg-primary-dark transition-colors shadow-[0_1px_4px_rgba(37,99,235,0.30)]"
+            className="flex items-center gap-1 rounded-lg bg-primary px-2.5 py-1.5 text-[11px] font-semibold text-white active:bg-primary-dark transition-colors shadow-[0_1px_4px_rgba(79,149,152,0.30)]"
           >
             {showAddTask ? <X size={11} /> : <Plus size={11} />}
             {showAddTask ? "Cancel" : "Add Task"}

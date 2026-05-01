@@ -1,5 +1,5 @@
 /**
- * Centralized demo data for HandyAnt.
+ * Centralized demo data for MCQ Home Co.
  *
  * Demo customer/tech identities used across the customer + admin views when
  * the `demo_mode` cookie is set. Individual screens may extend these base

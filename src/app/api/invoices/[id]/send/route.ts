@@ -158,7 +158,7 @@ export async function POST(req: NextRequest, ctx: { params: Promise<{ id: string
   const contentHtml = `
     <h1 style="margin:0 0 6px;font-size:20px;color:#1a1a1a;">Invoice ${escapeHtml(invoice.number)}</h1>
     <p style="margin:0 0 18px;color:#6a7280;font-size:13px;">
-      Hi ${escapeHtml(customerName)} — thanks for choosing HandyAnt. Here's your invoice for today's service.
+      Hi ${escapeHtml(customerName)} — thanks for choosing MCQ Home Co.. Here's your invoice for today's service.
     </p>
 
     <div style="background-color:#f7f9fc;border-radius:10px;padding:14px 16px;margin-bottom:18px;">
@@ -191,14 +191,14 @@ export async function POST(req: NextRequest, ctx: { params: Promise<{ id: string
       </tr>
       <tr>
         <td style="padding:10px 0 4px;font-size:15px;font-weight:700;color:#1a1a1a;border-top:1px solid #ececec;">Total Due</td>
-        <td align="right" style="padding:10px 0 4px;font-size:18px;font-weight:700;color:#0a6ef0;border-top:1px solid #ececec;">${totalStr}</td>
+        <td align="right" style="padding:10px 0 4px;font-size:18px;font-weight:700;color:#4F9598;border-top:1px solid #ececec;">${totalStr}</td>
       </tr>
     </table>
 
     <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="margin-bottom:22px;">
       <tr>
         <td align="center" style="padding:0;">
-          <a href="${receiptsUrl}" style="display:inline-block;background-color:#0a6ef0;color:#ffffff;text-decoration:none;font-size:14px;font-weight:600;padding:12px 24px;border-radius:10px;">
+          <a href="${receiptsUrl}" style="display:inline-block;background-color:#4F9598;color:#ffffff;text-decoration:none;font-size:14px;font-weight:600;padding:12px 24px;border-radius:10px;">
             View Invoice Online
           </a>
         </td>
@@ -224,7 +224,7 @@ export async function POST(req: NextRequest, ctx: { params: Promise<{ id: string
   const textLines: string[] = [
     `Invoice ${invoice.number}`,
     ``,
-    `Hi ${customerName}, thanks for choosing HandyAnt.`,
+    `Hi ${customerName}, thanks for choosing MCQ Home Co..`,
     ``,
     `Service: ${description}`,
     ``,
@@ -252,7 +252,7 @@ export async function POST(req: NextRequest, ctx: { params: Promise<{ id: string
 
   const result = await sendEmail({
     to: customerEmail,
-    subject: `Invoice ${invoice.number} from HandyAnt — ${totalStr}`,
+    subject: `Invoice ${invoice.number} from MCQ Home Co. — ${totalStr}`,
     html,
     text: textLines.join("\n"),
   });

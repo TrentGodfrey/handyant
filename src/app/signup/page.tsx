@@ -54,11 +54,11 @@ export default function SignupPage() {
     <div className="min-h-screen flex items-center justify-center bg-background px-4">
       <div className="w-full max-w-sm space-y-6">
         <div className="text-center">
-          <div className="inline-flex items-center justify-center w-14 h-14 rounded-2xl bg-primary text-white text-2xl font-bold mb-3">
-            HA
+          <div className="inline-flex items-center justify-center w-14 h-14 rounded-2xl bg-primary text-white text-base font-black tracking-[-0.06em] mb-3">
+            MCQ
           </div>
           <h1 className="text-2xl font-bold text-foreground">Create account</h1>
-          <p className="text-secondary mt-1">Get started with HandyAnt</p>
+          <p className="text-secondary mt-1">Get started with MCQ Home Co.</p>
         </div>
 
         <button

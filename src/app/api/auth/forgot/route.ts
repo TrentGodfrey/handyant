@@ -39,13 +39,13 @@ export async function POST(req: NextRequest) {
     const safeUrl = escapeHtml(resetUrl);
 
     const html = emailShell({
-      preheader: "Reset your HandyAnt password",
+      preheader: "Reset your MCQ Home Co. password",
       contentHtml: `
         <h1 style="margin:0 0 16px;font-size:20px;font-weight:700;">Reset your password</h1>
         <p style="margin:0 0 16px;">Hi ${safeName},</p>
-        <p style="margin:0 0 16px;">We received a request to reset your HandyAnt password. Click the button below to set a new one. This link will expire in 1 hour.</p>
+        <p style="margin:0 0 16px;">We received a request to reset your MCQ Home Co. password. Click the button below to set a new one. This link will expire in 1 hour.</p>
         <p style="margin:24px 0;">
-          <a href="${safeUrl}" style="display:inline-block;background-color:#0a6ef0;color:#ffffff;text-decoration:none;padding:12px 22px;border-radius:10px;font-weight:600;">Reset password</a>
+          <a href="${safeUrl}" style="display:inline-block;background-color:#4F9598;color:#ffffff;text-decoration:none;padding:12px 22px;border-radius:10px;font-weight:600;">Reset password</a>
         </p>
         <p style="margin:0 0 8px;font-size:12px;color:#6a7280;">If the button doesn't work, paste this link into your browser:</p>
         <p style="margin:0;font-size:12px;color:#6a7280;word-break:break-all;">${safeUrl}</p>
@@ -55,9 +55,9 @@ export async function POST(req: NextRequest) {
 
     await sendEmail({
       to: user.email!,
-      subject: "Reset your HandyAnt password",
+      subject: "Reset your MCQ Home Co. password",
       html,
-      text: `Reset your HandyAnt password: ${resetUrl}\n\nThis link expires in 1 hour. If you didn't request a reset, you can ignore this email.`,
+      text: `Reset your MCQ Home Co. password: ${resetUrl}\n\nThis link expires in 1 hour. If you didn't request a reset, you can ignore this email.`,
     });
   }
 

@@ -1,6 +1,6 @@
 import Link from "next/link";
 import {
-  Wrench, Home, ArrowRight, CheckCircle2, Star, Shield, Clock,
+  ArrowRight, CheckCircle2, Star, Shield, Clock,
   Droplet, Zap, Hammer, PaintBucket, Square, Refrigerator, Trees, Wifi,
   CalendarPlus, MessageCircle, Sparkles, MapPin, ChevronRight,
 } from "lucide-react";
@@ -43,7 +43,7 @@ const testimonials = [
 const steps = [
   { n: 1, title: "Tell us what's broken", body: "Snap a photo, describe the job, or just pick from a list. Two minutes." },
   { n: 2, title: "Pick a time that works", body: "See real availability on Anthony's calendar. Mornings, evenings, weekends." },
-  { n: 3, title: "Get it fixed — for good", body: "Licensed, insured, and on time. Upfront pricing. Real receipts. Real warranties." },
+  { n: 3, title: "Get it fixed — for good", body: "Insured, reliable, and on time. Upfront pricing. Real receipts. Real warranties." },
 ];
 
 export default function LandingPage() {
@@ -53,11 +53,10 @@ export default function LandingPage() {
       <header className="sticky top-0 z-40 border-b border-border bg-white/80 backdrop-blur-lg">
         <div className="mx-auto flex max-w-6xl items-center justify-between px-5 py-3">
           <Link href="/" className="flex items-center gap-2.5">
-            <div className="relative flex h-9 w-9 items-center justify-center rounded-xl bg-primary shadow-[0_2px_8px_rgba(37,99,235,0.30)]">
-              <Home size={14} className="absolute text-white" style={{ top: 7, left: 8 }} />
-              <Wrench size={11} className="absolute text-white/80" style={{ bottom: 7, right: 7 }} />
+            <div className="relative flex h-9 w-9 items-center justify-center rounded-xl bg-primary shadow-[0_2px_8px_rgba(79,149,152,0.30)]">
+              <span className="text-[10px] font-black tracking-[-0.05em] text-white">MCQ</span>
             </div>
-            <span className="text-[18px] font-black tracking-tight text-text-primary">HandyAnt</span>
+            <span className="text-[18px] font-black tracking-tight text-text-primary">MCQ Home Co.</span>
           </Link>
           <div className="flex items-center gap-2">
             <Link
@@ -68,7 +67,7 @@ export default function LandingPage() {
             </Link>
             <Link
               href="/signup"
-              className="inline-flex items-center gap-1.5 rounded-full bg-primary px-4 py-2 text-[13px] font-semibold text-white shadow-[0_2px_8px_rgba(37,99,235,0.25)] hover:bg-primary-dark transition-colors"
+              className="inline-flex items-center gap-1.5 rounded-full bg-primary px-4 py-2 text-[13px] font-semibold text-white shadow-[0_2px_8px_rgba(79,149,152,0.25)] hover:bg-primary-dark transition-colors"
             >
               Get started
               <ArrowRight size={14} />
@@ -95,19 +94,19 @@ export default function LandingPage() {
               </div>
 
               <h1 className="text-[40px] sm:text-[48px] lg:text-[56px] font-black tracking-tight text-text-primary leading-[1.05]">
-                Your home&apos;s <span className="text-primary">handyman</span>,
+                <span className="text-primary">Meticulous</span> craftsman quality,
                 <br className="hidden sm:block" /> on speed dial.
               </h1>
 
               <p className="mt-5 max-w-xl mx-auto lg:mx-0 text-[16px] sm:text-[17px] leading-relaxed text-text-secondary">
                 Plumbing leaks, broken switches, that closet door that never closed right —
-                book Anthony in 30 seconds and stop adding things to a list nobody&apos;s ever going to read.
+                book MCQ Home Co. in 30 seconds and stop adding things to a list nobody&apos;s ever going to read.
               </p>
 
               <div className="mt-7 flex flex-col sm:flex-row items-stretch sm:items-center gap-3 sm:justify-center lg:justify-start">
                 <Link
                   href="/signup"
-                  className="inline-flex items-center justify-center gap-2 rounded-xl bg-primary px-6 py-3.5 text-[15px] font-bold text-white shadow-[0_4px_16px_rgba(37,99,235,0.30)] hover:bg-primary-dark transition-colors"
+                  className="inline-flex items-center justify-center gap-2 rounded-xl bg-primary px-6 py-3.5 text-[15px] font-bold text-white shadow-[0_4px_16px_rgba(79,149,152,0.30)] hover:bg-primary-dark transition-colors"
                 >
                   <CalendarPlus size={18} />
                   Book a visit
@@ -124,7 +123,7 @@ export default function LandingPage() {
               <div className="mt-6 flex items-center justify-center lg:justify-start gap-5 text-[12px] text-text-tertiary">
                 <div className="flex items-center gap-1.5">
                   <Shield size={14} className="text-success" />
-                  Licensed &amp; insured
+                  Insured &amp; reliable
                 </div>
                 <div className="flex items-center gap-1.5">
                   <Star size={14} className="text-warning fill-warning" />
@@ -209,7 +208,7 @@ export default function LandingPage() {
             { num: "4.9★", label: "86 reviews" },
             { num: "1,200+", label: "jobs completed" },
             { num: "DFW", label: "since 2024" },
-            { num: "TXH-2824", label: "TX licensed" },
+            { num: "$1M", label: "liability coverage" },
           ].map((s) => (
             <div key={s.label} className="text-center">
               <p className="text-[20px] sm:text-[24px] font-black text-text-primary leading-none">{s.num}</p>
@@ -259,7 +258,7 @@ export default function LandingPage() {
           <div className="grid gap-5 sm:grid-cols-3">
             {steps.map((s) => (
               <div key={s.n} className="relative rounded-2xl bg-white border border-border p-6">
-                <div className="absolute -top-4 left-6 flex h-9 w-9 items-center justify-center rounded-xl bg-primary text-white font-black shadow-[0_2px_8px_rgba(37,99,235,0.30)]">
+                <div className="absolute -top-4 left-6 flex h-9 w-9 items-center justify-center rounded-xl bg-primary text-white font-black shadow-[0_2px_8px_rgba(79,149,152,0.30)]">
                   {s.n}
                 </div>
                 <h3 className="mt-3 text-[18px] font-bold text-text-primary">{s.title}</h3>
@@ -366,7 +365,7 @@ export default function LandingPage() {
               </ul>
               <Link
                 href="/signup"
-                className="mt-6 flex items-center justify-center gap-2 rounded-xl bg-primary py-3 text-[14px] font-bold text-white shadow-[0_2px_8px_rgba(37,99,235,0.30)] hover:bg-primary-dark transition-colors"
+                className="mt-6 flex items-center justify-center gap-2 rounded-xl bg-primary py-3 text-[14px] font-bold text-white shadow-[0_2px_8px_rgba(79,149,152,0.30)] hover:bg-primary-dark transition-colors"
               >
                 <Sparkles size={15} />
                 Go Pro
@@ -418,12 +417,12 @@ export default function LandingPage() {
             Stop staring at the to-do list.
           </h2>
           <p className="mt-4 max-w-xl mx-auto text-[16px] text-text-secondary">
-            Book Anthony in 30 seconds. Get back to your life.
+            Book MCQ Home Co. in 30 seconds. Get back to your life.
           </p>
           <div className="mt-7 flex flex-col sm:flex-row items-stretch sm:items-center gap-3 sm:justify-center">
             <Link
               href="/signup"
-              className="inline-flex items-center justify-center gap-2 rounded-xl bg-primary px-7 py-3.5 text-[15px] font-bold text-white shadow-[0_4px_16px_rgba(37,99,235,0.30)] hover:bg-primary-dark transition-colors"
+              className="inline-flex items-center justify-center gap-2 rounded-xl bg-primary px-7 py-3.5 text-[15px] font-bold text-white shadow-[0_4px_16px_rgba(79,149,152,0.30)] hover:bg-primary-dark transition-colors"
             >
               <CalendarPlus size={18} />
               Book a visit
@@ -445,12 +444,11 @@ export default function LandingPage() {
           <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-6">
             <div className="flex items-center gap-2.5">
               <div className="relative flex h-8 w-8 items-center justify-center rounded-lg bg-primary">
-                <Home size={12} className="absolute text-white" style={{ top: 6, left: 7 }} />
-                <Wrench size={10} className="absolute text-white/80" style={{ bottom: 6, right: 6 }} />
+                <span className="text-[9px] font-black tracking-[-0.05em] text-white">MCQ</span>
               </div>
               <div>
-                <p className="text-[14px] font-black text-text-primary">HandyAnt</p>
-                <p className="text-[11px] text-text-tertiary">Plano, TX · TXH-2824</p>
+                <p className="text-[14px] font-black text-text-primary">MCQ Home Co.</p>
+                <p className="text-[11px] text-text-tertiary">Plano, TX · Insured &amp; Reliable</p>
               </div>
             </div>
 
@@ -465,7 +463,7 @@ export default function LandingPage() {
             </div>
           </div>
           <p className="mt-6 text-[11px] text-text-tertiary">
-            © {new Date().getFullYear()} HandyAnt. Licensed &amp; insured in Texas. Independently owned.
+            © {new Date().getFullYear()} MCQ Home Co. — Meticulous Craftsman Quality. Fully insured. Independently owned.
           </p>
         </div>
       </footer>

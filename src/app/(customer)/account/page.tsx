@@ -29,7 +29,7 @@ const DEMO_JOBS: PastJob[] = [
 const menuItems = [
   { icon: Home, label: "Home Profile", href: "/account/home", desc: "To-do list, WiFi, household info", color: "bg-primary-50", iconColor: "text-primary" },
   { icon: FileText, label: "Receipts & Invoices", href: "/account/receipts", desc: "View transaction history", color: "bg-success-light", iconColor: "text-success" },
-  { icon: CreditCard, label: "Payment Methods", href: "/account/manage", desc: "Add a payment method", color: "bg-[#EFF6FF]", iconColor: "text-info" },
+  { icon: CreditCard, label: "Payment Methods", href: "/account/manage", desc: "Add a payment method", color: "bg-[#EAF4F4]", iconColor: "text-info" },
   { icon: Bell, label: "Notifications", href: "/notifications", desc: "Text & email preferences", color: "bg-warning-light", iconColor: "text-accent-amber" },
   { icon: Settings, label: "Manage Account", href: "/account/manage", desc: "Profile, subscription, notifications", color: "bg-surface-secondary", iconColor: "text-text-secondary" },
 ];
@@ -78,7 +78,7 @@ export default function AccountPage() {
         <div className="flex items-start justify-between mb-5 lg:mb-4">
           <div className="flex items-center gap-4">
             <div className="relative">
-              <div className="flex h-[62px] w-[62px] items-center justify-center rounded-full bg-primary text-[22px] font-bold text-white shadow-[0_2px_12px_rgba(37,99,235,0.3)]">
+              <div className="flex h-[62px] w-[62px] items-center justify-center rounded-full bg-primary text-[22px] font-bold text-white shadow-[0_2px_12px_rgba(79,149,152,0.3)]">
                 {userInitials}
               </div>
               <div className="absolute -bottom-0.5 -right-0.5 h-4 w-4 rounded-full border-2 border-surface bg-success" />
@@ -126,7 +126,7 @@ export default function AccountPage() {
         <Link href="/messages" className="block">
           <Card className="flex items-center gap-4 border border-primary-100 bg-gradient-to-r from-primary-50 to-surface">
             <div className="relative shrink-0">
-              <div className="flex h-12 w-12 items-center justify-center rounded-full bg-primary shadow-[0_2px_10px_rgba(37,99,235,0.25)]">
+              <div className="flex h-12 w-12 items-center justify-center rounded-full bg-primary shadow-[0_2px_10px_rgba(79,149,152,0.25)]">
                 <MessageCircle size={22} className="text-white" />
               </div>
             </div>

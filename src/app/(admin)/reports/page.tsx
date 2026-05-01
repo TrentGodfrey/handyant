@@ -25,7 +25,7 @@ const demoRevenueData = [5200, 6100, 6800, 7200, 7500, 8200];
 const demoRevenueLabels = ["Oct", "Nov", "Dec", "Jan", "Feb", "Mar"];
 
 const demoServiceCategories = [
-  { name: "Plumbing", value: 2400, pct: 29, color: "#3B82F6" },
+  { name: "Plumbing", value: 2400, pct: 29, color: "#6FAEB1" },
   { name: "Electrical", value: 1900, pct: 23, color: "#8B5CF6" },
   { name: "General Repair", value: 1500, pct: 18, color: "#F59E0B" },
   { name: "Smart Home", value: 1200, pct: 15, color: "#10B981" },
@@ -58,7 +58,7 @@ const demoWeeklyBreakdown = [
   { day: "Sat", jobs: 1, revenue: 210 },
 ];
 
-const CATEGORY_COLORS = ["#3B82F6", "#8B5CF6", "#F59E0B", "#10B981", "#EC4899", "#6366F1", "#14B8A6", "#F43F5E"];
+const CATEGORY_COLORS = ["#6FAEB1", "#8B5CF6", "#F59E0B", "#10B981", "#EC4899", "#6366F1", "#14B8A6", "#F43F5E"];
 
 /* ── Types ── */
 
@@ -174,8 +174,8 @@ function RevenueChart({
     >
       <defs>
         <linearGradient id="revGradient" x1="0" y1="0" x2="0" y2="1">
-          <stop offset="0%" stopColor="#3B82F6" stopOpacity={0.25} />
-          <stop offset="100%" stopColor="#3B82F6" stopOpacity={0.02} />
+          <stop offset="0%" stopColor="#6FAEB1" stopOpacity={0.25} />
+          <stop offset="100%" stopColor="#6FAEB1" stopOpacity={0.02} />
         </linearGradient>
       </defs>
 
@@ -211,7 +211,7 @@ function RevenueChart({
       <polyline
         points={linePoints}
         fill="none"
-        stroke="#3B82F6"
+        stroke="#6FAEB1"
         strokeWidth={2}
         strokeLinecap="round"
         strokeLinejoin="round"
@@ -219,7 +219,7 @@ function RevenueChart({
 
       {/* Data points */}
       {points.map((p, i) => (
-        <circle key={i} cx={p.x} cy={p.y} r={3} fill="#3B82F6" />
+        <circle key={i} cx={p.x} cy={p.y} r={3} fill="#6FAEB1" />
       ))}
 
       {/* Labels */}

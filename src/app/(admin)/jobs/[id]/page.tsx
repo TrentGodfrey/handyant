@@ -729,7 +729,7 @@ export default function JobDetailPage({ params }: { params: Promise<{ id: string
                 <div key={i} className="flex items-center gap-3 py-3">
                   <div className={`flex h-8 w-8 shrink-0 items-center justify-center rounded-lg ${
                     part.status === "purchased" ? "bg-success-light" :
-                    part.status === "ordered" ? "bg-[#EFF6FF]" : "bg-warning-light"
+                    part.status === "ordered" ? "bg-[#EAF4F4]" : "bg-warning-light"
                   }`}>
                     <Package size={15} className={
                       part.status === "purchased" ? "text-success" :
@@ -742,7 +742,7 @@ export default function JobDetailPage({ params }: { params: Promise<{ id: string
                   </div>
                   <span className={`rounded-full px-2.5 py-0.5 text-[10px] font-semibold capitalize ${
                     part.status === "purchased" ? "bg-success-light text-success" :
-                    part.status === "ordered" ? "bg-[#EFF6FF] text-info" : "bg-warning-light text-accent-amber"
+                    part.status === "ordered" ? "bg-[#EAF4F4] text-info" : "bg-warning-light text-accent-amber"
                   }`}>
                     {part.status}
                   </span>

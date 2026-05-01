@@ -439,7 +439,7 @@ function BookingPageInner() {
                     onClick={() => setServiceType(id)}
                     className={`flex-1 rounded-xl border-2 p-4 text-left transition-all ${
                       serviceType === id
-                        ? "border-primary bg-primary-50 shadow-[0_0_0_1px_#2563EB]"
+                        ? "border-primary bg-primary-50 shadow-[0_0_0_1px_#4F9598]"
                         : "border-border bg-surface hover:border-primary/40"
                     }`}
                   >
@@ -505,7 +505,7 @@ function BookingPageInner() {
                           }}
                           className={`relative flex flex-col items-center justify-center rounded-xl h-11 transition-all ${
                             isSelected
-                              ? "bg-primary text-white shadow-[0_2px_8px_rgba(37,99,235,0.30)]"
+                              ? "bg-primary text-white shadow-[0_2px_8px_rgba(79,149,152,0.30)]"
                               : day.available
                               ? "bg-surface hover:bg-primary-50 text-text-primary"
                               : "text-text-tertiary/30 cursor-not-allowed"
@@ -579,7 +579,7 @@ function BookingPageInner() {
                                 onClick={() => setSelectedTime(time)}
                                 className={`rounded-xl py-3 text-[13px] font-semibold transition-all ${
                                   isSelected
-                                    ? "bg-primary text-white shadow-[0_2px_8px_rgba(37,99,235,0.3)]"
+                                    ? "bg-primary text-white shadow-[0_2px_8px_rgba(79,149,152,0.3)]"
                                     : available
                                     ? "bg-surface border border-border text-text-secondary hover:border-primary/40 hover:bg-primary-50"
                                     : "bg-surface-secondary text-text-tertiary/40 cursor-not-allowed"
@@ -610,7 +610,7 @@ function BookingPageInner() {
                                 onClick={() => setSelectedTime(time)}
                                 className={`rounded-xl py-3 text-[13px] font-semibold transition-all ${
                                   isSelected
-                                    ? "bg-primary text-white shadow-[0_2px_8px_rgba(37,99,235,0.3)]"
+                                    ? "bg-primary text-white shadow-[0_2px_8px_rgba(79,149,152,0.3)]"
                                     : available
                                     ? "bg-surface border border-border text-text-secondary hover:border-primary/40 hover:bg-primary-50"
                                     : "bg-surface-secondary text-text-tertiary/40 cursor-not-allowed"

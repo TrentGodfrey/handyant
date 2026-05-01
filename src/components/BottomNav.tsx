@@ -73,11 +73,10 @@ export default function BottomNav({ variant = "customer" }: { variant?: "custome
         {/* Logo + Role Switcher */}
         <div className="px-5 pt-6 pb-4 border-b border-gray-100">
           <div className="flex items-center gap-2.5 mb-4">
-            <div className="relative flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-primary shadow-[0_2px_8px_rgba(37,99,235,0.30)]">
-              <Home size={14} className="absolute text-white" style={{ top: 7, left: 8 }} />
-              <Wrench size={11} className="absolute text-white/80" style={{ bottom: 7, right: 7 }} />
+            <div className="relative flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-primary shadow-[0_2px_8px_rgba(79,149,152,0.30)]">
+              <span className="text-[10px] font-black tracking-[-0.05em] text-white">MCQ</span>
             </div>
-            <span className="text-[18px] font-black tracking-tight text-text-primary">HandyAnt</span>
+            <span className="text-[16px] font-black tracking-tight text-text-primary">MCQ Home Co.</span>
           </div>
 
           {/* Role Switcher — only for tech users */}
@@ -122,7 +121,7 @@ export default function BottomNav({ variant = "customer" }: { variant?: "custome
                   href={tab.href}
                   className={`flex items-center gap-3 rounded-xl px-3 py-2.5 transition-all ${
                     isActive
-                      ? "bg-primary text-white shadow-[0_2px_8px_rgba(37,99,235,0.20)]"
+                      ? "bg-primary text-white shadow-[0_2px_8px_rgba(79,149,152,0.20)]"
                       : "text-gray-500 hover:bg-gray-50 hover:text-gray-900"
                   }`}
                 >

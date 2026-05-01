@@ -202,7 +202,7 @@ function RouteSVG({ phase }: { phase: Phase }) {
         {/* Traveled portion */}
         <path
           d="M 30 95 C 80 95, 90 30, 160 30 C 230 30, 240 95, 290 95"
-          stroke="var(--color-primary, #2563EB)"
+          stroke="var(--color-primary, #4F9598)"
           strokeWidth="6"
           strokeLinecap="round"
           strokeDasharray="400"
@@ -220,7 +220,7 @@ function RouteSVG({ phase }: { phase: Phase }) {
         />
 
         {/* Start point (Anthony) */}
-        <circle cx="30" cy="95" r="6" fill="var(--color-primary, #2563EB)" />
+        <circle cx="30" cy="95" r="6" fill="var(--color-primary, #4F9598)" />
         <circle cx="30" cy="95" r="3" fill="white" />
 
         {/* End point (Home) */}
@@ -234,8 +234,8 @@ function RouteSVG({ phase }: { phase: Phase }) {
         {/* Moving truck icon - animated along path */}
         {phase === 1 && (
           <g className="animate-truck-move">
-            <circle r="12" fill="var(--color-primary, #2563EB)" className="drop-shadow-md" />
-            <circle r="10" fill="var(--color-primary, #2563EB)" />
+            <circle r="12" fill="var(--color-primary, #4F9598)" className="drop-shadow-md" />
+            <circle r="10" fill="var(--color-primary, #4F9598)" />
             {/* Truck icon simplified */}
             <rect x="-6" y="-4" width="8" height="7" rx="1" fill="white" />
             <rect x="2" y="-2" width="5" height="5" rx="1" fill="white" opacity="0.8" />
@@ -390,7 +390,7 @@ export default function TrackPage() {
     try {
       if (typeof navigator !== "undefined" && navigator.share) {
         await navigator.share({
-          title: "HandyAnt ETA",
+          title: "MCQ Home Co. ETA",
           text,
           url: shareUrl,
         });

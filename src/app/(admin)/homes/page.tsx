@@ -202,7 +202,7 @@ export default function HomesPage() {
           <h1 className="mt-0.5 text-[26px] font-bold text-text-primary leading-tight">Homes</h1>
         </div>
         <Link href="/homes/new">
-          <button className="flex items-center gap-1.5 rounded-xl bg-primary px-4 py-2.5 text-[13px] font-semibold text-white shadow-[0_2px_8px_rgba(37,99,235,0.30)] active:bg-primary-dark transition-colors">
+          <button className="flex items-center gap-1.5 rounded-xl bg-primary px-4 py-2.5 text-[13px] font-semibold text-white shadow-[0_2px_8px_rgba(79,149,152,0.30)] active:bg-primary-dark transition-colors">
             <Plus size={15} />
             Add Home
           </button>
@@ -279,7 +279,7 @@ export default function HomesPage() {
             <div className="flex h-20 w-20 items-center justify-center rounded-3xl bg-primary-50">
               <Home size={36} className="text-primary" />
             </div>
-            <div className="absolute -bottom-1 -right-1 flex h-8 w-8 items-center justify-center rounded-full bg-primary shadow-[0_2px_8px_rgba(37,99,235,0.30)]">
+            <div className="absolute -bottom-1 -right-1 flex h-8 w-8 items-center justify-center rounded-full bg-primary shadow-[0_2px_8px_rgba(79,149,152,0.30)]">
               <Plus size={16} className="text-white" />
             </div>
           </div>
@@ -288,7 +288,7 @@ export default function HomesPage() {
             Add your first client to start managing their home and visits.
           </p>
           <Link href="/homes/new" className="mt-5">
-            <button className="flex items-center gap-2 rounded-xl bg-primary px-6 py-3 text-[14px] font-bold text-white shadow-[0_2px_8px_rgba(37,99,235,0.25)] active:bg-primary-dark transition-colors">
+            <button className="flex items-center gap-2 rounded-xl bg-primary px-6 py-3 text-[14px] font-bold text-white shadow-[0_2px_8px_rgba(79,149,152,0.25)] active:bg-primary-dark transition-colors">
               <UserPlus size={16} />
               Add Your First Client
             </button>
@@ -319,7 +319,7 @@ export default function HomesPage() {
               Clear Search
             </button>
             <Link href="/homes/new">
-              <button className="flex items-center gap-2 rounded-xl bg-primary px-5 py-2.5 text-[13px] font-bold text-white shadow-[0_2px_8px_rgba(37,99,235,0.25)] active:bg-primary-dark transition-colors">
+              <button className="flex items-center gap-2 rounded-xl bg-primary px-5 py-2.5 text-[13px] font-bold text-white shadow-[0_2px_8px_rgba(79,149,152,0.25)] active:bg-primary-dark transition-colors">
                 <UserPlus size={14} />
                 Add Client
               </button>

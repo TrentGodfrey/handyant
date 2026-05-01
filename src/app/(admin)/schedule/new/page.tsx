@@ -385,7 +385,7 @@ function ScheduleNewPageInner() {
             onClick={() => setMode("job")}
             className={`flex flex-1 items-center justify-center gap-2 rounded-lg py-2.5 text-[13px] font-semibold transition-all duration-150 ${
               mode === "job"
-                ? "bg-primary text-white shadow-[0_2px_8px_rgba(37,99,235,0.25)]"
+                ? "bg-primary text-white shadow-[0_2px_8px_rgba(79,149,152,0.25)]"
                 : "text-text-secondary hover:text-text-primary"
             }`}
           >
@@ -519,7 +519,7 @@ function ScheduleNewPageInner() {
                           isPast
                             ? "text-text-tertiary/40 cursor-not-allowed"
                             : isSelected
-                            ? "bg-primary text-white shadow-[0_2px_8px_rgba(37,99,235,0.30)]"
+                            ? "bg-primary text-white shadow-[0_2px_8px_rgba(79,149,152,0.30)]"
                             : isToday
                             ? "border-2 border-primary text-primary bg-primary-50"
                             : "text-text-primary hover:bg-surface-secondary active:bg-border"
@@ -590,7 +590,7 @@ function ScheduleNewPageInner() {
                     onClick={() => setDuration(d)}
                     className={`rounded-xl border-2 px-4 py-2 text-[13px] font-semibold transition-all duration-150 ${
                       duration === d
-                        ? "border-primary bg-primary text-white shadow-[0_2px_8px_rgba(37,99,235,0.20)]"
+                        ? "border-primary bg-primary text-white shadow-[0_2px_8px_rgba(79,149,152,0.20)]"
                         : "border-border bg-surface text-text-secondary hover:border-primary/30"
                     }`}
                   >

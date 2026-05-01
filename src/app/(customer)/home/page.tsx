@@ -146,7 +146,7 @@ export default function CustomerHome() {
   }, [isDemo, mounted]);
 
   const trustStats = [
-    { icon: BadgeCheck, label: "Licensed & Insured", sub: "TX Contractor #TXH-2824", color: "text-primary" },
+    { icon: BadgeCheck, label: "Insured & Reliable", sub: "$1M liability coverage", color: "text-primary" },
     ...(reviewStats
       ? [{ icon: Star, label: `${reviewStats.avg} Rating`, sub: `${reviewStats.count} review${reviewStats.count === 1 ? "" : "s"}`, color: "text-warning" }]
       : []),
@@ -206,7 +206,7 @@ export default function CustomerHome() {
         {nextBooking && nextBooking.tech && (
           <div className="mb-5">
             <Link href="/track">
-              <div className="relative overflow-hidden rounded-2xl bg-gradient-to-r from-primary to-[#1D4ED8] p-4 active:scale-[0.99] transition-transform">
+              <div className="relative overflow-hidden rounded-2xl bg-gradient-to-r from-primary to-[#3E7B7E] p-4 active:scale-[0.99] transition-transform">
                 <div className="flex items-center justify-between">
                   <div className="flex-1 min-w-0">
                     <p className="text-[15px] font-bold text-white">
@@ -320,14 +320,14 @@ export default function CustomerHome() {
                 </p>
 
                 <Link href="/book" className="mt-4 w-full">
-                  <button className="flex w-full items-center justify-center gap-2 rounded-xl bg-primary py-3 text-[14px] font-bold text-white shadow-[0_2px_8px_rgba(37,99,235,0.25)] active:bg-primary-dark transition-colors">
+                  <button className="flex w-full items-center justify-center gap-2 rounded-xl bg-primary py-3 text-[14px] font-bold text-white shadow-[0_2px_8px_rgba(79,149,152,0.25)] active:bg-primary-dark transition-colors">
                     <CalendarPlus size={16} />
                     Book a Visit
                   </button>
                 </Link>
 
                 <p className="mt-3 text-[11px] text-text-tertiary">
-                  DFW Metro · Licensed &amp; Insured
+                  DFW Metro · Fully Insured
                 </p>
               </div>
             </Card>

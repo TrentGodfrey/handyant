@@ -84,7 +84,7 @@ export default function GlobalError({ error, reset }: GlobalErrorProps) {
               style={{
                 padding: "10px 18px",
                 borderRadius: 12,
-                background: "#2563EB",
+                background: "#4F9598",
                 color: "#FFFFFF",
                 fontSize: 14,
                 fontWeight: 600,

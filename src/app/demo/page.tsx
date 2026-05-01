@@ -9,10 +9,10 @@ export default function DemoPage() {
       <div className="w-full max-w-sm space-y-6 text-center">
         {/* Logo */}
         <div>
-          <div className="inline-flex items-center justify-center w-16 h-16 rounded-2xl bg-primary text-white text-3xl font-bold mb-4">
-            HA
+          <div className="inline-flex items-center justify-center w-16 h-16 rounded-2xl bg-primary text-white text-lg font-black tracking-[-0.06em] mb-4">
+            MCQ
           </div>
-          <h1 className="text-2xl font-bold text-foreground">HandyAnt Demo</h1>
+          <h1 className="text-2xl font-bold text-foreground">MCQ Home Co. Demo</h1>
           <p className="text-secondary mt-2 text-sm">
             Explore the full app as a customer or as Anthony (the handyman).
           </p>

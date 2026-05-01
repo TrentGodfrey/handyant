@@ -657,7 +657,7 @@ export default function AccountManagePage() {
             className="relative group"
             aria-label="Change avatar"
           >
-            <div className="relative h-16 w-16 rounded-full bg-primary text-white flex items-center justify-center text-[20px] font-bold overflow-hidden shadow-[0_2px_12px_rgba(37,99,235,0.3)]">
+            <div className="relative h-16 w-16 rounded-full bg-primary text-white flex items-center justify-center text-[20px] font-bold overflow-hidden shadow-[0_2px_12px_rgba(79,149,152,0.3)]">
               {avatarUrl ? (
                 <Image src={avatarUrl} alt="" fill sizes="64px" className="object-cover" />
               ) : (
@@ -1225,7 +1225,7 @@ export default function AccountManagePage() {
                   setShowDelete(false);
                   setDeleteText("");
                   if (typeof window !== "undefined") {
-                    window.location.href = "mailto:support@handyant.com?subject=Account%20deletion%20request";
+                    window.location.href = "mailto:support@mcqhome.co?subject=Account%20deletion%20request";
                   }
                 }}
               >

@@ -33,7 +33,7 @@ type PaymentMethod = {
 };
 
 const DEMO_PAYMENT_METHODS: PaymentMethod[] = [
-  { key: "venmo", name: "Venmo", handle: "@AnthonyHandyAnt", icon: Smartphone, color: "text-[#3D95CE] bg-[#E8F4FC]" },
+  { key: "venmo", name: "Venmo", handle: "@MCQHomeCo", icon: Smartphone, color: "text-[#3D95CE] bg-[#E8F4FC]" },
   { key: "zelle", name: "Zelle", handle: "(214) 555-0199", icon: DollarSign, color: "text-[#6D1ED4] bg-[#F3EAFD]" },
   { key: "card",  name: "Card",  handle: "Via secure link", icon: CreditCard, color: "text-success bg-success-light" },
 ];
@@ -325,7 +325,7 @@ export default function InvoicePage({ params }: { params: Promise<{ id: string }
     const linkBase =
       typeof window !== "undefined" ? window.location.origin : "https://handyant.jordangodfrey.com";
     const link = `${linkBase}/account/receipts`;
-    const body = `Hi ${view.client.name.split(" ")[0] ?? ""}, here's your HandyAnt invoice ${view.number} for $${view.total.toFixed(2)}: ${link}`;
+    const body = `Hi ${view.client.name.split(" ")[0] ?? ""}, here's your MCQ Home Co. invoice ${view.number} for $${view.total.toFixed(2)}: ${link}`;
     const smsHref = phone
       ? `sms:${phone}?&body=${encodeURIComponent(body)}`
       : `sms:?&body=${encodeURIComponent(body)}`;
@@ -452,11 +452,11 @@ export default function InvoicePage({ params }: { params: Promise<{ id: string }
             <div>
               <div className="flex items-center gap-2 mb-1">
                 <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-primary">
-                  <span className="text-[12px] font-bold text-white">HA</span>
+                  <span className="text-[9px] font-black tracking-[-0.06em] text-white">MCQ</span>
                 </div>
-                <span className="text-[18px] font-bold text-text-primary">HandyAnt</span>
+                <span className="text-[18px] font-bold text-text-primary">MCQ Home Co.</span>
               </div>
-              <p className="text-[11px] text-text-tertiary">Professional Home Services</p>
+              <p className="text-[11px] text-text-tertiary">Meticulous Craftsman Quality</p>
               <p className="text-[11px] text-text-tertiary">DFW Metro Area, TX</p>
             </div>
             <div className="text-right">

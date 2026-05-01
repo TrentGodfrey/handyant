@@ -10,18 +10,18 @@ export default function Icon() {
         style={{
           width: "100%",
           height: "100%",
-          background: "#2563EB",
+          background: "#4F9598",
           display: "flex",
           alignItems: "center",
           justifyContent: "center",
           color: "white",
           fontWeight: 800,
-          fontSize: 16,
+          fontSize: 12,
           fontFamily: "system-ui, sans-serif",
-          letterSpacing: "-0.05em",
+          letterSpacing: "-0.06em",
         }}
       >
-        HA
+        MCQ
       </div>
     ),
     { ...size },

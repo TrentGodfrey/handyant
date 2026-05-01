@@ -10,18 +10,18 @@ export default function AppleIcon() {
         style={{
           width: "100%",
           height: "100%",
-          background: "#2563EB",
+          background: "#4F9598",
           display: "flex",
           alignItems: "center",
           justifyContent: "center",
           color: "white",
           fontWeight: 800,
-          fontSize: 86,
+          fontSize: 70,
           fontFamily: "system-ui, sans-serif",
           letterSpacing: "-0.05em",
         }}
       >
-        HA
+        MCQ
       </div>
     ),
     { ...size },

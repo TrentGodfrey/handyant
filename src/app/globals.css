@@ -3,12 +3,12 @@
 
 :root {
   /* Brand */
-  --primary: #2563EB;
-  --primary-dark: #1D4ED8;
-  --primary-light: #3B82F6;
-  --primary-50: #EFF6FF;
-  --primary-100: #DBEAFE;
-  --primary-200: #BFDBFE;
+  --primary: #4F9598;
+  --primary-dark: #3E7B7E;
+  --primary-light: #6FAEB1;
+  --primary-50: #EAF4F4;
+  --primary-100: #D4E8E9;
+  --primary-200: #B5D7D8;
 
   /* Surfaces */
   --background: #FAF9F7;
@@ -25,7 +25,7 @@
   /* Borders */
   --border: #E5E7EB;
   --border-light: #F3F4F6;
-  --border-focus: #2563EB;
+  --border-focus: #4F9598;
 
   /* Status */
   --success: #16A34A;
@@ -48,7 +48,7 @@
   --shadow-card: 0 1px 4px rgba(0,0,0,0.08), 0 4px 16px rgba(0,0,0,0.04);
   --shadow-md: 0 4px 12px rgba(0,0,0,0.10);
   --shadow-lg: 0 8px 32px rgba(0,0,0,0.12);
-  --shadow-focus: 0 0 0 3px rgba(37,99,235,0.15);
+  --shadow-focus: 0 0 0 3px rgba(79,149,152,0.18);
 }
 
 @theme inline {

@@ -34,7 +34,7 @@ const DEMO_PHOTOS: DemoPhoto[] = [
   { id: "p5", visitDate: "Feb 28, 2026", visitLabel: "Feb 28 Visit", taskName: "Smart Thermostat Install", hasBefore: true, color: "bg-[#F0FDFA]", iconColor: "text-accent-teal", beforeLabel: "Old manual thermostat", afterLabel: "Ecobee installed & connected" },
   { id: "p6", visitDate: "Feb 10, 2026", visitLabel: "Feb 10 Visit", taskName: "Drywall Patch – Hallway", hasBefore: true, color: "bg-[#FFF7ED]", iconColor: "text-accent-coral", beforeLabel: "Hole from door handle", afterLabel: "Patched & painted" },
   { id: "p7", visitDate: "Feb 10, 2026", visitLabel: "Feb 10 Visit", taskName: "Drywall Patch – Bedroom", hasBefore: false, color: "bg-[#FEF2F2]", iconColor: "text-error" },
-  { id: "p8", visitDate: "Feb 10, 2026", visitLabel: "Feb 10 Visit", taskName: "Curtain Rod – Master", hasBefore: true, color: "bg-[#EFF6FF]", iconColor: "text-info", beforeLabel: "Empty window", afterLabel: "Double rod installed" },
+  { id: "p8", visitDate: "Feb 10, 2026", visitLabel: "Feb 10 Visit", taskName: "Curtain Rod – Master", hasBefore: true, color: "bg-[#EAF4F4]", iconColor: "text-info", beforeLabel: "Empty window", afterLabel: "Double rod installed" },
   { id: "p9", visitDate: "Jan 22, 2026", visitLabel: "Jan 22 Visit", taskName: "Bathroom Fan – Master", hasBefore: true, color: "bg-[#FAFAFA]", iconColor: "text-text-secondary", beforeLabel: "Old rattling fan", afterLabel: "New Broan fan installed" },
 ];
 
@@ -212,7 +212,7 @@ function DemoPhotoGallery() {
       <div className="fixed bottom-24 right-5 z-10">
         <button
           onClick={() => setUploadedCount((c) => c + 1)}
-          className="flex items-center gap-2 rounded-full bg-primary text-white px-5 py-3 text-[13px] font-semibold shadow-[0_4px_20px_rgba(37,99,235,0.4)] active:scale-[0.97] transition-all"
+          className="flex items-center gap-2 rounded-full bg-primary text-white px-5 py-3 text-[13px] font-semibold shadow-[0_4px_20px_rgba(79,149,152,0.4)] active:scale-[0.97] transition-all"
         >
           <Upload size={16} />
           Upload Photo
@@ -500,7 +500,7 @@ function RealPhotoGallery() {
           <button
             onClick={triggerUpload}
             disabled={uploading}
-            className="flex items-center gap-2 rounded-full bg-primary text-white px-5 py-3 text-[13px] font-semibold shadow-[0_4px_20px_rgba(37,99,235,0.4)] active:scale-[0.97] transition-all disabled:opacity-60"
+            className="flex items-center gap-2 rounded-full bg-primary text-white px-5 py-3 text-[13px] font-semibold shadow-[0_4px_20px_rgba(79,149,152,0.4)] active:scale-[0.97] transition-all disabled:opacity-60"
           >
             {uploading ? <Loader2 size={16} className="animate-spin" /> : <Upload size={16} />}
             {uploading ? "Uploading…" : "Upload Photo"}

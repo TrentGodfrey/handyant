@@ -82,14 +82,14 @@ export default function ServiceAreaMap({
                   ? "#7C3AED"
                   : "#A78BFA"
                 : active
-                  ? "#1D4ED8"
+                  ? "#3E7B7E"
                   : "#9CA3AF",
               fillColor: isCustom
                 ? active
                   ? "#8B5CF6"
                   : "#C4B5FD"
                 : active
-                  ? "#2563EB"
+                  ? "#4F9598"
                   : "#D1D5DB",
               fillOpacity: active ? 0.85 : 0.55,
               weight: active ? 2.5 : 1.5,

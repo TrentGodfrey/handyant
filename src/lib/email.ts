@@ -14,7 +14,7 @@ export interface SendEmailResult {
   error?: string;
 }
 
-const DEFAULT_FROM = "HandyAnt <onboarding@resend.dev>";
+const DEFAULT_FROM = "MCQ Home Co. <onboarding@resend.dev>";
 
 let cachedClient: Resend | null = null;
 
@@ -63,7 +63,7 @@ export async function sendEmail(params: SendEmailParams): Promise<SendEmailResul
 }
 
 /**
- * Wraps content in a simple HandyAnt-branded email shell.
+ * Wraps content in a simple MCQ Home Co.–branded email shell.
  * Pure inline CSS, table-based layout for max client compatibility.
  */
 export function emailShell({
@@ -78,13 +78,13 @@ export function emailShell({
   const safePreheader = preheader ? escapeHtml(preheader) : "";
   const safeFooter =
     footerNote ??
-    "HandyAnt — Professional Home Services in DFW. Reply to this email if you have any questions.";
+    "MCQ Home Co. — Meticulous Craftsman Quality home services in DFW. Reply to this email if you have any questions.";
   return `<!DOCTYPE html>
 <html lang="en">
 <head>
 <meta charset="utf-8" />
 <meta name="viewport" content="width=device-width,initial-scale=1" />
-<title>HandyAnt</title>
+<title>MCQ Home Co.</title>
 </head>
 <body style="margin:0;padding:0;background-color:#f4f5f7;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Helvetica,Arial,sans-serif;color:#1a1a1a;">
 ${safePreheader ? `<div style="display:none;max-height:0;overflow:hidden;font-size:1px;line-height:1px;color:#f4f5f7;opacity:0;">${safePreheader}</div>` : ""}
@@ -93,15 +93,15 @@ ${safePreheader ? `<div style="display:none;max-height:0;overflow:hidden;font-si
     <td align="center">
       <table role="presentation" width="600" cellpadding="0" cellspacing="0" border="0" style="max-width:600px;background-color:#ffffff;border-radius:14px;overflow:hidden;box-shadow:0 1px 3px rgba(0,0,0,0.05);">
         <tr>
-          <td style="background-color:#0a6ef0;padding:20px 28px;">
+          <td style="background-color:#4F9598;padding:20px 28px;">
             <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0">
               <tr>
                 <td style="vertical-align:middle;">
-                  <span style="display:inline-block;width:36px;height:36px;line-height:36px;text-align:center;background-color:#ffffff;color:#0a6ef0;font-weight:700;border-radius:8px;font-size:14px;vertical-align:middle;">HA</span>
-                  <span style="margin-left:12px;color:#ffffff;font-size:18px;font-weight:700;vertical-align:middle;">HandyAnt</span>
+                  <span style="display:inline-block;width:36px;height:36px;line-height:36px;text-align:center;background-color:#ffffff;color:#4F9598;font-weight:700;border-radius:8px;font-size:12px;letter-spacing:-0.03em;vertical-align:middle;">MCQ</span>
+                  <span style="margin-left:12px;color:#ffffff;font-size:18px;font-weight:700;vertical-align:middle;">MCQ Home Co.</span>
                 </td>
-                <td align="right" style="color:#cfe1ff;font-size:11px;vertical-align:middle;">
-                  Professional Home Services
+                <td align="right" style="color:#D4E8E9;font-size:11px;vertical-align:middle;">
+                  Meticulous Craftsman Quality
                 </td>
               </tr>
             </table>

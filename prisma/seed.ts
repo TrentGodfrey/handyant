@@ -276,12 +276,12 @@ async function main() {
 
   // A welcome notification for each customer
   for (const c of customers) {
-    const has = await prisma.notification.findFirst({ where: { userId: c.id, title: "Welcome to HandyAnt" } });
+    const has = await prisma.notification.findFirst({ where: { userId: c.id, title: "Welcome to MCQ Home Co." } });
     if (!has) {
       await prisma.notification.create({
         data: {
           userId: c.id,
-          title: "Welcome to HandyAnt",
+          title: "Welcome to MCQ Home Co.",
           body: "Tap to book your first visit.",
           type: "info",
           link: "/book",

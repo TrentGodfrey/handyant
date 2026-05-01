@@ -182,7 +182,7 @@ function DayEmptyState({ dayLabel }: { dayLabel: string }) {
         </div>
         {!isWeekend && (
           <Link href="/schedule/new">
-            <div className="absolute -bottom-1.5 -right-1.5 flex h-8 w-8 items-center justify-center rounded-full bg-primary shadow-[0_2px_8px_rgba(37,99,235,0.30)] active:bg-primary-dark transition-colors">
+            <div className="absolute -bottom-1.5 -right-1.5 flex h-8 w-8 items-center justify-center rounded-full bg-primary shadow-[0_2px_8px_rgba(79,149,152,0.30)] active:bg-primary-dark transition-colors">
               <Plus size={16} className="text-white" />
             </div>
           </Link>
@@ -392,7 +392,7 @@ export default function SchedulePage() {
               onClick={() => setSelectedIndex(idx)}
               className={`flex flex-1 flex-col items-center gap-0.5 rounded-xl py-2.5 transition-all duration-150 ${
                 isSelected
-                  ? "bg-primary shadow-[0_2px_8px_rgba(37,99,235,0.30)]"
+                  ? "bg-primary shadow-[0_2px_8px_rgba(79,149,152,0.30)]"
                   : hasJobs
                   ? "bg-surface border border-border shadow-[0_1px_4px_rgba(0,0,0,0.06)] active:bg-surface-secondary"
                   : "bg-surface-secondary active:bg-surface"
@@ -483,7 +483,7 @@ export default function SchedulePage() {
                 <div
                   className={`h-3 w-3 shrink-0 rounded-full border-2 ${
                     item.type === "job"
-                      ? "border-primary bg-white shadow-[0_0_0_3px_rgba(37,99,235,0.12)]"
+                      ? "border-primary bg-white shadow-[0_0_0_3px_rgba(79,149,152,0.12)]"
                       : "border-border bg-surface-secondary"
                   }`}
                 />

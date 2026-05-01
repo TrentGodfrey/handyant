@@ -103,10 +103,10 @@ const DEMO_THREADS: Thread[] = [
   },
   {
     id: "support",
-    name: "HandyAnt Support",
+    name: "MCQ Home Co. Support",
     role: "Customer Support",
-    initials: "HA",
-    lastMessage: "Welcome to HandyAnt! Tap to say hi or ask us anything.",
+    initials: "MCQ",
+    lastMessage: "Welcome to MCQ Home Co.! Tap to say hi or ask us anything.",
     time: "Mar 27",
     unread: 1,
     online: true,
@@ -114,7 +114,7 @@ const DEMO_THREADS: Thread[] = [
     address: "",
     phone: "",
     messages: [
-      { id: "s1", text: "Welcome to HandyAnt! 🏡 We're here if you ever need help with your account, scheduling, or anything else. How can we help?", sender: "tech", timestamp: "Mar 27", type: "text" },
+      { id: "s1", text: "Welcome to MCQ Home Co.! 🏡 We're here if you ever need help with your account, scheduling, or anything else. How can we help?", sender: "tech", timestamp: "Mar 27", type: "text" },
     ],
   },
 ];

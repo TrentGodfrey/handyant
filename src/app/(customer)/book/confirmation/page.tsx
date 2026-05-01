@@ -54,7 +54,7 @@ interface ApiBooking {
 }
 
 function refNumber(id: string): string {
-  return `HA-${id.slice(0, 8).toUpperCase()}`;
+  return `MCQ-${id.slice(0, 8).toUpperCase()}`;
 }
 
 function formatDateLong(dateStr: string): string {
@@ -112,15 +112,15 @@ function buildIcs(booking: ApiBooking): string {
   const addressParts = [booking.home?.address, booking.home?.city, booking.home?.state, booking.home?.zip]
     .filter(Boolean).join(", ");
   const summary = booking.tech?.name
-    ? `HandyAnt visit with ${booking.tech.name}`
-    : "HandyAnt service visit";
+    ? `MCQ Home Co. visit with ${booking.tech.name}`
+    : "MCQ Home Co. service visit";
   const description = (booking.description ?? "Scheduled service visit").replace(/\n/g, "\\n");
   const lines = [
     "BEGIN:VCALENDAR",
     "VERSION:2.0",
-    "PRODID:-//HandyAnt//EN",
+    "PRODID:-//MCQ Home Co.//EN",
     "BEGIN:VEVENT",
-    `UID:${booking.id}@handyant`,
+    `UID:${booking.id}@mcqhome`,
     `DTSTAMP:${fmt(new Date())}`,
     `DTSTART:${fmt(start)}`,
     `DTEND:${fmt(end)}`,
@@ -139,7 +139,7 @@ function downloadIcs(booking: ApiBooking) {
   const url = URL.createObjectURL(blob);
   const a = document.createElement("a");
   a.href = url;
-  a.download = `handyant-${refNumber(booking.id)}.ics`;
+  a.download = `mcq-home-${refNumber(booking.id)}.ics`;
   document.body.appendChild(a);
   a.click();
   document.body.removeChild(a);
@@ -177,7 +177,7 @@ function DemoConfirmation() {
 
         <div className="mt-4 flex items-center gap-2 rounded-full bg-surface border border-border px-4 py-2">
           <span className="text-[12px] text-text-secondary">Booking ref:</span>
-          <span className="text-[12px] font-bold text-text-primary font-mono">HA-2026-0330</span>
+          <span className="text-[12px] font-bold text-text-primary font-mono">MCQ-2026-0330</span>
         </div>
       </div>
 
@@ -234,7 +234,7 @@ function DemoConfirmation() {
         <Card padding="md" className="border border-success/20 bg-success-light">
           <div className="flex items-center gap-3.5">
             <div className="relative shrink-0">
-              <div className="flex h-12 w-12 items-center justify-center rounded-full bg-primary text-[15px] font-bold text-white shadow-[0_2px_10px_rgba(37,99,235,0.25)]">AT</div>
+              <div className="flex h-12 w-12 items-center justify-center rounded-full bg-primary text-[15px] font-bold text-white shadow-[0_2px_10px_rgba(79,149,152,0.25)]">AT</div>
               <div className="absolute -bottom-0.5 -right-0.5 h-3.5 w-3.5 rounded-full border-2 border-surface bg-success" />
             </div>
             <div className="flex-1 min-w-0">
@@ -466,7 +466,7 @@ function RealConfirmation() {
         <Card padding="md" className="border border-success/20 bg-success-light">
           <div className="flex items-center gap-3.5">
             <div className="relative shrink-0">
-              <div className="flex h-12 w-12 items-center justify-center rounded-full bg-primary text-[15px] font-bold text-white shadow-[0_2px_10px_rgba(37,99,235,0.25)]">{techInitials}</div>
+              <div className="flex h-12 w-12 items-center justify-center rounded-full bg-primary text-[15px] font-bold text-white shadow-[0_2px_10px_rgba(79,149,152,0.25)]">{techInitials}</div>
               <div className="absolute -bottom-0.5 -right-0.5 h-3.5 w-3.5 rounded-full border-2 border-surface bg-success" />
             </div>
             <div className="flex-1 min-w-0">

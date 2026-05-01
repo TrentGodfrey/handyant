@@ -5,8 +5,6 @@ import Link from "next/link";
 import { signIn, useSession } from "next-auth/react";
 import { useRouter } from "next/navigation";
 import {
-  Wrench,
-  Home,
   ChevronLeft,
   Check,
   Phone,
@@ -72,20 +70,20 @@ function DFWMap() {
       aria-label="DFW Metro service area map"
     >
       {/* Background metro blob */}
-      <ellipse cx="170" cy="130" rx="148" ry="108" fill="#EFF6FF" opacity="0.9" />
-      <ellipse cx="170" cy="130" rx="148" ry="108" fill="none" stroke="#BFDBFE" strokeWidth="1.5" />
+      <ellipse cx="170" cy="130" rx="148" ry="108" fill="#EAF4F4" opacity="0.9" />
+      <ellipse cx="170" cy="130" rx="148" ry="108" fill="none" stroke="#B5D7D8" strokeWidth="1.5" />
 
       {/* Subtle grid lines */}
-      <line x1="30" y1="130" x2="310" y2="130" stroke="#DBEAFE" strokeWidth="0.5" strokeDasharray="4 4" />
-      <line x1="170" y1="22" x2="170" y2="238" stroke="#DBEAFE" strokeWidth="0.5" strokeDasharray="4 4" />
+      <line x1="30" y1="130" x2="310" y2="130" stroke="#D4E8E9" strokeWidth="0.5" strokeDasharray="4 4" />
+      <line x1="170" y1="22" x2="170" y2="238" stroke="#D4E8E9" strokeWidth="0.5" strokeDasharray="4 4" />
 
       {/* City nodes */}
       {dfwCities.map((city) => (
         <g key={city.name}>
           {/* Outer glow ring */}
-          <circle cx={city.x} cy={city.y} r="10" fill="#2563EB" opacity="0.12" />
+          <circle cx={city.x} cy={city.y} r="10" fill="#4F9598" opacity="0.12" />
           {/* Main circle */}
-          <circle cx={city.x} cy={city.y} r="7" fill="#2563EB" />
+          <circle cx={city.x} cy={city.y} r="7" fill="#4F9598" />
           {/* Inner highlight */}
           <circle cx={city.x} cy={city.y - 2} r="2.5" fill="white" opacity="0.35" />
           {/* Label — position above or below based on y */}
@@ -95,7 +93,7 @@ function DFWMap() {
             textAnchor="middle"
             fontSize="8"
             fontWeight="600"
-            fill="#1E40AF"
+            fill="#3E7B7E"
             fontFamily="system-ui, -apple-system, sans-serif"
           >
             {city.name}
@@ -425,7 +423,7 @@ export default function OnboardingPage() {
       if (selectedPlan !== "basic") {
         toast.info(`We'll let you know when ${plans.find((p) => p.id === selectedPlan)?.name} is available to upgrade.`);
       } else {
-        toast.success("Welcome to HandyAnt!");
+        toast.success("Welcome to MCQ Home Co.!");
       }
       setScreen("success");
     } catch (err) {
@@ -443,22 +441,21 @@ export default function OnboardingPage() {
       <div className="flex min-h-screen flex-col items-center justify-center bg-background px-6 text-center">
         {/* Logo */}
         <div className="mb-8 flex flex-col items-center gap-3">
-          <div className="relative flex h-20 w-20 items-center justify-center rounded-3xl bg-primary shadow-[0_8px_32px_rgba(37,99,235,0.30)]">
-            <Home size={28} className="absolute text-white" style={{ top: 14, left: 16 }} />
-            <Wrench size={20} className="absolute text-white/80" style={{ bottom: 14, right: 14 }} />
+          <div className="relative flex h-20 w-20 items-center justify-center rounded-3xl bg-primary shadow-[0_8px_32px_rgba(79,149,152,0.30)]">
+            <span className="text-[20px] font-black tracking-[-0.06em] text-white">MCQ</span>
           </div>
           <div>
             <h1 className="text-[28px] font-black tracking-tight text-text-primary">
-              HandyAnt
+              MCQ Home Co.
             </h1>
-            <p className="mt-1 text-[15px] font-medium text-text-secondary">Your home, handled.</p>
+            <p className="mt-1 text-[15px] font-medium text-text-secondary">Meticulous Craftsman Quality.</p>
           </div>
         </div>
 
         {/* Tagline card */}
         <div className="mb-10 max-w-[280px] rounded-2xl bg-surface p-5 shadow-[0_1px_4px_rgba(0,0,0,0.08),0_4px_16px_rgba(0,0,0,0.04)]">
           <p className="text-[13px] leading-relaxed text-text-secondary">
-            Professional handyman service for DFW homeowners. Scheduled visits, a maintained home, zero hassle.
+            Professional handyman service for DFW homeowners. Scheduled visits, a meticulously maintained home, zero hassle.
           </p>
         </div>
 
@@ -474,7 +471,7 @@ export default function OnboardingPage() {
                 setScreen("step-1");
               }
             }}
-            className="w-full rounded-2xl bg-primary py-4 text-[16px] font-bold text-white shadow-[0_4px_16px_rgba(37,99,235,0.35)] active:bg-primary-dark transition-colors"
+            className="w-full rounded-2xl bg-primary py-4 text-[16px] font-bold text-white shadow-[0_4px_16px_rgba(79,149,152,0.35)] active:bg-primary-dark transition-colors"
           >
             {sessionStatus === "authenticated" ? "Set Up My Home" : "Create Account"}
           </button>
@@ -596,7 +593,7 @@ export default function OnboardingPage() {
             className={`w-full rounded-2xl py-4 text-[16px] font-bold text-white transition-all ${
               submitting
                 ? "bg-primary/40 cursor-not-allowed"
-                : "bg-primary shadow-[0_4px_16px_rgba(37,99,235,0.30)] active:bg-primary-dark"
+                : "bg-primary shadow-[0_4px_16px_rgba(79,149,152,0.30)] active:bg-primary-dark"
             }`}
           >
             {submitting ? "Creating Account…" : "Continue"}
@@ -658,7 +655,7 @@ export default function OnboardingPage() {
                     onClick={() => setHomeType(t)}
                     className={`rounded-full px-4 py-2 text-[13px] font-semibold transition-all ${
                       homeType === t
-                        ? "bg-primary text-white shadow-[0_2px_8px_rgba(37,99,235,0.25)]"
+                        ? "bg-primary text-white shadow-[0_2px_8px_rgba(79,149,152,0.25)]"
                         : "border border-border bg-surface text-text-secondary"
                     }`}
                   >
@@ -712,7 +709,7 @@ export default function OnboardingPage() {
             className={`w-full rounded-2xl py-4 text-[16px] font-bold text-white transition-all ${
               submitting
                 ? "bg-primary/40 cursor-not-allowed"
-                : "bg-primary shadow-[0_4px_16px_rgba(37,99,235,0.30)] active:bg-primary-dark"
+                : "bg-primary shadow-[0_4px_16px_rgba(79,149,152,0.30)] active:bg-primary-dark"
             }`}
           >
             {submitting ? "Saving…" : "Continue"}
@@ -747,7 +744,7 @@ export default function OnboardingPage() {
           </div>
 
           {/* Map */}
-          <div className="mb-5 overflow-hidden rounded-2xl border border-border bg-[#F0F6FF] p-2 shadow-[0_1px_4px_rgba(0,0,0,0.06)]">
+          <div className="mb-5 overflow-hidden rounded-2xl border border-border bg-[#F0F8F8] p-2 shadow-[0_1px_4px_rgba(0,0,0,0.06)]">
             <DFWMap />
           </div>
 
@@ -817,7 +814,7 @@ export default function OnboardingPage() {
             disabled={areaStatus !== "in-area"}
             className={`w-full rounded-2xl py-4 text-[16px] font-bold text-white transition-all ${
               areaStatus === "in-area"
-                ? "bg-primary shadow-[0_4px_16px_rgba(37,99,235,0.30)] active:bg-primary-dark"
+                ? "bg-primary shadow-[0_4px_16px_rgba(79,149,152,0.30)] active:bg-primary-dark"
                 : "bg-primary/40 cursor-not-allowed"
             }`}
           >
@@ -849,7 +846,7 @@ export default function OnboardingPage() {
         <div className="flex-1 overflow-y-auto px-5 pb-44">
           <div className="mb-4 mt-2">
             <h2 className="text-[24px] font-black text-text-primary">Choose Your Plan</h2>
-            <p className="mt-1 text-[13px] text-text-secondary">All plans include licensed, insured service.</p>
+            <p className="mt-1 text-[13px] text-text-secondary">All plans include fully insured, reliable service.</p>
           </div>
 
           {/* Stripe-pending notice */}
@@ -873,7 +870,7 @@ export default function OnboardingPage() {
                   onClick={() => setSelectedPlan(plan.id)}
                   className={`relative w-full overflow-hidden rounded-2xl border-2 p-5 text-left transition-all duration-200 ${
                     isSelected
-                      ? "border-primary bg-gradient-to-br from-primary-50 to-white shadow-[0_4px_20px_rgba(37,99,235,0.18)]"
+                      ? "border-primary bg-gradient-to-br from-primary-50 to-white shadow-[0_4px_20px_rgba(79,149,152,0.18)]"
                       : "border-border bg-surface"
                   }`}
                 >
@@ -928,7 +925,7 @@ export default function OnboardingPage() {
             className={`w-full rounded-2xl py-4 text-[16px] font-bold text-white transition-colors ${
               submitting
                 ? "bg-primary/40 cursor-not-allowed"
-                : "bg-primary shadow-[0_4px_16px_rgba(37,99,235,0.30)] active:bg-primary-dark"
+                : "bg-primary shadow-[0_4px_16px_rgba(79,149,152,0.30)] active:bg-primary-dark"
             }`}
           >
             {submitting ? "Setting up…" : "Start with Free Plan"}
@@ -957,7 +954,7 @@ export default function OnboardingPage() {
         </div>
 
         <h2 className="mb-2 text-[28px] font-black text-text-primary">
-          Welcome to HandyAnt!
+          Welcome to MCQ Home Co.!
         </h2>
         <p className="mb-2 max-w-[280px] text-[15px] leading-relaxed text-text-secondary">
           Your home is set up. We&apos;ll be in touch within 24 hours to schedule your first visit.
@@ -987,7 +984,7 @@ export default function OnboardingPage() {
             router.push("/home");
             router.refresh();
           }}
-          className="flex items-center gap-2 rounded-2xl bg-primary px-8 py-4 text-[16px] font-bold text-white shadow-[0_4px_16px_rgba(37,99,235,0.30)] active:bg-primary-dark transition-colors"
+          className="flex items-center gap-2 rounded-2xl bg-primary px-8 py-4 text-[16px] font-bold text-white shadow-[0_4px_16px_rgba(79,149,152,0.30)] active:bg-primary-dark transition-colors"
         >
           Go to Home
           <ArrowRight size={18} />

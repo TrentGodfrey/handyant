@@ -1,0 +1,9 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 240 80" role="img" aria-label="MCQ Home Co.">
+  <text x="0" y="58"
+        font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif"
+        font-weight="900"
+        font-size="56"
+        letter-spacing="-2.5"
+        fill="#3E4D5C">MCQ</text>
+  <circle cx="146" cy="32" r="6" fill="#4F9598" />
+</svg>

@@ -537,7 +537,7 @@ export default function RateJobPage() {
         {showCategories && (
           <Card padding="md">
             <p className="text-[13px] font-bold text-text-primary mb-3">
-              Would you recommend HandyAnt to a friend?
+              Would you recommend MCQ Home Co. to a friend?
             </p>
             <div className="flex gap-3">
               <button

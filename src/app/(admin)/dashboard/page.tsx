@@ -338,8 +338,8 @@ function RevenueTrendChart({
         >
           <defs>
             <linearGradient id="revGradient" x1="0" y1="0" x2="0" y2="1">
-              <stop offset="0%" stopColor="#2563EB" stopOpacity={0.2} />
-              <stop offset="100%" stopColor="#2563EB" stopOpacity={0} />
+              <stop offset="0%" stopColor="#4F9598" stopOpacity={0.2} />
+              <stop offset="100%" stopColor="#4F9598" stopOpacity={0} />
             </linearGradient>
           </defs>
 
@@ -363,14 +363,14 @@ function RevenueTrendChart({
           <polyline
             points={linePoints}
             fill="none"
-            stroke="#2563EB"
+            stroke="#4F9598"
             strokeWidth={2}
             strokeLinecap="round"
             strokeLinejoin="round"
           />
 
-          <circle cx={lastPoint.x} cy={lastPoint.y} r={3.5} fill="#2563EB" />
-          <circle cx={lastPoint.x} cy={lastPoint.y} r={6} fill="#2563EB" opacity={0.15} />
+          <circle cx={lastPoint.x} cy={lastPoint.y} r={3.5} fill="#4F9598" />
+          <circle cx={lastPoint.x} cy={lastPoint.y} r={6} fill="#4F9598" opacity={0.15} />
 
           {values.map((_, i) => {
             const x = padLeft + (i / Math.max(values.length - 1, 1)) * plotW;

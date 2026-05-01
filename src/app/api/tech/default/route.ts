@@ -3,7 +3,7 @@ import { requireUser, unauthorized } from "@/lib/session";
 
 /**
  * Returns the default tech a customer should message when they have no
- * existing conversation and no booking yet. Currently HandyAnt has a single
+ * existing conversation and no booking yet. Currently MCQ Home Co. has a single
  * tech (Anthony), so we just return the first tech we find.
  */
 export async function GET() {
