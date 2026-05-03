@@ -4,17 +4,21 @@ import GoogleProvider from "next-auth/providers/google";
 import { compare } from "bcryptjs";
 import { prisma } from "./prisma";
 
-export const authOptions: NextAuthOptions = {
-  session: { strategy: "jwt" },
-  pages: {
-    signIn: "/login",
-  },
-  providers: [
+const providers: NextAuthOptions["providers"] = [];
+
+// Only enable Google OAuth if both env vars are configured.
+// Otherwise next-auth crashes the entire /api/auth route with "client_id is required".
+if (process.env.GOOGLE_CLIENT_ID && process.env.GOOGLE_CLIENT_SECRET) {
+  providers.push(
     GoogleProvider({
-      clientId: process.env.GOOGLE_CLIENT_ID ?? "",
-      clientSecret: process.env.GOOGLE_CLIENT_SECRET ?? "",
-    }),
-    CredentialsProvider({
+      clientId: process.env.GOOGLE_CLIENT_ID,
+      clientSecret: process.env.GOOGLE_CLIENT_SECRET,
+    })
+  );
+}
+
+providers.push(
+  CredentialsProvider({
       name: "Email",
       credentials: {
         email: { label: "Email", type: "email" },
@@ -40,8 +44,15 @@ export const authOptions: NextAuthOptions = {
           image: user.avatarUrl,
         };
       },
-    }),
-  ],
+    })
+);
+
+export const authOptions: NextAuthOptions = {
+  session: { strategy: "jwt" },
+  pages: {
+    signIn: "/login",
+  },
+  providers,
   callbacks: {
     async signIn({ user, account }) {
       if (account?.provider === "google") {

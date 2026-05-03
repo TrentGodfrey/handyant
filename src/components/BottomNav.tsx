@@ -5,7 +5,7 @@ import { usePathname } from "next/navigation";
 import { useSession, signOut } from "next-auth/react";
 import {
   Home, Wrench, CalendarPlus, User, LayoutDashboard, Calendar,
-  ClipboardList, Building2, MessageCircle, Settings, LogOut,
+  ClipboardList, Building2, MessageCircle, Settings, LogOut, Users,
 } from "lucide-react";
 
 const customerTabs = [
@@ -21,6 +21,7 @@ const adminTabs = [
   { href: "/schedule", icon: Calendar, label: "Schedule" },
   { href: "/jobs", icon: ClipboardList, label: "Jobs" },
   { href: "/homes", icon: Building2, label: "Homes" },
+  { href: "/people", icon: Users, label: "People" },
   { href: "/admin-messages", icon: MessageCircle, label: "Messages" },
   { href: "/settings", icon: Settings, label: "Settings" },
 ];

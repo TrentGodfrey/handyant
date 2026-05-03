@@ -60,7 +60,7 @@ export async function proxy(req: NextRequest) {
   }
 
   // Admin routes require tech role
-  const adminPaths = ["/dashboard", "/schedule", "/jobs", "/homes", "/admin-messages", "/reports", "/settings"];
+  const adminPaths = ["/dashboard", "/schedule", "/jobs", "/homes", "/people", "/admin-messages", "/reports", "/settings"];
   if (adminPaths.some((p) => pathname.startsWith(p)) && token.role !== "tech") {
     return NextResponse.redirect(new URL("/", req.url));
   }
