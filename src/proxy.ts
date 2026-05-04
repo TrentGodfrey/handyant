@@ -34,21 +34,24 @@ export async function proxy(req: NextRequest) {
   }
 
   // Demo mode bypass — allow browsing with ?demo=true or demo cookie.
-  // Restricted to non-production builds; in prod the demo flag is ignored so
-  // unauthenticated traffic always falls through to the JWT check below.
-  // NOTE: this only bypasses page-level proxy auth. API routes use their own
-  // requireUser()/requireTech() guards which never consult the demo cookie.
-  if (process.env.NODE_ENV !== "production") {
-    const isDemo =
-      req.nextUrl.searchParams.get("demo") === "true" ||
-      req.cookies.get("demo_mode")?.value === "true";
+  // Available in production as a "Try the demo" feature. The cookie only
+  // bypasses page-level proxy auth; API mutation routes still require a real
+  // JWT via requireUser()/requireTech(), so demo visitors can browse but
+  // can't write to the real DB. Pages gate mutations client-side via
+  // useDemoMode() to keep the UX seamless.
+  const isDemo =
+    req.nextUrl.searchParams.get("demo") === "true" ||
+    req.cookies.get("demo_mode")?.value === "true";
 
-    if (isDemo) {
-      const res = NextResponse.next();
-      // Set cookie so demo persists across page navigations
-      res.cookies.set("demo_mode", "true", { path: "/", maxAge: 60 * 60 }); // 1 hour
-      return res;
-    }
+  if (isDemo) {
+    const res = NextResponse.next();
+    // Persist for 7 days so users can come back to explore
+    res.cookies.set("demo_mode", "true", {
+      path: "/",
+      maxAge: 60 * 60 * 24 * 7,
+      sameSite: "lax",
+    });
+    return res;
   }
 
   const token = await getToken({ req, secret: process.env.NEXTAUTH_SECRET });

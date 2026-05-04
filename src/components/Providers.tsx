@@ -2,6 +2,7 @@
 
 import { useEffect } from "react";
 import { SessionProvider, useSession } from "next-auth/react";
+import DemoBanner from "./DemoBanner";
 
 const HEARTBEAT_INTERVAL_MS = 60_000;
 
@@ -35,6 +36,7 @@ export default function Providers({ children }: { children: React.ReactNode }) {
   return (
     <SessionProvider>
       <HeartbeatPing />
+      <DemoBanner />
       {children}
     </SessionProvider>
   );
