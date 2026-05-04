@@ -323,7 +323,7 @@ export default function InvoicePage({ params }: { params: Promise<{ id: string }
     setSendError(null);
     const phone = (view.client.phone ?? "").replace(/[^0-9+]/g, "");
     const linkBase =
-      typeof window !== "undefined" ? window.location.origin : "https://handyant.jordangodfrey.com";
+      typeof window !== "undefined" ? window.location.origin : "https://mcq.jordangodfrey.com";
     const link = `${linkBase}/account/receipts`;
     const body = `Hi ${view.client.name.split(" ")[0] ?? ""}, here's your MCQ Home Co. invoice ${view.number} for $${view.total.toFixed(2)}: ${link}`;
     const smsHref = phone

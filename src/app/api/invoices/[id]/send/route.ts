@@ -82,7 +82,7 @@ export async function POST(req: NextRequest, ctx: { params: Promise<{ id: string
     })),
   ];
 
-  const baseUrl = process.env.NEXTAUTH_URL ?? "https://handyant.jordangodfrey.com";
+  const baseUrl = process.env.NEXTAUTH_URL ?? "https://mcq.jordangodfrey.com";
   const receiptsUrl = `${baseUrl}/account/receipts`;
 
   const subtotalStr = fmtMoney(invoice.subtotal);
