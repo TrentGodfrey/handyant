@@ -24,7 +24,7 @@ export async function POST(req: NextRequest, ctx: { params: Promise<{ id: string
       }
     }
   } catch {
-    /* ignore — fall back to default */
+    /* ignore - fall back to default */
   }
 
   const invoice = await prisma.invoice.findUnique({
@@ -45,7 +45,7 @@ export async function POST(req: NextRequest, ctx: { params: Promise<{ id: string
 
   const isOwningTech = user.role === "tech" && invoice.booking.techId === user.id;
   if (!isOwningTech && user.role !== "tech") return forbidden();
-  // Allow any tech (admin) — owning tech preferred but role:"tech" is admin role here.
+  // Allow any tech (admin) - owning tech preferred but role:"tech" is admin role here.
 
   const customerEmail = invoice.customer?.email;
   if (!customerEmail) {
@@ -55,7 +55,7 @@ export async function POST(req: NextRequest, ctx: { params: Promise<{ id: string
     );
   }
 
-  // Pull tech contact info — prefer business profile phone, fall back to tech user phone.
+  // Pull tech contact info - prefer business profile phone, fall back to tech user phone.
   const techId = invoice.booking.techId ?? invoice.booking.tech?.id;
   const businessProfile = techId
     ? await prisma.businessProfile.findUnique({ where: { techId } })
@@ -71,12 +71,12 @@ export async function POST(req: NextRequest, ctx: { params: Promise<{ id: string
   const taskLabels = invoice.booking.tasks.map((t) => t.label).join(" + ") || "Service visit";
   const lineItems: { description: string; detail: string; amount: number }[] = [
     {
-      description: `Labor — ${taskLabels}`,
+      description: `Labor - ${taskLabels}`,
       detail: `${hours} hrs @ $${laborRate}/hr`,
       amount: labor,
     },
     ...invoice.booking.parts.map((p) => ({
-      description: `Materials — ${p.item}`,
+      description: `Materials - ${p.item}`,
       detail: `Qty ${p.qty ?? 1}`,
       amount: Number(p.cost ?? 0),
     })),
@@ -158,7 +158,7 @@ export async function POST(req: NextRequest, ctx: { params: Promise<{ id: string
   const contentHtml = `
     <h1 style="margin:0 0 6px;font-size:20px;color:#1a1a1a;">Invoice ${escapeHtml(invoice.number)}</h1>
     <p style="margin:0 0 18px;color:#6a7280;font-size:13px;">
-      Hi ${escapeHtml(customerName)} — thanks for choosing MCQ Home Co.. Here's your invoice for today's service.
+      Hi ${escapeHtml(customerName)} - thanks for choosing MCQ Home Co.. Here's your invoice for today's service.
     </p>
 
     <div style="background-color:#f7f9fc;border-radius:10px;padding:14px 16px;margin-bottom:18px;">
@@ -217,7 +217,7 @@ export async function POST(req: NextRequest, ctx: { params: Promise<{ id: string
   `;
 
   const html = emailShell({
-    preheader: `Invoice ${invoice.number} — ${totalStr}`,
+    preheader: `Invoice ${invoice.number} - ${totalStr}`,
     contentHtml,
   });
 
@@ -229,7 +229,7 @@ export async function POST(req: NextRequest, ctx: { params: Promise<{ id: string
     `Service: ${description}`,
     ``,
     `Line items:`,
-    ...lineItems.map((li) => `  • ${li.description} (${li.detail}) — ${fmtMoney(li.amount)}`),
+    ...lineItems.map((li) => `  • ${li.description} (${li.detail}) - ${fmtMoney(li.amount)}`),
     ``,
     `Subtotal: ${subtotalStr}`,
     `Tax:      ${taxStr}`,
@@ -248,11 +248,11 @@ export async function POST(req: NextRequest, ctx: { params: Promise<{ id: string
     }
   }
 
-  textLines.push(``, `— ${techName}${techPhone ? ` · ${techPhone}` : ""}`);
+  textLines.push(``, `- ${techName}${techPhone ? ` · ${techPhone}` : ""}`);
 
   const result = await sendEmail({
     to: customerEmail,
-    subject: `Invoice ${invoice.number} from MCQ Home Co. — ${totalStr}`,
+    subject: `Invoice ${invoice.number} from MCQ Home Co. - ${totalStr}`,
     html,
     text: textLines.join("\n"),
   });

@@ -78,7 +78,7 @@ function buildCalendar(start: Date, weeksCount: number): CalendarDay[][] {
 const WEEKS_TOTAL = 10;
 const WEEKS_PER_PAGE = 3;
 
-// Demo-mode time slots — kept hardcoded so the demo doesn't hit the API.
+// Demo-mode time slots - kept hardcoded so the demo doesn't hit the API.
 const demoMorningSlots = [
   { time: "8:00 AM", available: true },
   { time: "9:00 AM", available: true },
@@ -173,7 +173,7 @@ function BookingPageInner() {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [submitError, setSubmitError] = useState<string | null>(null);
 
-  // Real-mode availability state — fetched per selected date.
+  // Real-mode availability state - fetched per selected date.
   const [slots, setSlots] = useState<DisplaySlot[]>([]);
   const [slotsLoading, setSlotsLoading] = useState(false);
   const [slotsError, setSlotsError] = useState<string | null>(null);
@@ -374,7 +374,7 @@ function BookingPageInner() {
       const booking = await res.json();
       const bookingId: string | undefined = booking?.id;
 
-      // Upload any collected photos against the new booking — best effort
+      // Upload any collected photos against the new booking - best effort
       if (bookingId && photos.length) {
         const uploads = photos
           .filter((p) => p.dataUrl)
@@ -538,7 +538,7 @@ function BookingPageInner() {
               </Card>
             </div>
 
-            {/* Time Slots — only show after date selected */}
+            {/* Time Slots - only show after date selected */}
             {selectedDay && (
               <div className="mb-6 animate-slide-up">
                 <p className="mb-3 text-sm font-semibold uppercase tracking-wider text-text-secondary">

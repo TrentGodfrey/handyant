@@ -78,7 +78,7 @@ const demoConversations: Conversation[] = [
     address: "890 Sunset Ridge",
     online: false,
     messages: [
-      { id: "1", text: "Quick question — do you have the paint or should I pick it up?", sender: "tech", timestamp: "Yesterday, 3:00 PM", type: "text" },
+      { id: "1", text: "Quick question - do you have the paint or should I pick it up?", sender: "tech", timestamp: "Yesterday, 3:00 PM", type: "text" },
       { id: "2", text: "The paint color is SW Alabaster from the garage shelf", sender: "customer", timestamp: "Yesterday, 4:30 PM", type: "text" },
     ],
   },
@@ -344,11 +344,11 @@ function AdminMessagesPageInner() {
       return;
     }
     if (isDemo) {
-      // Demo: nothing to look up — just bail.
+      // Demo: nothing to look up - just bail.
       setAutoOpened(true);
       return;
     }
-    // No existing conversation — create one. The POST response is just the raw
+    // No existing conversation - create one. The POST response is just the raw
     // Conversation row (no customer object), so we refetch the list to get the
     // enriched form including customer name.
     setAutoOpened(true);
@@ -579,7 +579,7 @@ function AdminMessagesPageInner() {
       }
 
       // Real mode: upload to /api/photos, then send the URL inline as a message.
-      // (Real attachments would need Message.attachmentUrl in the schema — out of scope.)
+      // (Real attachments would need Message.attachmentUrl in the schema - out of scope.)
       const dataUrl = await readFileAsDataUrl(file);
       const photoRes = await fetch("/api/photos", {
         method: "POST",
@@ -626,7 +626,7 @@ function AdminMessagesPageInner() {
         }));
       }
     } catch {
-      /* swallow — UI keeps optimistic state */
+      /* swallow - UI keeps optimistic state */
     } finally {
       setUploadingPhoto(false);
     }
@@ -634,7 +634,7 @@ function AdminMessagesPageInner() {
 
   function archiveActiveConvo() {
     if (!activeConvo) return;
-    // Local-only hide for now — the schema has no `archived` field on Conversation.
+    // Local-only hide for now - the schema has no `archived` field on Conversation.
     // TODO: when schema adds Conversation.archived, PATCH the conversation here.
     setHiddenConvoIds((prev) => new Set(prev).add(activeConvo.id));
     setActiveConvo(null);
@@ -646,7 +646,7 @@ function AdminMessagesPageInner() {
     if (typeof window !== "undefined" && !window.confirm(`Block ${activeConvo.client}? They won't be able to message you.`)) {
       return;
     }
-    // Local-only hide for now — same schema caveat as archive.
+    // Local-only hide for now - same schema caveat as archive.
     setHiddenConvoIds((prev) => new Set(prev).add(activeConvo.id));
     setActiveConvo(null);
     setConvoMenuOpen(false);

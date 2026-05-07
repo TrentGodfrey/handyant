@@ -41,7 +41,7 @@ export async function POST(req: NextRequest) {
 
   const existing = await prisma.user.findUnique({ where: { email } });
   if (existing) {
-    // If they exist as a customer already, promote — preserve history.
+    // If they exist as a customer already, promote - preserve history.
     if (existing.role !== "tech") {
       const updated = await prisma.user.update({
         where: { id: existing.id },
@@ -99,7 +99,7 @@ export async function DELETE(req: NextRequest) {
     return badRequest("User is not a staff member");
   }
 
-  // Demote rather than delete — preserves bookings, reviews, etc.
+  // Demote rather than delete - preserves bookings, reviews, etc.
   await prisma.user.update({
     where: { id: userId },
     data: { role: "customer" },

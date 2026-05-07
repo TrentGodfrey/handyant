@@ -18,7 +18,7 @@ export default function ForgotPasswordPage() {
         body: JSON.stringify({ email }),
       });
     } catch {
-      // Always show the same generic message — never reveal whether the email
+      // Always show the same generic message - never reveal whether the email
       // exists. Even on a network failure we tell the user to check their inbox.
     } finally {
       setLoading(false);

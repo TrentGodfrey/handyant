@@ -48,12 +48,12 @@ interface ScheduleItem {
 
 const demoScheduleByDay: Record<number, ScheduleItem[]> = {
   30: [
-    { time: "8:00 AM", label: "Part Shopping", type: "block", duration: "45 min", details: "Home Depot — Broan fan motor, caulk" },
+    { time: "8:00 AM", label: "Part Shopping", type: "block", duration: "45 min", details: "Home Depot - Broan fan motor, caulk" },
     { time: "9:00 AM", label: demoCustomerBy("1")!.name, type: "job", duration: "2h", address: "4821 Oak Hollow Dr, Plano", status: "confirmed", tasks: 2, homeId: 1 },
     { time: "11:30 AM", label: demoCustomerBy("2")!.name, type: "job", duration: "1.5h", address: "1205 Elm Creek Ct, Frisco", status: "confirmed", tasks: 3, homeId: 2 },
     { time: "1:00 PM", label: "Lunch Break", type: "block", duration: "1h", details: "" },
     { time: "2:00 PM", label: demoCustomerBy("3")!.name, type: "job", duration: "2h", address: "890 Sunset Ridge, Roanoke", status: "pending", tasks: 2, homeId: 3 },
-    { time: "4:30 PM", label: "Team Meeting", type: "block", duration: "30 min", details: "Weekly sync — Zoom" },
+    { time: "4:30 PM", label: "Team Meeting", type: "block", duration: "30 min", details: "Weekly sync - Zoom" },
   ],
   31: [
     { time: "9:00 AM", label: "Tom Brady", type: "job", duration: "1.5h", address: "102 Birchwood Ln, Allen", status: "confirmed", tasks: 2, homeId: 4 },
@@ -62,7 +62,7 @@ const demoScheduleByDay: Record<number, ScheduleItem[]> = {
     { time: "2:30 PM", label: "Kevin Nguyen", type: "job", duration: "1h", address: "87 Pine Ct, McKinney", status: "confirmed", tasks: 1, homeId: 6 },
   ],
   1: [
-    { time: "8:30 AM", label: "Supply Run", type: "block", duration: "1h", details: "Lowe's — drywall, screws, paint" },
+    { time: "8:30 AM", label: "Supply Run", type: "block", duration: "1h", details: "Lowe's - drywall, screws, paint" },
     { time: "9:30 AM", label: "Diana Ross", type: "job", duration: "2.5h", address: "310 Lakeview Dr, Frisco", status: "confirmed", tasks: 3, homeId: 7 },
     { time: "12:00 PM", label: "Lunch", type: "block", duration: "45 min", details: "" },
     { time: "1:00 PM", label: "Marcus Lee", type: "job", duration: "1h", address: "720 Elm St, Plano", status: "needs-parts", tasks: 2, homeId: 8 },
@@ -136,7 +136,7 @@ function formatRange(weekStart: Date): string {
 }
 
 function formatTime(scheduledTime: string): string {
-  // API returns ISO datetime like "1970-01-01T09:00:00.000Z" — extract HH:mm
+  // API returns ISO datetime like "1970-01-01T09:00:00.000Z" - extract HH:mm
   const d = new Date(scheduledTime);
   const h = d.getUTCHours();
   const m = d.getUTCMinutes();
@@ -194,7 +194,7 @@ function DayEmptyState({ dayLabel }: { dayLabel: string }) {
       </h3>
       <p className="mt-1.5 max-w-[200px] text-[13px] leading-relaxed text-text-secondary">
         {isWeekend
-          ? "Enjoy your weekend — no jobs today."
+          ? "Enjoy your weekend - no jobs today."
           : "This day is clear. Add an appointment to fill it in."}
       </p>
 
@@ -421,7 +421,7 @@ export default function SchedulePage() {
                   {d.jobs} job{d.jobs !== 1 ? "s" : ""}
                 </span>
               ) : (
-                <span className="mt-0.5 text-[8px] text-text-tertiary/40">—</span>
+                <span className="mt-0.5 text-[8px] text-text-tertiary/40">-</span>
               )}
             </button>
           );
@@ -529,7 +529,7 @@ export default function SchedulePage() {
                     </Card>
                   </Link>
                 ) : (
-                  // Block card — dashed border, flat style
+                  // Block card - dashed border, flat style
                   <div
                     className={`rounded-xl border border-dashed px-3.5 py-3 ${
                       item.label === "Lunch Break" || item.label === "Lunch"

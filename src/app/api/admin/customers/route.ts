@@ -5,7 +5,7 @@ import { requireTech, unauthorized } from "@/lib/session";
 /**
  * Lightweight customer roster for the admin /people page.
  * The richer /api/admin/clients endpoint includes subscription + last booking
- * details — this one returns just the aggregate counts the People list needs.
+ * details - this one returns just the aggregate counts the People list needs.
  */
 export async function GET(req: NextRequest) {
   const tech = await requireTech();

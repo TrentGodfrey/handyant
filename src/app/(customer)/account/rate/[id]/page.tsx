@@ -55,7 +55,7 @@ function formatBookingDate(iso: string): string {
 }
 
 function formatHours(minutes: number | null): string {
-  if (!minutes) return "—";
+  if (!minutes) return "-";
   const h = Math.round((minutes / 60) * 10) / 10;
   return `${h} ${h === 1 ? "hour" : "hours"}`;
 }

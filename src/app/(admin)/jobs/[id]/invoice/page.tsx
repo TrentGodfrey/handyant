@@ -106,9 +106,9 @@ const DEMO_INVOICE = {
     };
   })(),
   lineItems: [
-    { description: "Labor — Kitchen faucet replacement + garage door sensor", detail: "3 hrs @ $80/hr", amount: 240 },
-    { description: "Materials — Moen 7594ESRS Arbor Faucet", detail: "Brushed nickel", amount: 75 },
-    { description: "Materials — Garage door sensor mounting bracket", detail: "Universal fit", amount: 25 },
+    { description: "Labor - Kitchen faucet replacement + garage door sensor", detail: "3 hrs @ $80/hr", amount: 240 },
+    { description: "Materials - Moen 7594ESRS Arbor Faucet", detail: "Brushed nickel", amount: 75 },
+    { description: "Materials - Garage door sensor mounting bracket", detail: "Universal fit", amount: 25 },
   ],
   subtotal: 340,
   taxRate: TAX_RATE,
@@ -164,7 +164,7 @@ function buildView(b: ApiBooking, invoice?: ApiInvoice): InvoiceView {
   const partsItems = (b.parts ?? []).map((p) => {
     const cost = p.cost == null ? 0 : Number(p.cost);
     return {
-      description: `Materials — ${p.item}`,
+      description: `Materials - ${p.item}`,
       detail: `Qty ${p.qty ?? 1}`,
       amount: cost,
     };
@@ -172,7 +172,7 @@ function buildView(b: ApiBooking, invoice?: ApiInvoice): InvoiceView {
   const labels = b.tasks.map((t) => t.label).join(" + ");
   const lineItems = [
     {
-      description: `Labor — ${labels || "Service visit"}`,
+      description: `Labor - ${labels || "Service visit"}`,
       detail: `${hours} hrs @ $${laborRate}/hr`,
       amount: labor,
     },
@@ -201,8 +201,8 @@ function buildView(b: ApiBooking, invoice?: ApiInvoice): InvoiceView {
     dueDate: fmt(dueObj),
     client: {
       name: b.customer?.name ?? "Customer",
-      address: home?.address ?? "—",
-      city: cityLine || "—",
+      address: home?.address ?? "-",
+      city: cityLine || "-",
       phone: b.customer?.phone ?? "",
       email: b.customer?.email ?? "",
     },
@@ -644,7 +644,7 @@ export default function InvoicePage({ params }: { params: Promise<{ id: string }
                   </div>
                   <div className="text-center">
                     <p className="text-[13px] font-bold text-text-primary">Copy SMS Link</p>
-                    <p className="text-[11px] text-text-tertiary">{view.client.phone || "—"}</p>
+                    <p className="text-[11px] text-text-tertiary">{view.client.phone || "-"}</p>
                   </div>
                 </>
               )}
@@ -681,7 +681,7 @@ export default function InvoicePage({ params }: { params: Promise<{ id: string }
                   <div className="text-center">
                     <p className="text-[13px] font-bold text-text-primary">Email</p>
                     <p className="text-[11px] text-text-tertiary truncate max-w-[110px]">
-                      {view.client.email || "—"}
+                      {view.client.email || "-"}
                     </p>
                   </div>
                 </>

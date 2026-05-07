@@ -468,7 +468,7 @@ export default function AddNewClientPage() {
                 ))}
               </div>
               <p className="mt-2 text-[11px] text-text-tertiary px-1">
-                Skip for now — you can assign a plan later from the client profile.
+                Skip for now - you can assign a plan later from the client profile.
               </p>
             </div>
 
@@ -515,16 +515,16 @@ export default function AddNewClientPage() {
               <div className="space-y-2">
                 <ReviewRow
                   label="Name"
-                  value={`${form.firstName || "—"} ${form.lastName || ""}`.trim() || "—"}
+                  value={`${form.firstName || "-"} ${form.lastName || ""}`.trim() || "-"}
                 />
-                <ReviewRow label="Phone" value={form.phone || "—"} />
-                <ReviewRow label="Email" value={form.email || "—"} />
+                <ReviewRow label="Phone" value={form.phone || "-"} />
+                <ReviewRow label="Email" value={form.email || "-"} />
                 <ReviewRow
                   label="Address"
                   value={
                     form.street
                       ? `${form.street}, ${form.city} ${form.zip}`
-                      : "—"
+                      : "-"
                   }
                 />
               </div>
@@ -551,7 +551,7 @@ export default function AddNewClientPage() {
                 <ReviewRow label="Year Built" value={form.yearBuilt} />
                 <ReviewRow
                   label="Size"
-                  value={form.sqFootage ? `${Number(form.sqFootage).toLocaleString()} sq ft` : "—"}
+                  value={form.sqFootage ? `${Number(form.sqFootage).toLocaleString()} sq ft` : "-"}
                 />
                 <ReviewRow label="Beds / Baths" value={`${form.bedrooms} bd / ${form.bathrooms} ba`} />
                 {form.specialNotes && (
@@ -584,7 +584,7 @@ export default function AddNewClientPage() {
                   </span>
                 </div>
               ) : (
-                <p className="text-[13px] text-text-tertiary">No plan selected — one-time client</p>
+                <p className="text-[13px] text-text-tertiary">No plan selected - one-time client</p>
               )}
             </Card>
 

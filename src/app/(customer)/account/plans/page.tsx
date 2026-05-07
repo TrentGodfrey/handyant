@@ -57,19 +57,19 @@ const includedFeatures = [
   {
     icon: Package,
     title: "Parts Tracking",
-    desc: "We source and track parts for your repairs — no hardware store runs.",
+    desc: "We source and track parts for your repairs - no hardware store runs.",
     plans: ["Pro", "Premium"],
   },
   {
     icon: Home,
     title: "Full Home Profile",
-    desc: "Appliance ages, WiFi, household info, visit photos — all in one place.",
+    desc: "Appliance ages, WiFi, household info, visit photos - all in one place.",
     plans: ["Pro", "Premium"],
   },
   {
     icon: Star,
     title: "Dedicated Technician",
-    desc: "The same trusted tech every visit — they know your home.",
+    desc: "The same trusted tech every visit - they know your home.",
     plans: ["Pro", "Premium"],
   },
   {
@@ -401,7 +401,7 @@ export default function PlansPage() {
                       {feat.plans.includes(name) ? (
                         <Check size={14} className={name === "Pro" ? "text-primary" : "text-success"} strokeWidth={2.5} />
                       ) : (
-                        <span className="text-[16px] text-border">—</span>
+                        <span className="text-[16px] text-border">-</span>
                       )}
                     </div>
                   ))}

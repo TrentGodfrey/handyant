@@ -63,7 +63,7 @@ const DEMO_JOBS: Record<string, JobDetail> = {
     tasks: [
       { id: "t1", label: "Replace kitchen faucet (Moen brushed nickel)", done: false },
       { id: "t2", label: "Fix garage door sensor alignment", done: false, notes: "Laser level needed" },
-      { id: "t3", label: "Check garbage disposal — making noise", done: false },
+      { id: "t3", label: "Check garbage disposal - making noise", done: false },
     ],
     parts: [
       { item: "Moen 7594ESRS Arbor Faucet", qty: 1, status: "purchased" },
@@ -74,7 +74,7 @@ const DEMO_JOBS: Record<string, JobDetail> = {
       { id: "p2", label: "garage_sensor.jpg" },
       { id: "p3", label: "disposal_unit.jpg" },
     ],
-    techNotes: "Gate code is 4821#. Dog is friendly. Faucet shutoffs under sink — need to bring basin wrench.",
+    techNotes: "Gate code is 4821#. Dog is friendly. Faucet shutoffs under sink - need to bring basin wrench.",
     customerNotes: "Kitchen faucet has been leaking worse this week. Garage door closes then reopens immediately.",
   },
   "2": {
@@ -83,7 +83,7 @@ const DEMO_JOBS: Record<string, JobDetail> = {
     estimate: "$280",
     tasks: [
       { id: "t1", label: "Install Nest Learning Thermostat (3rd gen)", done: false },
-      { id: "t2", label: "Replace 3 duplex outlets — master BR + office + garage", done: false },
+      { id: "t2", label: "Replace 3 duplex outlets - master BR + office + garage", done: false },
     ],
     parts: [],
     photos: [],
@@ -95,8 +95,8 @@ const DEMO_JOBS: Record<string, JobDetail> = {
     phone: "(817) 555-0377", date: "Today", time: "2:00 PM", status: "pending",
     estimate: "$190",
     tasks: [
-      { id: "t1", label: "Drywall patch — 2 holes from TV mount removal", done: false },
-      { id: "t2", label: "Touch-up paint — living room & hallway", done: false, notes: "Paint color: SW Alabaster" },
+      { id: "t1", label: "Drywall patch - 2 holes from TV mount removal", done: false },
+      { id: "t2", label: "Touch-up paint - living room & hallway", done: false, notes: "Paint color: SW Alabaster" },
     ],
     parts: [],
     photos: [
@@ -104,7 +104,7 @@ const DEMO_JOBS: Record<string, JobDetail> = {
       { id: "p2", label: "hole_2_hallway.jpg" },
     ],
     techNotes: "Bring sanding supplies + joint compound. Paint stored in garage.",
-    customerNotes: "Holes are from previous TV mount. Need matching paint — Sherwin Williams Alabaster SW7008.",
+    customerNotes: "Holes are from previous TV mount. Need matching paint - Sherwin Williams Alabaster SW7008.",
   },
 };
 
@@ -141,7 +141,7 @@ function bookingToDetail(b: ApiBooking): JobDetail {
 
   const homeStr = b.home
     ? `${b.home.address}${b.home.city ? `, ${b.home.city}` : ""}${b.home.state ? ` ${b.home.state}` : ""}${b.home.zip ? ` ${b.home.zip}` : ""}`
-    : "—";
+    : "-";
 
   return {
     id: b.id,
@@ -477,7 +477,7 @@ export default function JobDetailPage({ params }: { params: Promise<{ id: string
         // for any customer-facing notifications. Nothing more to do client-side.
       }
     } catch {
-      /* swallow — UI will reflect non-completed state */
+      /* swallow - UI will reflect non-completed state */
     } finally {
       setCompleting(false);
       setShowCompleteModal(false);

@@ -16,7 +16,7 @@ import { PRIORITY_CONFIG } from "./types";
 import { demoCustomerBy, DEMO_TECH } from "@/lib/demoData";
 
 // =====================================================================
-// Demo data — preserved from previous version
+// Demo data - preserved from previous version
 // =====================================================================
 
 const DEMO_INITIAL_TODOS: DemoTodoItem[] = [
@@ -24,7 +24,7 @@ const DEMO_INITIAL_TODOS: DemoTodoItem[] = [
   { id: "2", task: "Install smart thermostat", priority: "medium", hasPhoto: false, status: "pending", parts: "Ecobee Smart Thermostat", partStatus: "Purchased", specialist: false },
   { id: "3", task: "Patch drywall in hallway", priority: "low", hasPhoto: true, status: "pending", parts: null, partStatus: null, specialist: false },
   { id: "4", task: "Replace garage door weatherstrip", priority: "low", hasPhoto: false, status: "confirmed", parts: null, partStatus: null, specialist: false },
-  { id: "5", task: "Electrical panel inspection", priority: "high", hasPhoto: false, status: "pending", parts: null, partStatus: null, specialist: true, notes: "Breaker trips on circuit 4 — licensed electrician needed" },
+  { id: "5", task: "Electrical panel inspection", priority: "high", hasPhoto: false, status: "pending", parts: null, partStatus: null, specialist: true, notes: "Breaker trips on circuit 4 - licensed electrician needed" },
 ];
 
 const PRIMARY_DEMO_CUSTOMER = demoCustomerBy("Sarah Mitchell")!;
@@ -336,7 +336,7 @@ export default function DemoHomeProfile() {
               </div>
               <div className="flex-1">
                 <p className="text-[13px] font-semibold text-text-primary">Garage door spring has play</p>
-                <p className="text-[12px] text-text-secondary mt-0.5 leading-relaxed">Monitoring — may need specialist. Lubrication applied, check in 3 months.</p>
+                <p className="text-[12px] text-text-secondary mt-0.5 leading-relaxed">Monitoring - may need specialist. Lubrication applied, check in 3 months.</p>
                 <p className="text-[10px] text-text-tertiary mt-1">Noted Mar 15, 2026 · Anthony</p>
               </div>
             </div>

@@ -21,7 +21,7 @@ export default function DemoPage() {
           </div>
           <h1 className="text-2xl font-bold text-text-primary">Try the demo</h1>
           <p className="text-text-secondary mt-2 text-[14px]">
-            Pick a role and explore. Sample data only — nothing is saved.
+            Pick a role and explore. Sample data only - nothing is saved.
           </p>
         </div>
 

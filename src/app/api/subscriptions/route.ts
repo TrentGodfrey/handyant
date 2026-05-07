@@ -26,7 +26,7 @@ export async function POST(req: NextRequest) {
   // pro/premium must come from a tech-side endpoint or a future Stripe webhook.
   if (user.role !== "tech" && plan !== "free") {
     return Response.json(
-      { error: "Paid plans are not yet available — Stripe integration pending" },
+      { error: "Paid plans are not yet available - Stripe integration pending" },
       { status: 403 }
     );
   }

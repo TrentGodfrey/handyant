@@ -104,7 +104,7 @@ const DEMO_STAFF_ROWS: StaffRow[] = [
 // ── Helpers ──────────────────────────────────────────────────────────────────
 
 function formatJoinedDate(iso: string | null): string {
-  if (!iso) return "—";
+  if (!iso) return "-";
   try {
     return new Date(iso).toLocaleDateString("en-US", {
       month: "short",
@@ -112,7 +112,7 @@ function formatJoinedDate(iso: string | null): string {
       year: "numeric",
     });
   } catch {
-    return "—";
+    return "-";
   }
 }
 
@@ -134,7 +134,7 @@ export default function PeoplePage() {
   // Invite modal state
   const [inviteOpen, setInviteOpen] = useState(false);
 
-  // Remove confirm state — track id so we can disable buttons during request
+  // Remove confirm state - track id so we can disable buttons during request
   const [removingId, setRemovingId] = useState<string | null>(null);
 
   useEffect(() => {
@@ -610,7 +610,7 @@ function InviteStaffModal({
     navigator.clipboard
       .writeText(tempPassword)
       .then(() => toast.success("Copied to clipboard"))
-      .catch(() => toast.error("Couldn't copy — copy it manually"));
+      .catch(() => toast.error("Couldn't copy - copy it manually"));
   }
 
   return (
@@ -633,7 +633,7 @@ function InviteStaffModal({
             <p className="text-[13px] text-text-secondary">
               <span className="font-semibold text-text-primary">{invitedName}</span> has been
               added as a staff member. Share this temporary password with them out of band
-              (text, in person) — it won&rsquo;t be shown again.
+              (text, in person) - it won&rsquo;t be shown again.
             </p>
 
             <div>

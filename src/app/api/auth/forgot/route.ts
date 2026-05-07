@@ -16,7 +16,7 @@ export async function POST(req: NextRequest) {
   const email =
     typeof body.email === "string" ? body.email.trim().toLowerCase() : "";
 
-  // Always 200 — never reveal whether the email exists.
+  // Always 200 - never reveal whether the email exists.
   if (!email) return Response.json({ ok: true });
 
   const user = await prisma.user.findUnique({ where: { email } });

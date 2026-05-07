@@ -572,7 +572,7 @@ export default function AccountManagePage() {
             />
           ) : (
             <p className="text-[14px] font-medium text-text-primary mt-0.5 truncate">
-              {value || <span className="text-text-tertiary">{placeholder ?? "—"}</span>}
+              {value || <span className="text-text-tertiary">{placeholder ?? "-"}</span>}
             </p>
           )}
         </div>
@@ -699,12 +699,12 @@ export default function AccountManagePage() {
           <Card className="divide-y divide-border-light">
             <FieldRow label="Full Name" value={name} icon={User} field="name" onChange={setName} />
             {/* TODO: a parallel agent is wiring email-change-with-verification.
-                Hide the pencil for now by omitting onChange — FieldRow only renders
+                Hide the pencil for now by omitting onChange - FieldRow only renders
                 its edit button when an onChange handler is supplied. */}
             <FieldRow label="Email" value={email} icon={Mail} field="email" readOnly />
             <FieldRow label="Phone" value={phone} icon={Phone} field="phone" onChange={setPhone} />
 
-            {/* Service Address — inline editable (real + demo) */}
+            {/* Service Address - inline editable (real + demo) */}
             <div className="py-3.5">
               <div className="flex items-start gap-3">
                 <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-surface-secondary">
@@ -862,7 +862,7 @@ export default function AccountManagePage() {
             ) : (
               <div className="mb-4">
                 <p className="text-[15px] font-semibold text-text-primary">No subscription</p>
-                <p className="text-[13px] text-text-secondary mt-0.5">You&apos;re on Basic Free — pay per visit.</p>
+                <p className="text-[13px] text-text-secondary mt-0.5">You&apos;re on Basic Free - pay per visit.</p>
               </div>
             )}
 
@@ -1012,7 +1012,7 @@ export default function AccountManagePage() {
                 size="sm"
                 fullWidth
                 onClick={() => {
-                  setPaymentToast("Coming soon — card storage isn't enabled yet.");
+                  setPaymentToast("Coming soon - card storage isn't enabled yet.");
                   setShowAddCard(false);
                   setTimeout(() => setPaymentToast(null), 4000);
                 }}

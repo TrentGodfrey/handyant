@@ -16,7 +16,7 @@ import VisitsAndNotes from "./_components/VisitsAndNotes";
 import AddHomeForm, { type AddHomeState } from "./_components/AddHomeForm";
 
 // =====================================================================
-// Page entry — chooses demo vs real
+// Page entry - chooses demo vs real
 // =====================================================================
 
 export default function HomeProfilePage() {
@@ -43,7 +43,7 @@ function RealHomeProfile() {
   const [home, setHome] = useState<HomeFull | null>(null);
   const [hasNoHome, setHasNoHome] = useState(false);
 
-  // Edit state — address
+  // Edit state - address
   const [editingAddress, setEditingAddress] = useState(false);
   const [editAddress, setEditAddress] = useState("");
   const [editCity, setEditCity] = useState("");
@@ -52,7 +52,7 @@ function RealHomeProfile() {
   const [savingAddress, setSavingAddress] = useState(false);
   const [addressToast, setAddressToast] = useState<string | null>(null);
 
-  // Edit state — home details
+  // Edit state - home details
   const [editingDetails, setEditingDetails] = useState(false);
   const [editYearBuilt, setEditYearBuilt] = useState<string>("");
   const [editWaterHeaterYear, setEditWaterHeaterYear] = useState<string>("");

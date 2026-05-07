@@ -112,12 +112,12 @@ function initialsFor(name: string): string {
 }
 
 function formatDateShort(iso: string | null): string {
-  if (!iso) return "—";
+  if (!iso) return "-";
   try {
     const d = new Date(iso);
     return d.toLocaleDateString("en-US", { month: "short", day: "numeric" });
   } catch {
-    return "—";
+    return "-";
   }
 }
 
@@ -248,7 +248,7 @@ export default function HomesPage() {
         </div>
       )}
 
-      {/* Summary row — only show when there are results */}
+      {/* Summary row - only show when there are results */}
       {showClientList && (
         <div className="mb-4 flex items-center gap-1.5">
           <span className="text-[12px] font-semibold text-text-primary">{filtered.length}</span>

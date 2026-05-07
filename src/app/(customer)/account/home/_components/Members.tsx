@@ -200,7 +200,7 @@ export default function Members(props: MembersProps) {
                 <div className="flex-1 min-w-0">
                   <p className="text-[14px] font-semibold text-text-primary truncate">{member.name}</p>
                   <p className="text-[12px] text-text-tertiary truncate">
-                    {[member.role, member.phone].filter(Boolean).join(" · ") || "—"}
+                    {[member.role, member.phone].filter(Boolean).join(" · ") || "-"}
                   </p>
                 </div>
                 {member.phone && (

@@ -17,7 +17,7 @@ const publicExact = new Set(["/"]);
 export async function proxy(req: NextRequest) {
   const { pathname } = req.nextUrl;
 
-  // Demo mode bypass — runs FIRST so the cookie is set even when landing on
+  // Demo mode bypass - runs FIRST so the cookie is set even when landing on
   // a public path like / or /demo. Available in production as a "Try the demo"
   // feature. The cookie only bypasses page-level proxy auth; API mutation
   // routes still require a real JWT via requireUser()/requireTech(), so demo
@@ -28,7 +28,7 @@ export async function proxy(req: NextRequest) {
 
   if (demoQuery && !demoCookie) {
     // Set the cookie on the response. Whether the destination is public or
-    // protected, we just continue — the rest of the middleware lets demo
+    // protected, we just continue - the rest of the middleware lets demo
     // requests through anyway.
     const res = NextResponse.next();
     res.cookies.set("demo_mode", "true", {
@@ -55,7 +55,7 @@ export async function proxy(req: NextRequest) {
     return NextResponse.next();
   }
 
-  // Demo cookie present — bypass auth on protected routes too
+  // Demo cookie present - bypass auth on protected routes too
   if (demoCookie) {
     return NextResponse.next();
   }

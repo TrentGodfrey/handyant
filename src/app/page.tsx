@@ -36,14 +36,14 @@ const testimonials = [
     name: "Angela T.",
     city: "Waxahachie",
     rating: 5,
-    text: "I love the Pro plan — priority scheduling has saved me twice when something broke right before guests came over.",
+    text: "I love the Pro plan - priority scheduling has saved me twice when something broke right before guests came over.",
   },
 ];
 
 const steps = [
   { n: 1, title: "Tell us what's broken", body: "Snap a photo, describe the job, or just pick from a list. Two minutes." },
   { n: 2, title: "Pick a time that works", body: "See real availability on Anthony's calendar. Mornings, evenings, weekends." },
-  { n: 3, title: "Get it fixed — for good", body: "Insured, reliable, and on time. Upfront pricing. Real receipts. Real warranties." },
+  { n: 3, title: "Get it fixed - for good", body: "Insured, reliable, and on time. Upfront pricing. Real receipts. Real warranties." },
 ];
 
 export default function LandingPage() {
@@ -99,7 +99,7 @@ export default function LandingPage() {
               </h1>
 
               <p className="mt-5 max-w-xl mx-auto lg:mx-0 text-[16px] sm:text-[17px] leading-relaxed text-text-secondary">
-                Plumbing leaks, broken switches, that closet door that never closed right —
+                Plumbing leaks, broken switches, that closet door that never closed right -
                 book MCQ Home Co. in 30 seconds and stop adding things to a list nobody&apos;s ever going to read.
               </p>
 
@@ -226,7 +226,7 @@ export default function LandingPage() {
             One handyman. Every kind of job.
           </h2>
           <p className="mt-3 max-w-xl mx-auto text-[15px] text-text-secondary">
-            From a leaky faucet to a full smart-home install — book any of the below in two taps.
+            From a leaky faucet to a full smart-home install - book any of the below in two taps.
           </p>
         </div>
 
@@ -463,7 +463,7 @@ export default function LandingPage() {
             </div>
           </div>
           <p className="mt-6 text-[11px] text-text-tertiary">
-            © {new Date().getFullYear()} MCQ Home Co. — Meticulous Craftsman Quality. Fully insured. Independently owned.
+            © {new Date().getFullYear()} MCQ Home Co. - Meticulous Craftsman Quality. Fully insured. Independently owned.
           </p>
         </div>
       </footer>

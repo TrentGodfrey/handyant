@@ -271,7 +271,7 @@ function ScheduleNewPageInner() {
         body: JSON.stringify({
           startAt: new Date(startIso).toISOString(),
           endAt: new Date(endIso).toISOString(),
-          reason: reasonParts.join(" — ") || null,
+          reason: reasonParts.join(" - ") || null,
         }),
       });
       if (!res.ok) {
@@ -639,7 +639,7 @@ function ScheduleNewPageInner() {
                   ref={partsTextareaRef}
                   className={`${inputCls} resize-none animate-fade-in`}
                   rows={2}
-                  placeholder="List parts needed, one per line — e.g. Moen 7594ESRS faucet"
+                  placeholder="List parts needed, one per line - e.g. Moen 7594ESRS faucet"
                   value={partsList}
                   onChange={(e) => setPartsList(e.target.value)}
                 />

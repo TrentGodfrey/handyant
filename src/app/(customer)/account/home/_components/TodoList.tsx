@@ -93,7 +93,7 @@ export default function TodoList(props: TodoListProps) {
 
       {todos.length === 0 ? (
         <Card padding="md">
-          <p className="text-[13px] text-text-tertiary text-center">No tasks yet — tap Add Task to get started</p>
+          <p className="text-[13px] text-text-tertiary text-center">No tasks yet - tap Add Task to get started</p>
         </Card>
       ) : (
         <div className="space-y-2">

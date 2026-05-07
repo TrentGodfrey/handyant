@@ -26,14 +26,14 @@ function getClient(): Resend | null {
 }
 
 /**
- * Send an email via Resend. Degrades gracefully if RESEND_API_KEY isn't set —
+ * Send an email via Resend. Degrades gracefully if RESEND_API_KEY isn't set -
  * logs a warning and returns { ok: false } instead of throwing.
  */
 export async function sendEmail(params: SendEmailParams): Promise<SendEmailResult> {
   const client = getClient();
   if (!client) {
     console.warn(
-      "[email] RESEND_API_KEY is not set — skipping send to",
+      "[email] RESEND_API_KEY is not set - skipping send to",
       Array.isArray(params.to) ? params.to.join(", ") : params.to,
     );
     return { ok: false, error: "email not configured" };
@@ -78,7 +78,7 @@ export function emailShell({
   const safePreheader = preheader ? escapeHtml(preheader) : "";
   const safeFooter =
     footerNote ??
-    "MCQ Home Co. — Meticulous Craftsman Quality home services in DFW. Reply to this email if you have any questions.";
+    "MCQ Home Co. - Meticulous Craftsman Quality home services in DFW. Reply to this email if you have any questions.";
   return `<!DOCTYPE html>
 <html lang="en">
 <head>

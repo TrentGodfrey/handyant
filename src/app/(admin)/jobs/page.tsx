@@ -98,7 +98,7 @@ function bookingToJob(b: ApiBooking): Job {
   return {
     id: b.id,
     client: b.customer?.name ?? "Customer",
-    address: b.home ? `${b.home.address}${b.home.city ? `, ${b.home.city}` : ""}` : "—",
+    address: b.home ? `${b.home.address}${b.home.city ? `, ${b.home.city}` : ""}` : "-",
     date: formatJobDate(b.scheduledDate, b.scheduledTime),
     dateGroup: bucketDate(new Date(b.scheduledDate)),
     tasks: b.tasks.map((t) => t.label),
@@ -626,7 +626,7 @@ function KanbanColumn({
         </div>
       </div>
 
-      {/* Column body — grows with content, page scrolls; dropdown stays unclipped */}
+      {/* Column body - grows with content, page scrolls; dropdown stays unclipped */}
       <div className="flex-1 space-y-2.5 p-2.5 min-h-[120px]">
         {columnJobs.length === 0 ? (
           <div className="flex items-center justify-center py-10">
@@ -723,7 +723,7 @@ export default function JobsPage() {
       .finally(() => setLoading(false));
   }, [isDemo, activeStage, mounted, reloadKey]);
 
-  // Move handler — optimistic update + PATCH (with revert on failure)
+  // Move handler - optimistic update + PATCH (with revert on failure)
   const handleMove = (jobId: string, newStage: PipelineStage) => {
     let prevSnapshot: Job[] = [];
     setJobData((prev) => {

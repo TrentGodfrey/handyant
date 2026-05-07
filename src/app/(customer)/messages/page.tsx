@@ -96,7 +96,7 @@ const DEMO_THREADS: Thread[] = [
       { id: "1", text: "Hi Sarah! Just confirming our appointment for Tuesday. I'll be there around 9 AM.", sender: "tech", timestamp: "Mar 28, 10:30 AM", type: "text" },
       { id: "2", text: "Sounds great! The kitchen faucet has been leaking worse this week.", sender: "customer", timestamp: "Mar 28, 10:45 AM", type: "text" },
       { id: "3", text: "Got it, I'll bring a Moen cartridge. Any preference on finish?", sender: "tech", timestamp: "Mar 28, 11:02 AM", type: "text" },
-      { id: "4", text: "Brushed nickel if possible! Also the garage door sensor has been acting up — it closes then reopens immediately.", sender: "customer", timestamp: "Mar 28, 11:15 AM", type: "text" },
+      { id: "4", text: "Brushed nickel if possible! Also the garage door sensor has been acting up - it closes then reopens immediately.", sender: "customer", timestamp: "Mar 28, 11:15 AM", type: "text" },
       { id: "5", text: "Classic alignment issue. I'll bring my laser level. See you Tuesday! 👍", sender: "tech", timestamp: "Mar 28, 11:20 AM", type: "text" },
       { id: "s1", text: "Appointment confirmed for Tue, Apr 1 at 9:00 AM", sender: "tech", timestamp: "Mar 28, 11:21 AM", type: "system" },
     ],

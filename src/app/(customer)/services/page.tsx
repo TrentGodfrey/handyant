@@ -250,7 +250,7 @@ export default function ServicesPage() {
 
   // Build the unified category list rendered by the grid below.
   // In demo mode, we use the rich curated catalog. In real mode, we project
-  // ServiceCategory rows onto the same shape (no sub-services — the click
+  // ServiceCategory rows onto the same shape (no sub-services - the click
   // takes the user straight to /book?category=<name>).
   const categories = useMemo(() => {
     if (isDemo) return demoCategories;

@@ -86,7 +86,7 @@ function DFWMap() {
           <circle cx={city.x} cy={city.y} r="7" fill="#4F9598" />
           {/* Inner highlight */}
           <circle cx={city.x} cy={city.y - 2} r="2.5" fill="white" opacity="0.35" />
-          {/* Label — position above or below based on y */}
+          {/* Label - position above or below based on y */}
           <text
             x={city.x}
             y={city.y > 200 ? city.y + 17 : city.y - 12}
@@ -254,7 +254,7 @@ export default function OnboardingPage() {
   const [screen, setScreen] = useState<Screen>("welcome");
   const [submitting, setSubmitting] = useState(false);
 
-  // Step 1 — account info
+  // Step 1 - account info
   const [firstName, setFirstName] = useState("");
   const [lastName, setLastName] = useState("");
   const [phone, setPhone] = useState("");
@@ -262,7 +262,7 @@ export default function OnboardingPage() {
   const [password, setPassword] = useState("");
   const [step1Error, setStep1Error] = useState("");
 
-  // Step 2 — home info
+  // Step 2 - home info
   const [street, setStreet] = useState("");
   const [city, setCity] = useState("");
   const [zip, setZip] = useState("");
@@ -273,10 +273,10 @@ export default function OnboardingPage() {
   const [bathrooms, setBathrooms] = useState(2);
   const [step2Error, setStep2Error] = useState("");
 
-  // Step 3 — service area check (real lookup against city list)
+  // Step 3 - service area check (real lookup against city list)
   const [areaStatus, setAreaStatus] = useState<"checking" | "in-area" | "out-area">("checking");
 
-  // Step 4 — plan
+  // Step 4 - plan
   const [selectedPlan, setSelectedPlan] = useState<PlanId>("pro");
 
   // Service area check on entering step 3
@@ -405,7 +405,7 @@ export default function OnboardingPage() {
     setSubmitting(true);
     try {
       // Customers can only set themselves to the free tier today (Stripe pending).
-      // Always POST "free" — we record the user's preferred plan in toast/UI so
+      // Always POST "free" - we record the user's preferred plan in toast/UI so
       // they remember to upgrade when paid plans go live.
       const res = await fetch("/api/subscriptions", {
         method: "POST",
@@ -465,7 +465,7 @@ export default function OnboardingPage() {
             type="button"
             onClick={() => {
               if (sessionStatus === "authenticated") {
-                // Already signed in — skip account step, go straight to home info.
+                // Already signed in - skip account step, go straight to home info.
                 setScreen("step-2");
               } else {
                 setScreen("step-1");
@@ -798,7 +798,7 @@ export default function OnboardingPage() {
                 <div>
                   <p className="text-[14px] font-bold text-error">Not yet available</p>
                   <p className="text-[13px] text-text-secondary">
-                    We don&apos;t serve {city || "your city"} yet — but we&apos;re expanding fast.
+                    We don&apos;t serve {city || "your city"} yet - but we&apos;re expanding fast.
                   </p>
                 </div>
               </div>
@@ -973,7 +973,7 @@ export default function OnboardingPage() {
           <div className="mt-3 flex items-center gap-1.5 rounded-xl bg-surface-secondary px-3 py-2.5">
             <CheckCircle2 size={14} className="text-[#22C55E]" />
             <span className="text-[12px] font-semibold text-text-secondary">
-              Free Plan — upgrade to {plans.find((p) => p.id === selectedPlan)?.name} when available
+              Free Plan - upgrade to {plans.find((p) => p.id === selectedPlan)?.name} when available
             </span>
           </div>
         </div>

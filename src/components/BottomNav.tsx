@@ -80,7 +80,7 @@ export default function BottomNav({ variant = "customer" }: { variant?: "custome
             <span className="text-[16px] font-black tracking-tight text-text-primary">MCQ Home Co.</span>
           </div>
 
-          {/* Role Switcher — only for tech users */}
+          {/* Role Switcher - only for tech users */}
           {isTech && (
             <div className="flex rounded-full bg-gray-100 p-1">
               <a

@@ -32,7 +32,7 @@ export async function DELETE(
       return forbidden();
     }
   } else if (user.role !== "tech") {
-    // Orphan photo with no owner reference — only techs can clean these up.
+    // Orphan photo with no owner reference - only techs can clean these up.
     return forbidden();
   }
 

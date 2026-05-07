@@ -1,7 +1,7 @@
 import { NextRequest } from "next/server";
 import { prisma } from "@/lib/prisma";
 
-// Public endpoint — unauthenticated visitors can pick a time before signing up.
+// Public endpoint - unauthenticated visitors can pick a time before signing up.
 // Returns 30-min slot grid for the default tech (Anthony) on the requested date.
 //
 // GET /api/availability?date=YYYY-MM-DD
@@ -65,7 +65,7 @@ export async function GET(req: NextRequest) {
   }
   const dayKey = DAY_KEYS[date.getUTCDay()];
 
-  // Find the default tech (Anthony — only one tech for now).
+  // Find the default tech (Anthony - only one tech for now).
   const tech = await prisma.user.findFirst({
     where: { role: "tech" },
     select: { id: true },
@@ -73,7 +73,7 @@ export async function GET(req: NextRequest) {
   });
 
   if (!tech) {
-    // No tech configured yet — nothing to book against.
+    // No tech configured yet - nothing to book against.
     return Response.json({ slots: [] });
   }
 

@@ -30,7 +30,7 @@ export async function POST(req: NextRequest) {
   const isTechCreating = user.role === "tech" && typeof body.customerId === "string" && body.customerId.length > 0;
   const customerId = isTechCreating ? (body.customerId as string) : user.id;
 
-  // Normalize parts payload — accept string[] of items, drop blanks.
+  // Normalize parts payload - accept string[] of items, drop blanks.
   const partItems: string[] = Array.isArray(body.parts)
     ? (body.parts as unknown[])
         .filter((p): p is string => typeof p === "string")

@@ -130,7 +130,7 @@ async function main() {
       tasks: [
         { label: "Replace kitchen faucet (Moen brushed nickel)" },
         { label: "Fix garage door sensor alignment", notes: "Laser level needed" },
-        { label: "Check garbage disposal — making noise" },
+        { label: "Check garbage disposal - making noise" },
       ],
       parts: [
         { item: "Moen 7594ESRS Arbor Faucet", qty: 1, status: "purchased", cost: 185 },
@@ -152,8 +152,8 @@ async function main() {
       customerIdx: 2, dateOffset: 0, hour: 14, status: "pending", duration: 120, estimate: 190,
       desc: "Drywall + paint touch-up",
       tasks: [
-        { label: "Drywall patch — 2 holes from TV mount" },
-        { label: "Touch-up paint — living room & hallway", notes: "Paint color: SW Alabaster" },
+        { label: "Drywall patch - 2 holes from TV mount" },
+        { label: "Touch-up paint - living room & hallway", notes: "Paint color: SW Alabaster" },
       ],
       parts: [],
       categoriesByName: ["Drywall", "Painting"],
@@ -270,7 +270,7 @@ async function main() {
       data: { conversationId: convo.id, senderId: sarah.id, text: "Sounds great! The kitchen faucet has been leaking worse." },
     });
     await prisma.message.create({
-      data: { conversationId: convo.id, senderId: tech.id, text: "Got it — I'll bring a Moen cartridge. Brushed nickel?" },
+      data: { conversationId: convo.id, senderId: tech.id, text: "Got it - I'll bring a Moen cartridge. Brushed nickel?" },
     });
   }
 

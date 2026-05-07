@@ -89,7 +89,7 @@ export function planMeta(plan: string): { label: string; price: string; details:
   }
   return {
     label: plan.charAt(0).toUpperCase() + plan.slice(1),
-    price: "—",
+    price: "-",
     details: "Custom plan",
   };
 }

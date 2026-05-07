@@ -119,7 +119,7 @@ function todayStr(): string {
 function statusToPhase(status: string): Phase {
   if (status === "completed") return 3;
   if (status === "in_progress") return 2;
-  // We don't have an explicit "on_the_way" status — keep the demo advance toggle.
+  // We don't have an explicit "on_the_way" status - keep the demo advance toggle.
   return 0;
 }
 
@@ -386,7 +386,7 @@ export default function TrackPage() {
     if (!booking) return;
     const eta = computeEtaLabel(booking.scheduledDate, booking.scheduledTime, booking.status);
     const shareUrl = typeof window !== "undefined" ? window.location.href : "";
-    const text = `${booking.techName} — ${eta.primary}${eta.secondary ? ` (${eta.secondary})` : ""}`;
+    const text = `${booking.techName} - ${eta.primary}${eta.secondary ? ` (${eta.secondary})` : ""}`;
     try {
       if (typeof navigator !== "undefined" && navigator.share) {
         await navigator.share({
@@ -397,7 +397,7 @@ export default function TrackPage() {
         return;
       }
     } catch {
-      // user cancelled or share failed — fall through to copy
+      // user cancelled or share failed - fall through to copy
     }
     try {
       if (typeof navigator !== "undefined" && navigator.clipboard) {
@@ -568,7 +568,7 @@ export default function TrackPage() {
               </div>
             </div>
 
-            {/* Demo hint — only visible in demo mode */}
+            {/* Demo hint - only visible in demo mode */}
             {isDemo && (
               <div className="relative z-10 mt-3 flex items-center justify-center">
                 <span className="text-[10px] text-white/50 font-medium tracking-wide uppercase">

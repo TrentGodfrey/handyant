@@ -178,7 +178,7 @@ export default function NotificationPanel({ open, onClose }: NotificationPanelPr
         className="absolute inset-0 bg-black/30 backdrop-blur-[2px] cursor-default"
       />
 
-      {/* Panel — desktop right slide-over, mobile bottom sheet */}
+      {/* Panel - desktop right slide-over, mobile bottom sheet */}
       <div
         className={[
           "relative ml-auto bg-white border-border shadow-xl flex flex-col",

@@ -80,7 +80,7 @@ export default function VisitsAndNotes({
         <p className="mb-3 text-sm font-semibold uppercase tracking-wider text-text-secondary">Tech Notes</p>
         {techNotes.length === 0 ? (
           <Card padding="md">
-            <p className="text-[13px] text-text-tertiary text-center">No tech notes yet — your handyman will add observations after visits</p>
+            <p className="text-[13px] text-text-tertiary text-center">No tech notes yet - your handyman will add observations after visits</p>
           </Card>
         ) : (
           <Card padding="md" className="space-y-4">

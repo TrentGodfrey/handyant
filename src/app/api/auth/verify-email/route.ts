@@ -43,7 +43,7 @@ export async function GET(req: NextRequest) {
     );
   }
 
-  // If pendingEmail is set we're confirming a change — swap it into email.
+  // If pendingEmail is set we're confirming a change - swap it into email.
   // Guard against the new address being claimed in the meantime.
   if (user.pendingEmail) {
     const taken = await prisma.user.findUnique({

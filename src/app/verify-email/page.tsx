@@ -16,7 +16,7 @@ function VerifyEmailContent() {
   const error = searchParams.get("error");
 
   // The /api/auth/verify-email GET endpoint redirects on success directly to
-  // /account?verified=1 — so this page only renders when something went wrong.
+  // /account?verified=1 - so this page only renders when something went wrong.
   // If a token is present without an error, the user landed here from a
   // direct link and we let them know we're verifying.
   const token = searchParams.get("token");

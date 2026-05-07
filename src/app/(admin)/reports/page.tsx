@@ -285,7 +285,7 @@ function TrendDeltaBadge({
       <div className="flex items-center gap-1">
         <Minus size={11} className="text-text-tertiary" />
         <span className="text-[11px] font-semibold text-text-tertiary">
-          — {priorLabel}
+          - {priorLabel}
         </span>
       </div>
     );
@@ -388,7 +388,7 @@ export default function ReportsPage() {
         labels: [...quarters.keys()],
       };
     }
-    // year — bucket by year
+    // year - bucket by year
     const years = new Map<string, number>();
     for (const w of weekly) {
       const date = new Date(w.weekStart);
@@ -551,7 +551,7 @@ export default function ReportsPage() {
     },
     {
       label: "Client Satisfaction",
-      value: `${rating ? rating.toFixed(1) : "—"}/5.0`,
+      value: `${rating ? rating.toFixed(1) : "-"}/5.0`,
       trend: { kind: "stars" },
       icon: Star,
       iconBg: "bg-warning-light",
@@ -677,7 +677,7 @@ export default function ReportsPage() {
             </h3>
             <p className="text-[11px] text-text-tertiary">
               {period === "week"
-                ? "Weekly revenue — last 8 weeks"
+                ? "Weekly revenue - last 8 weeks"
                 : period === "month"
                   ? "Monthly revenue"
                   : period === "quarter"
@@ -689,7 +689,7 @@ export default function ReportsPage() {
             <RevenueChart values={chartData.values} labels={chartData.labels} />
           ) : (
             <p className="text-[12px] text-text-tertiary text-center py-12">
-              No data yet — complete jobs to see reports
+              No data yet - complete jobs to see reports
             </p>
           )}
         </Card>
@@ -704,7 +704,7 @@ export default function ReportsPage() {
           </h3>
           {serviceCategories.length === 0 ? (
             <p className="text-[12px] text-text-tertiary text-center py-6">
-              No data yet — complete jobs to see reports
+              No data yet - complete jobs to see reports
             </p>
           ) : (
             <div className="space-y-3">
@@ -746,7 +746,7 @@ export default function ReportsPage() {
           </div>
           {topClients.length === 0 ? (
             <p className="text-[12px] text-text-tertiary text-center py-6">
-              No data yet — complete jobs to see reports
+              No data yet - complete jobs to see reports
             </p>
           ) : (
             <div className="space-y-3">
@@ -803,7 +803,7 @@ export default function ReportsPage() {
           </div>
           {serviceAreas.length === 0 ? (
             <p className="text-[12px] text-text-tertiary text-center py-6">
-              No data yet — complete jobs to see reports
+              No data yet - complete jobs to see reports
             </p>
           ) : (
             <div className="space-y-2.5">
@@ -842,7 +842,7 @@ export default function ReportsPage() {
           </div>
           {weeklyBreakdown.every((d) => d.jobs === 0) && !isDemo ? (
             <p className="text-[12px] text-text-tertiary text-center py-6">
-              No data yet — complete jobs to see reports
+              No data yet - complete jobs to see reports
             </p>
           ) : (
             <div className="grid grid-cols-2 gap-2">

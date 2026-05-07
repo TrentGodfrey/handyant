@@ -55,7 +55,7 @@ export async function POST(req: NextRequest) {
     return Response.json({ error: "Name is required" }, { status: 400 });
   }
 
-  // Dedupe by email or phone — return existing customer rather than creating
+  // Dedupe by email or phone - return existing customer rather than creating
   // a duplicate User row (techs frequently re-add a client they've forgotten).
   const dedupeOr: Array<Record<string, unknown>> = [];
   if (body.email) dedupeOr.push({ email: body.email });

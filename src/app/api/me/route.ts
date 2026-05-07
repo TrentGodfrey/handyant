@@ -84,7 +84,7 @@ export async function DELETE() {
 
   const userId = user.id;
 
-  // Hard delete — relies on Prisma cascade on related rows (homes, etc.).
+  // Hard delete - relies on Prisma cascade on related rows (homes, etc.).
   // Bookings and conversations have onDelete: NoAction so we anonymize first
   // by clearing the FK soft-association where possible. The simplest path that
   // doesn't violate constraints is to hard-delete homes/subscriptions/notifications
@@ -93,7 +93,7 @@ export async function DELETE() {
     await prisma.user.delete({ where: { id: userId } });
     return Response.json({ ok: true });
   } catch {
-    // Soft delete fallback — anonymize the account.
+    // Soft delete fallback - anonymize the account.
     await prisma.user.update({
       where: { id: userId },
       data: {

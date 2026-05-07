@@ -35,7 +35,7 @@ import { useDemoMode } from "@/lib/useDemoMode";
 import type { ServiceCity } from "@/components/ServiceAreaMap";
 import { toast } from "@/components/Toaster";
 
-// Lazy-loaded Leaflet map (no SSR — Leaflet needs `window`)
+// Lazy-loaded Leaflet map (no SSR - Leaflet needs `window`)
 const ServiceAreaMap = dynamic(() => import("@/components/ServiceAreaMap"), {
   ssr: false,
   loading: () => (
@@ -146,10 +146,10 @@ export default function SettingsPage() {
   const [pendingPinName, setPendingPinName] = useState("");
   const lastSearchAt = useRef(0);
 
-  // Availability — backed by BusinessProfile.workingHours
+  // Availability - backed by BusinessProfile.workingHours
   const [workingHours, setWorkingHours] = useState<WorkingHours>(DEFAULT_HOURS);
 
-  // Notifications — backed by BusinessProfile.notifyPrefs
+  // Notifications - backed by BusinessProfile.notifyPrefs
   const [notifyPrefs, setNotifyPrefs] = useState<NotifyPrefs>({
     jobReminders: true,
     leadAlerts: true,
@@ -157,7 +157,7 @@ export default function SettingsPage() {
     email: true,
   });
 
-  // Payment methods — backed by BusinessProfile
+  // Payment methods - backed by BusinessProfile
   const [venmoHandle, setVenmoHandle] = useState("");
   const [zelleHandle, setZelleHandle] = useState("");
   const [cashappHandle, setCashappHandle] = useState("");
@@ -311,7 +311,7 @@ export default function SettingsPage() {
           });
         }
       } catch {
-        /* swallow — UI keeps optimistic value */
+        /* swallow - UI keeps optimistic value */
       }
     }
 
@@ -420,7 +420,7 @@ export default function SettingsPage() {
         body: JSON.stringify({ city: trimmed, lat, lng }),
       });
     } catch {
-      /* swallow — keep optimistic state */
+      /* swallow - keep optimistic state */
     }
   }
 
@@ -711,7 +711,7 @@ export default function SettingsPage() {
                     </div>
                     <div className="flex-1 min-w-0">
                       <p className="text-[11px] text-text-tertiary">{label}</p>
-                      <p className="text-[14px] font-semibold text-text-primary truncate">{value || "—"}</p>
+                      <p className="text-[14px] font-semibold text-text-primary truncate">{value || "-"}</p>
                     </div>
                     <button
                       onClick={() => startEdit(field, value)}
@@ -1191,7 +1191,7 @@ export default function SettingsPage() {
           </Card>
         </section>
 
-        {/* ── SECTION: Subscription / Billing — demo only ── */}
+        {/* ── SECTION: Subscription / Billing - demo only ── */}
         {isDemo && (
           <section>
             <div className="flex items-center gap-2 mb-3">

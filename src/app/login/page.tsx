@@ -24,7 +24,7 @@ export default function LoginPage() {
   const [showGoogle, setShowGoogle] = useState(false);
 
   // Detect whether Google provider is configured server-side. Default to NOT
-  // showing the button until /api/auth/providers confirms it's available — the
+  // showing the button until /api/auth/providers confirms it's available - the
   // unconditional button crashed in prod when env vars were absent.
   useEffect(() => {
     let active = true;

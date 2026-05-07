@@ -249,7 +249,7 @@ function RevenueTrendChart({
           </div>
           <div className="flex items-center justify-center py-8 text-center">
             <p className="text-[13px] text-text-tertiary max-w-[260px]">
-              No revenue data yet — complete a job to see trends
+              No revenue data yet - complete a job to see trends
             </p>
           </div>
         </Card>
@@ -525,7 +525,7 @@ export default function AdminDashboard() {
         {
           label: "Tasks / Visit",
           value: (stats?.month.tasksPerVisit ?? 0).toFixed(1),
-          trend: "—",
+          trend: "-",
           positive: true,
           icon: Wrench,
           sparkline: [2.8, 3.0, 2.9, 3.1, stats?.month.tasksPerVisit ?? 0],
@@ -541,7 +541,7 @@ export default function AdminDashboard() {
         {
           label: "Revenue",
           value: formatRevenue(stats?.month.revenue ?? 0),
-          trend: "—",
+          trend: "-",
           positive: true,
           icon: TrendingUp,
           sparkline: [6800, 7200, 7500, 7800, stats?.month.revenue ?? 0],
@@ -660,7 +660,7 @@ export default function AdminDashboard() {
         open={notifPanelOpen}
         onClose={() => {
           setNotifPanelOpen(false);
-          // Refresh unread count after the user closed the panel — they may
+          // Refresh unread count after the user closed the panel - they may
           // have marked things read inside it.
           if (!isDemo) {
             fetch("/api/notifications?unread=true")
