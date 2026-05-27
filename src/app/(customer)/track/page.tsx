@@ -390,7 +390,7 @@ export default function TrackPage() {
     try {
       if (typeof navigator !== "undefined" && navigator.share) {
         await navigator.share({
-          title: "MCQ Home Co. ETA",
+          title: "MCQ Property Care ETA",
           text,
           url: shareUrl,
         });

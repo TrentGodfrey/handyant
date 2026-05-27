@@ -24,6 +24,7 @@ import {
 } from "lucide-react";
 import { toast } from "@/components/Toaster";
 import Spinner from "@/components/Spinner";
+import { PLANS, VISIT_USES } from "@/lib/plans";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -105,47 +106,17 @@ function DFWMap() {
 }
 
 // ─── Plans ────────────────────────────────────────────────────────────────────
+// Derive plan display from the canonical PLANS list so pricing/visits stay
+// in sync with /account/plans, /account/manage, and the landing page.
 
-const plans = [
-  {
-    id: "essential" as PlanId,
-    name: "Essential",
-    price: 2000,
-    visits: "10 visits / year",
-    popular: false,
-    features: [
-      "10 scheduled visits per year",
-      "Standard scheduling",
-      "Priority over walk-ins",
-    ],
-  },
-  {
-    id: "pro" as PlanId,
-    name: "Pro",
-    price: 4000,
-    visits: "25 visits / year",
-    popular: true,
-    features: [
-      "25 scheduled visits per year",
-      "Priority scheduling",
-      "Parts procurement assistance",
-      "Phone + chat support",
-    ],
-  },
-  {
-    id: "elite" as PlanId,
-    name: "Elite",
-    price: 6500,
-    visits: "50 visits / year",
-    popular: false,
-    features: [
-      "50 scheduled visits per year",
-      "Same-day availability",
-      "Dedicated handyman",
-      "24/7 emergency support",
-    ],
-  },
-];
+const plans = PLANS.map((p) => ({
+  id: p.id as PlanId,
+  name: p.label,
+  price: p.annualPrice,
+  visits: p.visitLabel,
+  popular: p.popular ?? false,
+  features: p.features,
+}));
 
 // ─── Progress Bar ─────────────────────────────────────────────────────────────
 
@@ -422,7 +393,7 @@ export default function OnboardingPage() {
       if (selectedPlan !== "essential") {
         toast.info(`We'll let you know when ${plans.find((p) => p.id === selectedPlan)?.name} is available to upgrade.`);
       } else {
-        toast.success("Welcome to MCQ Home Co.!");
+        toast.success("Welcome to MCQ Property Care!");
       }
       setScreen("success");
     } catch (err) {
@@ -445,7 +416,7 @@ export default function OnboardingPage() {
           </div>
           <div>
             <h1 className="text-[28px] font-black tracking-tight text-text-primary">
-              MCQ Home Co.
+              MCQ Property Care
             </h1>
             <p className="mt-1 text-[15px] font-medium text-text-secondary">Meticulous Craftsman Quality.</p>
           </div>
@@ -858,6 +829,21 @@ export default function OnboardingPage() {
             </div>
           </div>
 
+          {/* What you can use visits for */}
+          <div className="mb-5 rounded-2xl border border-border bg-surface p-4">
+            <p className="text-[11px] font-semibold uppercase tracking-wider text-primary mb-2.5">
+              What you can use visits for
+            </p>
+            <div className="grid grid-cols-1 gap-1.5">
+              {VISIT_USES.map((use) => (
+                <div key={use} className="flex items-center gap-2 text-[13px] text-text-primary">
+                  <CheckCircle2 size={13} className="text-primary shrink-0" />
+                  <span>{use}</span>
+                </div>
+              ))}
+            </div>
+          </div>
+
           {/* Plan cards */}
           <div className="space-y-3">
             {plans.map((plan) => {
@@ -953,7 +939,7 @@ export default function OnboardingPage() {
         </div>
 
         <h2 className="mb-2 text-[28px] font-black text-text-primary">
-          Welcome to MCQ Home Co.!
+          Welcome to MCQ Property Care!
         </h2>
         <p className="mb-2 max-w-[280px] text-[15px] leading-relaxed text-text-secondary">
           Your home is set up. We&apos;ll be in touch within 24 hours to schedule your first visit.

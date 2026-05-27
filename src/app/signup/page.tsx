@@ -93,7 +93,7 @@ export default function SignupPage() {
             MCQ
           </div>
           <h1 className="text-2xl font-bold text-foreground">Create account</h1>
-          <p className="text-secondary mt-1">Get started with MCQ Home Co.</p>
+          <p className="text-secondary mt-1">Get started with MCQ Property Care</p>
         </div>
 
         {showGoogle && (

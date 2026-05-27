@@ -325,7 +325,7 @@ export default function InvoicePage({ params }: { params: Promise<{ id: string }
     const linkBase =
       typeof window !== "undefined" ? window.location.origin : "https://mcq.jordangodfrey.com";
     const link = `${linkBase}/account/receipts`;
-    const body = `Hi ${view.client.name.split(" ")[0] ?? ""}, here's your MCQ Home Co. invoice ${view.number} for $${view.total.toFixed(2)}: ${link}`;
+    const body = `Hi ${view.client.name.split(" ")[0] ?? ""}, here's your MCQ Property Care invoice ${view.number} for $${view.total.toFixed(2)}: ${link}`;
     const smsHref = phone
       ? `sms:${phone}?&body=${encodeURIComponent(body)}`
       : `sms:?&body=${encodeURIComponent(body)}`;
@@ -454,7 +454,7 @@ export default function InvoicePage({ params }: { params: Promise<{ id: string }
                 <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-primary">
                   <span className="text-[9px] font-black tracking-[-0.06em] text-white">MCQ</span>
                 </div>
-                <span className="text-[18px] font-bold text-text-primary">MCQ Home Co.</span>
+                <span className="text-[18px] font-bold text-text-primary">MCQ Property Care</span>
               </div>
               <p className="text-[11px] text-text-tertiary">Meticulous Craftsman Quality</p>
               <p className="text-[11px] text-text-tertiary">DFW Metro Area, TX</p>

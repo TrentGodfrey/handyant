@@ -77,11 +77,11 @@ export async function POST(req: NextRequest) {
   const safeNew = escapeHtml(newEmail);
 
   const html = emailShell({
-    preheader: "Confirm your new MCQ Home Co. email address",
+    preheader: "Confirm your new MCQ Property Care email address",
     contentHtml: `
       <h1 style="margin:0 0 16px;font-size:20px;font-weight:700;">Confirm your new email</h1>
       <p style="margin:0 0 16px;">Hi ${safeName},</p>
-      <p style="margin:0 0 16px;">You requested to change your MCQ Home Co. email to <strong>${safeNew}</strong>. Click the button below to confirm. The change won't take effect until you do. This link expires in 24 hours.</p>
+      <p style="margin:0 0 16px;">You requested to change your MCQ Property Care email to <strong>${safeNew}</strong>. Click the button below to confirm. The change won't take effect until you do. This link expires in 24 hours.</p>
       <p style="margin:24px 0;">
         <a href="${safeUrl}" style="display:inline-block;background-color:#4F9598;color:#ffffff;text-decoration:none;padding:12px 22px;border-radius:10px;font-weight:600;">Confirm new email</a>
       </p>
@@ -93,9 +93,9 @@ export async function POST(req: NextRequest) {
 
   await sendEmail({
     to: newEmail,
-    subject: "Confirm your new MCQ Home Co. email address",
+    subject: "Confirm your new MCQ Property Care email address",
     html,
-    text: `Confirm your new MCQ Home Co. email: ${verifyUrl}\n\nThis link expires in 24 hours. If you didn't request this change, you can ignore it.`,
+    text: `Confirm your new MCQ Property Care email: ${verifyUrl}\n\nThis link expires in 24 hours. If you didn't request this change, you can ignore it.`,
   });
 
   return Response.json({ ok: true, pendingVerification: true });

@@ -19,7 +19,7 @@ export default function DemoPage() {
           <div className="inline-flex items-center justify-center w-16 h-16 rounded-2xl bg-primary text-white text-lg font-black tracking-[-0.06em] mb-4">
             MCQ
           </div>
-          <h1 className="text-2xl font-bold text-text-primary">Try the demo</h1>
+          <h1 className="text-2xl font-bold text-text-primary">Try the MCQ Property Care demo</h1>
           <p className="text-text-secondary mt-2 text-[14px]">
             Pick a role and explore. Sample data only - nothing is saved.
           </p>

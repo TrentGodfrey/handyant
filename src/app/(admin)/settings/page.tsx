@@ -133,7 +133,7 @@ export default function SettingsPage() {
   const { isDemo, mounted } = useDemoMode();
 
   // Business info
-  const [bizName, setBizName]   = useState("MCQ Home Co.");
+  const [bizName, setBizName]   = useState("MCQ Property Care");
   const [owner, setOwner]       = useState("");
   const [phone, setPhone]       = useState("");
   const [email, setEmail]       = useState("");

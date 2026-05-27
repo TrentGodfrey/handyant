@@ -126,7 +126,7 @@ export default function AccountPage() {
               value: !mounted
                 ? "-"
                 : isDemo
-                  ? "12/25"
+                  ? "12/20"
                   : planVisitAllowance != null
                     ? `${pastJobs.length}/${planVisitAllowance}`
                     : String(pastJobs.length),

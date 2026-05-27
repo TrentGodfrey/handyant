@@ -18,7 +18,7 @@ import {
 // ─── Static Data (UI config, not mock) ──────────────────────────────────────
 
 // Fallback contact for the "Call" button when the tech's phone isn't loaded yet.
-const FALLBACK_TEL = "tel:+12145550199";
+const FALLBACK_TEL = "tel:+19253502269";
 
 const PLAN_LABELS: Record<string, string> = {
   essential: "Essential Plan",
@@ -95,7 +95,7 @@ export default function CustomerHome() {
       setNextBooking(DEMO_BOOKING);
       setReviewStats({ count: 86, avg: 4.9 });
       setPlanLabel("Pro Plan");
-      setTechPhone("+12145550199");
+      setTechPhone("+19253502269");
       setLoading(false);
       return;
     }

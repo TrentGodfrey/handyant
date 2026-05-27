@@ -874,17 +874,17 @@ export default function AccountManagePage() {
                       <span className="text-[15px] font-semibold text-text-primary">Pro Plan</span>
                       <span className="rounded-full bg-success-light px-2.5 py-0.5 text-[10px] font-semibold text-success">Active</span>
                     </div>
-                    <p className="text-[13px] text-text-secondary mt-0.5">25 visits/year &middot; Renews April 15</p>
+                    <p className="text-[13px] text-text-secondary mt-0.5">20 visits/year &middot; Renews April 15</p>
                   </div>
-                  <span className="text-[20px] font-bold text-text-primary">$4,000<span className="text-[12px] font-normal text-text-tertiary">/yr</span></span>
+                  <span className="text-[20px] font-bold text-text-primary">$3,400<span className="text-[12px] font-normal text-text-tertiary">/yr</span></span>
                 </div>
                 <div className="mb-3">
                   <div className="flex items-center justify-between mb-1.5">
                     <span className="text-[12px] font-medium text-text-secondary">Visits this year</span>
-                    <span className="text-[12px] font-semibold text-text-primary">12 of 25 used</span>
+                    <span className="text-[12px] font-semibold text-text-primary">12 of 20 used</span>
                   </div>
                   <div className="h-2 rounded-full bg-surface-secondary overflow-hidden">
-                    <div className="h-full rounded-full bg-primary transition-all" style={{ width: `${(12 / 25) * 100}%` }} />
+                    <div className="h-full rounded-full bg-primary transition-all" style={{ width: `${(12 / 20) * 100}%` }} />
                   </div>
                 </div>
               </>

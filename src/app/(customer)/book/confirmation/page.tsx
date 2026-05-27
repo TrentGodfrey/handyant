@@ -112,13 +112,13 @@ function buildIcs(booking: ApiBooking): string {
   const addressParts = [booking.home?.address, booking.home?.city, booking.home?.state, booking.home?.zip]
     .filter(Boolean).join(", ");
   const summary = booking.tech?.name
-    ? `MCQ Home Co. visit with ${booking.tech.name}`
-    : "MCQ Home Co. service visit";
+    ? `MCQ Property Care visit with ${booking.tech.name}`
+    : "MCQ Property Care service visit";
   const description = (booking.description ?? "Scheduled service visit").replace(/\n/g, "\\n");
   const lines = [
     "BEGIN:VCALENDAR",
     "VERSION:2.0",
-    "PRODID:-//MCQ Home Co.//EN",
+    "PRODID:-//MCQ Property Care//EN",
     "BEGIN:VEVENT",
     `UID:${booking.id}@mcqhome`,
     `DTSTAMP:${fmt(new Date())}`,

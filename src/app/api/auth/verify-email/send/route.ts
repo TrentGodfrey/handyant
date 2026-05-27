@@ -45,7 +45,7 @@ export async function POST() {
   const safeTarget = escapeHtml(target);
 
   const html = emailShell({
-    preheader: "Verify your MCQ Home Co. email address",
+    preheader: "Verify your MCQ Property Care email address",
     contentHtml: `
       <h1 style="margin:0 0 16px;font-size:20px;font-weight:700;">Verify your email</h1>
       <p style="margin:0 0 16px;">Hi ${safeName},</p>
@@ -61,9 +61,9 @@ export async function POST() {
 
   await sendEmail({
     to: target,
-    subject: "Verify your MCQ Home Co. email address",
+    subject: "Verify your MCQ Property Care email address",
     html,
-    text: `Verify your MCQ Home Co. email: ${verifyUrl}\n\nThis link expires in 24 hours.`,
+    text: `Verify your MCQ Property Care email: ${verifyUrl}\n\nThis link expires in 24 hours.`,
   });
 
   return Response.json({ ok: true });

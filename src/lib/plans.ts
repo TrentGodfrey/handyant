@@ -3,6 +3,7 @@
 //
 // Plans are annual memberships: each tier includes a fixed number of
 // scheduled visits per YEAR (not per month). Pricing is the annual total.
+// Each visit is 1 hour 45 minutes (105 min).
 
 export type PlanId = "essential" | "pro" | "elite";
 
@@ -11,55 +12,80 @@ export interface PlanDefinition {
   label: string;
   annualPrice: number; // total billed once per year
   visits: number; // visits per year
+  visitDurationMinutes: number; // length of each visit
   visitLabel: string;
   tagline: string;
   details: string;
+  popular?: boolean;
   features: string[];
 }
+
+// Shared by all plans: ways customers can use a visit.
+// Surfaced on /account/plans and the onboarding pricing screen.
+export const VISIT_USES: string[] = [
+  "Repairs & Installations",
+  "TV Mounting / Electrical Fixes",
+  "Drywall / Paint Touch-Ups",
+  "Fixtures, Doors, Hardware",
+  "Preventative Maintenance",
+  "\"Honey-Do\" Lists Knocked Out Fast",
+];
+
+// Trust points for the landing page.
+export const WHY_MCQ: string[] = [
+  "Trusted by High-End Homeowners",
+  "150+ 5-Star References",
+  "Clear Communication Every Step",
+  "No Guesswork. No Runaround.",
+];
 
 export const PLANS: PlanDefinition[] = [
   {
     id: "essential",
     label: "Essential",
-    annualPrice: 2000,
+    annualPrice: 1950,
     visits: 10,
+    visitDurationMinutes: 105,
     visitLabel: "10 visits / year",
-    tagline: "Steady upkeep for the everyday home",
-    details: "10 scheduled visits per year",
+    tagline: "Ideal for maintenance & small repairs",
+    details: "10 visits per year · 1h 45m each",
     features: [
-      "10 scheduled visits per year",
-      "Standard scheduling",
-      "Priority over walk-ins",
+      "10 Visits Per Year",
+      "1 Hour 45 Minutes Per Visit",
+      "Ideal for maintenance & small repairs",
     ],
   },
   {
     id: "pro",
     label: "Pro",
-    annualPrice: 4000,
-    visits: 25,
-    visitLabel: "25 visits / year",
-    tagline: "Most popular for homeowners",
-    details: "25 scheduled visits per year",
+    annualPrice: 3400,
+    visits: 20,
+    visitDurationMinutes: 105,
+    visitLabel: "20 visits / year",
+    tagline: "Perfect for active households",
+    details: "20 visits per year · 1h 45m each",
+    popular: true,
     features: [
-      "25 scheduled visits per year",
-      "Priority scheduling",
-      "Parts procurement assistance",
-      "Phone + chat support",
+      "20 Visits Per Year",
+      "1 Hour 45 Minutes Per Visit",
+      "Priority Scheduling",
+      "Perfect for active households",
     ],
   },
   {
     id: "elite",
     label: "Elite",
-    annualPrice: 6500,
-    visits: 50,
-    visitLabel: "50 visits / year",
-    tagline: "For comprehensive home care",
-    details: "50 scheduled visits per year",
+    annualPrice: 4500,
+    visits: 30,
+    visitDurationMinutes: 105,
+    visitLabel: "30 visits / year",
+    tagline: "Dedicated handyman experience",
+    details: "30 visits per year · 1h 45m each",
     features: [
-      "50 scheduled visits per year",
-      "Same-day availability",
-      "Dedicated handyman",
-      "24/7 emergency support",
+      "30 Visits Per Year",
+      "1 Hour 45 Minutes Per Visit",
+      "VIP Scheduling + Flexibility",
+      "Dedicated handyman experience",
     ],
   },
 ];

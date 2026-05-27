@@ -2,7 +2,7 @@ import type { MetadataRoute } from "next";
 
 export default function manifest(): MetadataRoute.Manifest {
   return {
-    name: "MCQ Home Co.",
+    name: "MCQ Property Care",
     short_name: "MCQ",
     description: "Meticulous Craftsman Quality home services across DFW.",
     start_url: "/",

@@ -39,11 +39,11 @@ export async function POST(req: NextRequest) {
     const safeUrl = escapeHtml(resetUrl);
 
     const html = emailShell({
-      preheader: "Reset your MCQ Home Co. password",
+      preheader: "Reset your MCQ Property Care password",
       contentHtml: `
         <h1 style="margin:0 0 16px;font-size:20px;font-weight:700;">Reset your password</h1>
         <p style="margin:0 0 16px;">Hi ${safeName},</p>
-        <p style="margin:0 0 16px;">We received a request to reset your MCQ Home Co. password. Click the button below to set a new one. This link will expire in 1 hour.</p>
+        <p style="margin:0 0 16px;">We received a request to reset your MCQ Property Care password. Click the button below to set a new one. This link will expire in 1 hour.</p>
         <p style="margin:24px 0;">
           <a href="${safeUrl}" style="display:inline-block;background-color:#4F9598;color:#ffffff;text-decoration:none;padding:12px 22px;border-radius:10px;font-weight:600;">Reset password</a>
         </p>
@@ -55,9 +55,9 @@ export async function POST(req: NextRequest) {
 
     await sendEmail({
       to: user.email!,
-      subject: "Reset your MCQ Home Co. password",
+      subject: "Reset your MCQ Property Care password",
       html,
-      text: `Reset your MCQ Home Co. password: ${resetUrl}\n\nThis link expires in 1 hour. If you didn't request a reset, you can ignore this email.`,
+      text: `Reset your MCQ Property Care password: ${resetUrl}\n\nThis link expires in 1 hour. If you didn't request a reset, you can ignore this email.`,
     });
   }
 

@@ -5,6 +5,7 @@ import {
   CalendarPlus, MessageCircle, Sparkles, MapPin, ChevronRight,
 } from "lucide-react";
 import { DEMO_TECH } from "@/lib/demoData";
+import { WHY_MCQ } from "@/lib/plans";
 
 const categories = [
   { name: "Plumbing", icon: Droplet, color: "text-blue-500", bg: "bg-blue-50" },
@@ -56,7 +57,7 @@ export default function LandingPage() {
             <div className="relative flex h-9 w-9 items-center justify-center rounded-xl bg-primary shadow-[0_2px_8px_rgba(79,149,152,0.30)]">
               <span className="text-[10px] font-black tracking-[-0.05em] text-white">MCQ</span>
             </div>
-            <span className="text-[18px] font-black tracking-tight text-text-primary">MCQ Home Co.</span>
+            <span className="text-[18px] font-black tracking-tight text-text-primary">MCQ Property Care</span>
           </Link>
           <div className="flex items-center gap-2">
             <Link
@@ -90,7 +91,7 @@ export default function LandingPage() {
                   <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-success opacity-75" />
                   <span className="relative inline-flex h-2 w-2 rounded-full bg-success" />
                 </span>
-                <span className="text-[12px] font-semibold text-primary">Booking visits this week in DFW</span>
+                <span className="text-[12px] font-semibold text-primary">Stop chasing contractors. Have a pro on call year-round.</span>
               </div>
 
               <h1 className="text-[40px] sm:text-[48px] lg:text-[56px] font-black tracking-tight text-text-primary leading-[1.05]">
@@ -100,7 +101,11 @@ export default function LandingPage() {
 
               <p className="mt-5 max-w-xl mx-auto lg:mx-0 text-[16px] sm:text-[17px] leading-relaxed text-text-secondary">
                 Plumbing leaks, broken switches, that closet door that never closed right -
-                book MCQ Home Co. in 30 seconds and stop adding things to a list nobody&apos;s ever going to read.
+                book MCQ Property Care in 30 seconds and stop adding things to a list nobody&apos;s ever going to read.
+              </p>
+
+              <p className="mt-4 max-w-xl mx-auto lg:mx-0 text-[13px] font-semibold text-primary tracking-wide">
+                Reliable <span className="text-text-tertiary mx-1.5">·</span> Skilled <span className="text-text-tertiary mx-1.5">·</span> Overly communicative <span className="text-text-tertiary mx-1.5">·</span> Done right the first time
               </p>
 
               <div className="mt-7 flex flex-col sm:flex-row items-stretch sm:items-center gap-3 sm:justify-center lg:justify-start">
@@ -269,8 +274,32 @@ export default function LandingPage() {
         </div>
       </section>
 
-      {/* ── Testimonials ──────────────────────────────────────────── */}
+      {/* ── Why MCQ ───────────────────────────────────────────────── */}
       <section className="mx-auto max-w-6xl px-5 py-16 lg:py-20">
+        <div className="text-center mb-10">
+          <p className="text-[12px] font-semibold uppercase tracking-wider text-primary mb-2">Why MCQ Property Care</p>
+          <h2 className="text-[28px] sm:text-[34px] font-black tracking-tight text-text-primary">
+            Built for homeowners who expect more.
+          </h2>
+        </div>
+
+        <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+          {WHY_MCQ.map((point) => (
+            <div
+              key={point}
+              className="flex items-start gap-3 rounded-2xl border border-border bg-white p-5"
+            >
+              <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-primary-50">
+                <CheckCircle2 size={18} className="text-primary" />
+              </div>
+              <p className="text-[14px] font-semibold text-text-primary leading-snug">{point}</p>
+            </div>
+          ))}
+        </div>
+      </section>
+
+      {/* ── Testimonials ──────────────────────────────────────────── */}
+      <section className="mx-auto max-w-6xl px-5 py-16 lg:py-20 border-t border-border">
         <div className="text-center mb-10">
           <p className="text-[12px] font-semibold uppercase tracking-wider text-primary mb-2">From homeowners</p>
           <h2 className="text-[28px] sm:text-[34px] font-black tracking-tight text-text-primary">
@@ -417,7 +446,7 @@ export default function LandingPage() {
             Stop staring at the to-do list.
           </h2>
           <p className="mt-4 max-w-xl mx-auto text-[16px] text-text-secondary">
-            Book MCQ Home Co. in 30 seconds. Get back to your life.
+            Book MCQ Property Care in 30 seconds. Get back to your life.
           </p>
           <div className="mt-7 flex flex-col sm:flex-row items-stretch sm:items-center gap-3 sm:justify-center">
             <Link
@@ -447,7 +476,7 @@ export default function LandingPage() {
                 <span className="text-[9px] font-black tracking-[-0.05em] text-white">MCQ</span>
               </div>
               <div>
-                <p className="text-[14px] font-black text-text-primary">MCQ Home Co.</p>
+                <p className="text-[14px] font-black text-text-primary">MCQ Property Care</p>
                 <p className="text-[11px] text-text-tertiary">Plano, TX · Insured &amp; Reliable</p>
               </div>
             </div>
@@ -456,14 +485,17 @@ export default function LandingPage() {
               <Link href="/login" className="hover:text-text-primary transition-colors">Sign in</Link>
               <Link href="/signup" className="hover:text-text-primary transition-colors">Sign up</Link>
               <Link href="/demo" className="hover:text-text-primary transition-colors">Try demo</Link>
-              <a href="tel:2145550199" className="hover:text-text-primary transition-colors flex items-center gap-1.5">
+              <a href="tel:9253502269" className="hover:text-text-primary transition-colors flex items-center gap-1.5">
                 <MessageCircle size={12} />
-                (214) 555-0199
+                (925) 350-2269
               </a>
             </div>
           </div>
-          <p className="mt-6 text-[11px] text-text-tertiary">
-            © {new Date().getFullYear()} MCQ Home Co. - Meticulous Craftsman Quality. Fully insured. Independently owned.
+          <p className="mt-3 text-[11px] text-text-tertiary">
+            24/7 emergency service available (additional fee).
+          </p>
+          <p className="mt-2 text-[11px] text-text-tertiary">
+            © {new Date().getFullYear()} MCQ Property Care - Meticulous Craftsman Quality. Fully insured. Independently owned.
           </p>
         </div>
       </footer>

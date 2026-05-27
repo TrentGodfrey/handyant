@@ -74,7 +74,7 @@ export default function LoginPage() {
             MCQ
           </div>
           <h1 className="text-2xl font-bold text-foreground">Welcome back</h1>
-          <p className="text-secondary mt-1">Sign in to your MCQ Home Co. account</p>
+          <p className="text-secondary mt-1">Sign in to your MCQ Property Care account</p>
         </div>
 
         {/* Google */}

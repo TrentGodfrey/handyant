@@ -158,7 +158,7 @@ export async function POST(req: NextRequest, ctx: { params: Promise<{ id: string
   const contentHtml = `
     <h1 style="margin:0 0 6px;font-size:20px;color:#1a1a1a;">Invoice ${escapeHtml(invoice.number)}</h1>
     <p style="margin:0 0 18px;color:#6a7280;font-size:13px;">
-      Hi ${escapeHtml(customerName)} - thanks for choosing MCQ Home Co.. Here's your invoice for today's service.
+      Hi ${escapeHtml(customerName)} - thanks for choosing MCQ Property Care. Here's your invoice for today's service.
     </p>
 
     <div style="background-color:#f7f9fc;border-radius:10px;padding:14px 16px;margin-bottom:18px;">
@@ -224,7 +224,7 @@ export async function POST(req: NextRequest, ctx: { params: Promise<{ id: string
   const textLines: string[] = [
     `Invoice ${invoice.number}`,
     ``,
-    `Hi ${customerName}, thanks for choosing MCQ Home Co..`,
+    `Hi ${customerName}, thanks for choosing MCQ Property Care.`,
     ``,
     `Service: ${description}`,
     ``,
@@ -252,7 +252,7 @@ export async function POST(req: NextRequest, ctx: { params: Promise<{ id: string
 
   const result = await sendEmail({
     to: customerEmail,
-    subject: `Invoice ${invoice.number} from MCQ Home Co. - ${totalStr}`,
+    subject: `Invoice ${invoice.number} from MCQ Property Care - ${totalStr}`,
     html,
     text: textLines.join("\n"),
   });

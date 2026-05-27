@@ -14,7 +14,7 @@ export interface SendEmailResult {
   error?: string;
 }
 
-const DEFAULT_FROM = "MCQ Home Co. <onboarding@resend.dev>";
+const DEFAULT_FROM = "MCQ Property Care <onboarding@resend.dev>";
 
 let cachedClient: Resend | null = null;
 
@@ -63,7 +63,7 @@ export async function sendEmail(params: SendEmailParams): Promise<SendEmailResul
 }
 
 /**
- * Wraps content in a simple MCQ Home Co.–branded email shell.
+ * Wraps content in a simple MCQ Property Care–branded email shell.
  * Pure inline CSS, table-based layout for max client compatibility.
  */
 export function emailShell({
@@ -78,13 +78,13 @@ export function emailShell({
   const safePreheader = preheader ? escapeHtml(preheader) : "";
   const safeFooter =
     footerNote ??
-    "MCQ Home Co. - Meticulous Craftsman Quality home services in DFW. Reply to this email if you have any questions.";
+    "MCQ Property Care - Meticulous Craftsman Quality home services in DFW. Reply to this email if you have any questions.";
   return `<!DOCTYPE html>
 <html lang="en">
 <head>
 <meta charset="utf-8" />
 <meta name="viewport" content="width=device-width,initial-scale=1" />
-<title>MCQ Home Co.</title>
+<title>MCQ Property Care</title>
 </head>
 <body style="margin:0;padding:0;background-color:#f4f5f7;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Helvetica,Arial,sans-serif;color:#1a1a1a;">
 ${safePreheader ? `<div style="display:none;max-height:0;overflow:hidden;font-size:1px;line-height:1px;color:#f4f5f7;opacity:0;">${safePreheader}</div>` : ""}
@@ -98,7 +98,7 @@ ${safePreheader ? `<div style="display:none;max-height:0;overflow:hidden;font-si
               <tr>
                 <td style="vertical-align:middle;">
                   <span style="display:inline-block;width:36px;height:36px;line-height:36px;text-align:center;background-color:#ffffff;color:#4F9598;font-weight:700;border-radius:8px;font-size:12px;letter-spacing:-0.03em;vertical-align:middle;">MCQ</span>
-                  <span style="margin-left:12px;color:#ffffff;font-size:18px;font-weight:700;vertical-align:middle;">MCQ Home Co.</span>
+                  <span style="margin-left:12px;color:#ffffff;font-size:18px;font-weight:700;vertical-align:middle;">MCQ Property Care</span>
                 </td>
                 <td align="right" style="color:#D4E8E9;font-size:11px;vertical-align:middle;">
                   Meticulous Craftsman Quality
