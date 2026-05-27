@@ -292,7 +292,7 @@ function DemoConfirmation() {
 
         <div className="grid grid-cols-2 gap-3 pt-1">
           <Link href="/messages"><Button variant="outline" fullWidth icon={<MessageCircle size={16} />}>Messages</Button></Link>
-          <Link href="/"><Button variant="primary" fullWidth icon={<Home size={16} />}>Back Home</Button></Link>
+          <Link href="/home"><Button variant="primary" fullWidth icon={<Home size={16} />}>Back Home</Button></Link>
         </div>
 
         <p className="text-center text-[11px] text-text-tertiary pb-2">Need to reschedule? Message Anthony or call (972) 555-0100</p>
@@ -356,7 +356,7 @@ function RealConfirmation() {
           <p className="text-[13px] text-text-secondary mb-5">
             We couldn&apos;t find a booking for this confirmation link.
           </p>
-          <Link href="/"><Button variant="primary" fullWidth>Back Home</Button></Link>
+          <Link href="/home"><Button variant="primary" fullWidth>Back Home</Button></Link>
         </Card>
       </div>
     );
@@ -528,7 +528,7 @@ function RealConfirmation() {
 
         <div className="grid grid-cols-2 gap-3 pt-1">
           <Link href="/messages"><Button variant="outline" fullWidth icon={<MessageCircle size={16} />}>Messages</Button></Link>
-          <Link href="/"><Button variant="primary" fullWidth icon={<Home size={16} />}>Back Home</Button></Link>
+          <Link href="/home"><Button variant="primary" fullWidth icon={<Home size={16} />}>Back Home</Button></Link>
         </div>
 
         <p className="text-center text-[11px] text-text-tertiary pb-2">

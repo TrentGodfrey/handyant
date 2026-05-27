@@ -44,12 +44,16 @@ export interface ApiBooking {
 export interface ApiTodo {
   id: string;
   task: string;
+  description?: string | null;
   priority: string;
   status: string;
   parts: string | null;
   partStatus: string | null;
+  partsDescription?: string | null;
+  partsBuyer?: string | null;
   specialist: boolean | null;
   hasPhoto: boolean | null;
+  photoIds?: string[] | null;
   notes: string | null;
 }
 
@@ -105,12 +109,15 @@ export interface EditFormState {
 export interface NormalizedTodo {
   id: string;
   task: string;
+  description: string | null;
   priority: Priority;
   status: ItemStatus;
   parts: string | null;
   partStatus: string | null;
+  partsBuyer: string | null;
   specialist: boolean;
   hasPhoto: boolean;
+  photoUrls: string[];
 }
 
 export const priorityDot: Record<Priority, string> = {

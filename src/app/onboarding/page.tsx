@@ -36,7 +36,7 @@ type Screen =
   | "success";
 
 type HomeType = "Single Family" | "Townhouse" | "Condo" | "Other";
-type PlanId = "basic" | "pro" | "premium";
+type PlanId = "essential" | "pro" | "elite";
 
 // ─── DFW Map ─────────────────────────────────────────────────────────────────
 
@@ -108,39 +108,38 @@ function DFWMap() {
 
 const plans = [
   {
-    id: "basic" as PlanId,
-    name: "Basic",
-    price: 49,
-    visits: "2 visits / month",
+    id: "essential" as PlanId,
+    name: "Essential",
+    price: 2000,
+    visits: "10 visits / year",
     popular: false,
     features: [
-      "2 scheduled visits/month",
-      "General maintenance tasks",
-      "Photo documentation",
-      "Email support",
+      "10 scheduled visits per year",
+      "Standard scheduling",
+      "Priority over walk-ins",
     ],
   },
   {
     id: "pro" as PlanId,
     name: "Pro",
-    price: 89,
-    visits: "4 visits / month",
+    price: 4000,
+    visits: "25 visits / year",
     popular: true,
     features: [
-      "4 scheduled visits/month",
+      "25 scheduled visits per year",
       "Priority scheduling",
-      "Parts procurement help",
-      "Phone & chat support",
+      "Parts procurement assistance",
+      "Phone + chat support",
     ],
   },
   {
-    id: "premium" as PlanId,
-    name: "Premium",
-    price: 149,
-    visits: "Unlimited visits",
+    id: "elite" as PlanId,
+    name: "Elite",
+    price: 6500,
+    visits: "50 visits / year",
     popular: false,
     features: [
-      "Unlimited visits",
+      "50 scheduled visits per year",
       "Same-day availability",
       "Dedicated handyman",
       "24/7 emergency support",
@@ -277,7 +276,7 @@ export default function OnboardingPage() {
   const [areaStatus, setAreaStatus] = useState<"checking" | "in-area" | "out-area">("checking");
 
   // Step 4 - plan
-  const [selectedPlan, setSelectedPlan] = useState<PlanId>("pro");
+  const [selectedPlan, setSelectedPlan] = useState<PlanId>("essential");
 
   // Service area check on entering step 3
   useEffect(() => {
@@ -404,13 +403,13 @@ export default function OnboardingPage() {
   async function handleStartPlan() {
     setSubmitting(true);
     try {
-      // Customers can only set themselves to the free tier today (Stripe pending).
-      // Always POST "free" - we record the user's preferred plan in toast/UI so
-      // they remember to upgrade when paid plans go live.
+      // Customers can only self-select the entry-level Essential plan today
+      // (Stripe pending for upgrades). We always POST "essential" and record the
+      // user's preferred upgrade tier in toast/UI so they remember to upgrade.
       const res = await fetch("/api/subscriptions", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ plan: "free" }),
+        body: JSON.stringify({ plan: "essential" }),
       });
 
       if (!res.ok) {
@@ -420,7 +419,7 @@ export default function OnboardingPage() {
         return;
       }
 
-      if (selectedPlan !== "basic") {
+      if (selectedPlan !== "essential") {
         toast.info(`We'll let you know when ${plans.find((p) => p.id === selectedPlan)?.name} is available to upgrade.`);
       } else {
         toast.success("Welcome to MCQ Home Co.!");
@@ -854,7 +853,7 @@ export default function OnboardingPage() {
             <div className="flex items-start gap-2.5">
               <Sparkles size={16} className="mt-0.5 shrink-0 text-primary" />
               <p className="text-[12px] leading-relaxed text-primary">
-                Paid plans launch soon. We&apos;ll start you on the free tier today and notify you when your selected plan is ready to activate.
+                Paid upgrades launch soon. We&apos;ll start you on the Essential plan today and notify you when Pro and Elite are ready to activate.
               </p>
             </div>
           </div>
@@ -884,8 +883,8 @@ export default function OnboardingPage() {
                   <div className="mb-3 pr-24">
                     <p className="text-[18px] font-black text-text-primary">{plan.name}</p>
                     <div className="mt-0.5 flex items-baseline gap-1">
-                      <span className="text-[28px] font-black text-text-primary">${plan.price}</span>
-                      <span className="text-[13px] text-text-tertiary">/mo</span>
+                      <span className="text-[28px] font-black text-text-primary">${plan.price.toLocaleString()}</span>
+                      <span className="text-[13px] text-text-tertiary">/yr</span>
                     </div>
                     <p className={`text-[12px] font-semibold ${isSelected ? "text-primary" : "text-text-secondary"}`}>
                       {plan.visits}
@@ -928,10 +927,10 @@ export default function OnboardingPage() {
                 : "bg-primary shadow-[0_4px_16px_rgba(79,149,152,0.30)] active:bg-primary-dark"
             }`}
           >
-            {submitting ? "Setting up…" : "Start with Free Plan"}
+            {submitting ? "Setting up…" : "Start with Essential Plan"}
           </button>
           <p className="mt-3 text-center text-[12px] text-text-tertiary">
-            You can upgrade to a paid plan anytime.
+            You can upgrade to Pro or Elite anytime.
           </p>
         </div>
       </div>
@@ -973,7 +972,9 @@ export default function OnboardingPage() {
           <div className="mt-3 flex items-center gap-1.5 rounded-xl bg-surface-secondary px-3 py-2.5">
             <CheckCircle2 size={14} className="text-[#22C55E]" />
             <span className="text-[12px] font-semibold text-text-secondary">
-              Free Plan - upgrade to {plans.find((p) => p.id === selectedPlan)?.name} when available
+              {selectedPlan === "essential"
+                ? "Essential Plan active"
+                : `Essential Plan - upgrade to ${plans.find((p) => p.id === selectedPlan)?.name} when available`}
             </span>
           </div>
         </div>

@@ -4,12 +4,16 @@ import { requireUser, unauthorized, notFound, forbidden } from "@/lib/session";
 
 const ALLOWED_FIELDS = [
   "task",
+  "description",
   "priority",
   "status",
   "parts",
   "partStatus",
+  "partsDescription",
+  "partsBuyer",
   "specialist",
   "hasPhoto",
+  "photoIds",
   "notes",
   "sortOrder",
 ];

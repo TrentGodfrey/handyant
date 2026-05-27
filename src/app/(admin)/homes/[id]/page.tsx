@@ -116,16 +116,24 @@ export default function HomeDetailPage({ params }: { params: Promise<{ id: strin
     });
   }, [home]);
 
-  const todoItems = (home?.todos ?? []).map((t) => ({
-    id: t.id,
-    task: t.task,
-    priority: normalizePriority(t.priority),
-    status: normalizeStatus(t.status),
-    parts: t.parts,
-    partStatus: t.partStatus,
-    specialist: !!t.specialist,
-    hasPhoto: !!t.hasPhoto,
-  }));
+  const homePhotos = home?.photos ?? [];
+  const todoItems = (home?.todos ?? []).map((t) => {
+    const ids = Array.isArray(t.photoIds) ? t.photoIds : [];
+    const photoUrls = homePhotos.filter((p) => ids.includes(p.id)).map((p) => p.url);
+    return {
+      id: t.id,
+      task: t.task,
+      description: t.description ?? null,
+      priority: normalizePriority(t.priority),
+      status: normalizeStatus(t.status),
+      parts: t.partsDescription ?? t.parts,
+      partStatus: t.partStatus,
+      partsBuyer: t.partsBuyer ?? null,
+      specialist: !!t.specialist,
+      hasPhoto: !!t.hasPhoto,
+      photoUrls,
+    };
+  });
 
   const openTasks = todoItems.filter((t) => t.status !== "completed").length;
   const totalVisits = home?.bookings.filter((b) => b.status === "completed").length ?? 0;
@@ -283,12 +291,16 @@ export default function HomeDetailPage({ params }: { params: Promise<{ id: strin
             {
               id: `t${Date.now()}`,
               task,
+              description: null,
               priority: newTaskPriority,
               status: "pending",
               parts: null,
               partStatus: null,
+              partsDescription: null,
+              partsBuyer: null,
               specialist: false,
               hasPhoto: false,
+              photoIds: [],
               notes: null,
             },
           ],

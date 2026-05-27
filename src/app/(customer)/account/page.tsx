@@ -7,10 +7,11 @@ import Card from "@/components/Card";
 import StatusBadge from "@/components/StatusBadge";
 import {
   Home, ChevronRight, FileText, CreditCard, Bell, Settings, LogOut,
-  Calendar, Clock, Wrench, MessageCircle, Star, Shield, Edit2,
+  Calendar, Wrench, MessageCircle, Star, Shield, Edit2,
 } from "lucide-react";
 import { useDemoMode } from "@/lib/useDemoMode";
 import { demoCustomerBy } from "@/lib/demoData";
+import { PLANS } from "@/lib/plans";
 
 interface PastJob {
   date: string;
@@ -34,12 +35,19 @@ const menuItems = [
   { icon: Settings, label: "Manage Account", href: "/account/manage", desc: "Profile, subscription, notifications", color: "bg-surface-secondary", iconColor: "text-text-secondary" },
 ];
 
+interface SubscriptionRecord {
+  id: string;
+  plan: string;
+  status: string | null;
+}
+
 export default function AccountPage() {
   const { data: session } = useSession();
   const { isDemo, mounted } = useDemoMode();
 
   const [pastJobs, setPastJobs] = useState<PastJob[]>([]);
   const [showAllJobs, setShowAllJobs] = useState(false);
+  const [planVisitAllowance, setPlanVisitAllowance] = useState<number | null>(null);
 
   const userName = !mounted ? "User" : isDemo ? (demoCustomerBy("Sarah Mitchell")?.name ?? "User") : session?.user?.name || "User";
   const userInitials = userName.split(" ").map((n) => n[0]).join("").toUpperCase().slice(0, 2);
@@ -50,11 +58,12 @@ export default function AccountPage() {
       setPastJobs(DEMO_JOBS);
       return;
     }
-    // Fetch completed bookings for real users
-    fetch("/api/bookings")
-      .then((r) => r.json())
-      .then((bookings) => {
-        if (!Array.isArray(bookings)) return;
+    // Fetch completed bookings + active subscription for real users
+    Promise.all([
+      fetch("/api/bookings").then((r) => (r.ok ? r.json() : [])).catch(() => []),
+      fetch("/api/subscriptions").then((r) => (r.ok ? r.json() : [])).catch(() => []),
+    ]).then(([bookings, subs]) => {
+      if (Array.isArray(bookings)) {
         const completed = bookings
           .filter((b: Record<string, unknown>) => b.status === "completed")
           .map((b: Record<string, unknown>) => ({
@@ -65,8 +74,13 @@ export default function AccountPage() {
             hours: `${(b.durationMinutes as number || 120) / 60}h`,
           }));
         setPastJobs(completed);
-      })
-      .catch(() => setPastJobs([]));
+      }
+      if (Array.isArray(subs)) {
+        const active = (subs as SubscriptionRecord[]).find((s) => s.status === "active");
+        const plan = active ? PLANS.find((p) => p.id === active.plan) : null;
+        setPlanVisitAllowance(plan ? plan.visits : null);
+      }
+    });
   }, [isDemo, mounted]);
 
   const displayedJobs = showAllJobs ? pastJobs : pastJobs.slice(0, 2);
@@ -107,7 +121,19 @@ export default function AccountPage() {
         <div className="grid grid-cols-3 gap-2 lg:gap-3 lg:max-w-md">
           {[
             { label: "Total Visits", value: !mounted ? "-" : isDemo ? "12" : String(pastJobs.length), icon: Calendar, color: "text-primary", bg: "bg-primary-50" },
-            { label: "Hours Used", value: !mounted ? "-" : isDemo ? "24h" : `${pastJobs.reduce((acc, j) => acc + parseFloat(j.hours), 0)}h`, icon: Clock, color: "text-accent-teal", bg: "bg-[#F0FDFA]" },
+            {
+              label: "Visits Used",
+              value: !mounted
+                ? "-"
+                : isDemo
+                  ? "12/25"
+                  : planVisitAllowance != null
+                    ? `${pastJobs.length}/${planVisitAllowance}`
+                    : String(pastJobs.length),
+              icon: Calendar,
+              color: "text-accent-teal",
+              bg: "bg-[#F0FDFA]",
+            },
             { label: "Tasks Done", value: !mounted ? "-" : isDemo ? "31" : "-", icon: Wrench, color: "text-accent-amber", bg: "bg-warning-light" },
           ].map((stat) => (
             <div key={stat.label} className="rounded-xl bg-surface-secondary p-3.5 text-center">

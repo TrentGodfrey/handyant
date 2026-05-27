@@ -7,7 +7,8 @@ import Button from "@/components/Button";
 import { useDemoMode } from "@/lib/useDemoMode";
 import { ChevronLeft, AlertTriangle, Loader2 } from "lucide-react";
 
-import type { HomeFull, Priority } from "./_components/types";
+import type { HomeFull } from "./_components/types";
+import type { NewTaskPayload } from "@/components/AddTaskForm";
 import DemoHomeProfile from "./_components/DemoHomeProfile";
 import HomeHeader from "./_components/HomeHeader";
 import Members from "./_components/Members";
@@ -76,8 +77,6 @@ function RealHomeProfile() {
   // Todos
   const [expandedTodo, setExpandedTodo] = useState<string | null>(null);
   const [showAddTask, setShowAddTask] = useState(false);
-  const [newTask, setNewTask] = useState("");
-  const [newPriority, setNewPriority] = useState<Priority>("medium");
   const [savingTask, setSavingTask] = useState(false);
   const [photoUploadingId, setPhotoUploadingId] = useState<string | null>(null);
   const photoInputRef = useRef<HTMLInputElement | null>(null);
@@ -271,18 +270,16 @@ function RealHomeProfile() {
     }
   }
 
-  async function addTodo() {
-    if (!home || !newTask.trim()) return;
+  async function addTodoFull(payload: NewTaskPayload) {
+    if (!home) return;
     setSavingTask(true);
     try {
       const res = await fetch(`/api/homes/${home.id}/todos`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ task: newTask.trim(), priority: newPriority }),
+        body: JSON.stringify(payload),
       });
       if (!res.ok) throw new Error("Failed to add task");
-      setNewTask("");
-      setNewPriority("medium");
       setShowAddTask(false);
       await refresh();
     } catch {
@@ -456,15 +453,12 @@ function RealHomeProfile() {
           setExpandedTodo={setExpandedTodo}
           showAddTask={showAddTask}
           setShowAddTask={setShowAddTask}
-          newTask={newTask}
-          setNewTask={setNewTask}
-          newPriority={newPriority}
-          setNewPriority={setNewPriority}
           savingTask={savingTask}
-          addTodo={addTodo}
+          addTodoFull={addTodoFull}
           removeTodo={removeTodo}
           triggerPhotoUpload={triggerPhotoUpload}
           photoUploadingId={photoUploadingId}
+          homeId={home.id}
         />
 
         <VisitsAndNotes

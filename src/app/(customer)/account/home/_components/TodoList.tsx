@@ -1,8 +1,8 @@
 "use client";
 
 import Card from "@/components/Card";
-import Button from "@/components/Button";
 import StatusBadge from "@/components/StatusBadge";
+import AddTaskForm, { type NewTaskPayload } from "@/components/AddTaskForm";
 import {
   Plus, Camera, ShoppingCart, ChevronRight, Info, X,
   Loader2,
@@ -19,16 +19,22 @@ interface TodoListProps {
 
   showAddTask: boolean;
   setShowAddTask: (v: boolean) => void;
-  newTask: string;
-  setNewTask: (v: string) => void;
-  newPriority: Priority;
-  setNewPriority: (p: Priority) => void;
   savingTask: boolean;
-  addTodo: () => void;
+  /**
+   * New unified add handler. The form gives back a full payload (description,
+   * priority, parts info, photo IDs). The page is responsible for POSTing it.
+   */
+  addTodoFull: (payload: NewTaskPayload) => Promise<void> | void;
   removeTodo: (id: string) => void;
 
   triggerPhotoUpload: (todoId: string) => void;
   photoUploadingId: string | null;
+
+  /**
+   * The home id is required for the shared AddTaskForm to upload photos.
+   * Pass null in cases where uploads aren't possible.
+   */
+  homeId: string | null;
 }
 
 const KNOWN_STATUSES = ["confirmed", "pending", "completed", "in-progress", "needs-parts", "scheduled", "cancelled"] as const;
@@ -39,10 +45,9 @@ export default function TodoList(props: TodoListProps) {
     todos, highCount,
     expandedTodo, setExpandedTodo,
     showAddTask, setShowAddTask,
-    newTask, setNewTask,
-    newPriority, setNewPriority,
-    savingTask, addTodo, removeTodo,
+    savingTask, addTodoFull, removeTodo,
     triggerPhotoUpload, photoUploadingId,
+    homeId,
   } = props;
 
   return (
@@ -58,38 +63,13 @@ export default function TodoList(props: TodoListProps) {
         </button>
       </div>
 
-      {showAddTask && (
-        <Card padding="md" className="mb-3 border border-primary-100 bg-primary-50">
-          <p className="text-[13px] font-semibold text-text-primary mb-3">New Task</p>
-          <input
-            type="text"
-            value={newTask}
-            onChange={(e) => setNewTask(e.target.value)}
-            onKeyDown={(e) => e.key === "Enter" && addTodo()}
-            placeholder="Describe the task…"
-            autoFocus
-            className="w-full rounded-xl border border-border bg-surface px-4 py-3 text-[14px] text-text-primary placeholder:text-text-tertiary focus:border-primary focus:outline-none mb-3"
-          />
-          <div className="flex gap-2 mb-3">
-            {(["high", "medium", "low"] as Priority[]).map((p) => (
-              <button
-                key={p}
-                onClick={() => setNewPriority(p)}
-                className={`flex items-center gap-1.5 rounded-full px-3 py-1.5 text-[12px] font-semibold border transition-all ${newPriority === p ? "border-primary bg-primary text-white" : "border-border bg-surface text-text-secondary"}`}
-              >
-                <div className={`h-2 w-2 rounded-full ${PRIORITY_CONFIG[p].dot}`} />
-                {PRIORITY_CONFIG[p].label}
-              </button>
-            ))}
-          </div>
-          <div className="flex gap-2">
-            <Button variant="outline" size="sm" onClick={() => { setShowAddTask(false); setNewTask(""); }}>Cancel</Button>
-            <Button variant="primary" size="sm" fullWidth disabled={!newTask.trim() || savingTask} onClick={addTodo}>
-              {savingTask ? "Adding…" : "Add Task"}
-            </Button>
-          </div>
-        </Card>
-      )}
+      <AddTaskForm
+        open={showAddTask}
+        onCancel={() => setShowAddTask(false)}
+        onSubmit={addTodoFull}
+        homeId={homeId}
+        saving={savingTask}
+      />
 
       {todos.length === 0 ? (
         <Card padding="md">
@@ -106,6 +86,12 @@ export default function TodoList(props: TodoListProps) {
             const status = (KNOWN_STATUSES as readonly string[]).includes(item.status)
               ? (item.status as KnownStatus)
               : "pending";
+            const partsLabel = item.partsDescription ?? item.parts;
+            const partsBuyerLabel = item.partsBuyer === "tech"
+              ? "Anthony to Purchase"
+              : item.partsBuyer === "customer"
+              ? "Customer to Purchase"
+              : item.partStatus;
             return (
               <Card key={item.id} padding="sm" onClick={() => setExpandedTodo(isExpanded ? null : item.id)} className="cursor-pointer">
                 <div className="flex items-start gap-2.5">
@@ -120,6 +106,11 @@ export default function TodoList(props: TodoListProps) {
                         <ChevronRight size={14} className={`text-text-tertiary transition-transform ${isExpanded ? "rotate-90" : ""}`} />
                       </div>
                     </div>
+                    {item.description && (
+                      <p className="mt-1 text-[12px] text-text-secondary leading-snug">
+                        {item.description}
+                      </p>
+                    )}
                     <div className="mt-1.5 flex items-center gap-2 flex-wrap">
                       <StatusBadge status={status} />
                       {item.hasPhoto && (
@@ -129,13 +120,13 @@ export default function TodoList(props: TodoListProps) {
                         </span>
                       )}
                     </div>
-                    {item.parts && (
+                    {partsLabel && (
                       <div className="mt-2.5 flex items-center gap-2 rounded-lg bg-surface-secondary px-3 py-2">
                         <ShoppingCart size={12} className="shrink-0 text-text-tertiary" />
-                        <span className="text-[11px] text-text-secondary flex-1 truncate">{item.parts}</span>
-                        {item.partStatus && (
-                          <span className={`text-[10px] font-semibold shrink-0 ${item.partStatus === "Purchased" ? "text-success" : item.partStatus === "Tech to Purchase" ? "text-primary" : "text-accent-amber"}`}>
-                            {item.partStatus}
+                        <span className="text-[11px] text-text-secondary flex-1 truncate">{partsLabel}</span>
+                        {partsBuyerLabel && (
+                          <span className={`text-[10px] font-semibold shrink-0 ${partsBuyerLabel === "Purchased" ? "text-success" : partsBuyerLabel.includes("Anthony") || partsBuyerLabel === "Tech to Purchase" ? "text-primary" : "text-accent-amber"}`}>
+                            {partsBuyerLabel}
                           </span>
                         )}
                       </div>

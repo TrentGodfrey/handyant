@@ -1,15 +1,16 @@
 // Single source of truth for subscription plans.
-// Used by /account/plans and /account/manage. Pricing here matches the
-// /account/manage UI ($0 / $149) plus a Premium tier for power users.
+// Used by /account/plans, /account/manage, /onboarding, /account.
+//
+// Plans are annual memberships: each tier includes a fixed number of
+// scheduled visits per YEAR (not per month). Pricing is the annual total.
 
-export type PlanId = "free" | "pro" | "premium";
+export type PlanId = "essential" | "pro" | "elite";
 
 export interface PlanDefinition {
   id: PlanId;
   label: string;
-  monthlyPrice: number;
-  annualPrice: number; // per-month price billed annually
-  visits: number; // -1 = unlimited
+  annualPrice: number; // total billed once per year
+  visits: number; // visits per year
   visitLabel: string;
   tagline: string;
   details: string;
@@ -18,62 +19,47 @@ export interface PlanDefinition {
 
 export const PLANS: PlanDefinition[] = [
   {
-    id: "free",
-    label: "Free",
-    monthlyPrice: 0,
-    annualPrice: 0,
-    visits: 0,
-    visitLabel: "Pay per visit",
-    tagline: "On-demand bookings",
-    details: "On-demand bookings · pay per visit",
+    id: "essential",
+    label: "Essential",
+    annualPrice: 2000,
+    visits: 10,
+    visitLabel: "10 visits / year",
+    tagline: "Steady upkeep for the everyday home",
+    details: "10 scheduled visits per year",
     features: [
-      "On-demand bookings",
+      "10 scheduled visits per year",
       "Standard scheduling",
-      "Email support",
-      "Basic home profile",
-      "Job history & receipts",
-      "Online booking",
+      "Priority over walk-ins",
     ],
   },
   {
     id: "pro",
     label: "Pro",
-    monthlyPrice: 149,
-    annualPrice: 124,
-    visits: 2,
-    visitLabel: "2 visits / month",
+    annualPrice: 4000,
+    visits: 25,
+    visitLabel: "25 visits / year",
     tagline: "Most popular for homeowners",
-    details: "2 visits/month · priority scheduling",
+    details: "25 scheduled visits per year",
     features: [
-      "2 technician visits per month",
+      "25 scheduled visits per year",
       "Priority scheduling",
-      "Parts tracking & ordering",
-      "SMS & email reminders",
-      "Full home profile",
-      "Dedicated tech",
-      "Job history & receipts",
-      "Phone support",
+      "Parts procurement assistance",
+      "Phone + chat support",
     ],
   },
   {
-    id: "premium",
-    label: "Premium",
-    monthlyPrice: 249,
-    annualPrice: 207,
-    visits: -1,
-    visitLabel: "Unlimited visits",
+    id: "elite",
+    label: "Elite",
+    annualPrice: 6500,
+    visits: 50,
+    visitLabel: "50 visits / year",
     tagline: "For comprehensive home care",
-    details: "Unlimited visits · same-day availability",
+    details: "50 scheduled visits per year",
     features: [
-      "Unlimited technician visits",
+      "50 scheduled visits per year",
       "Same-day availability",
-      "Dedicated tech + backup",
-      "Full home profile & photos",
-      "Priority parts ordering",
-      "Annual home inspection",
-      "24/7 emergency line",
-      "Multi-room project support",
-      "Annual health report",
+      "Dedicated handyman",
+      "24/7 emergency support",
     ],
   },
 ];
@@ -83,7 +69,7 @@ export function planMeta(plan: string): { label: string; price: string; details:
   if (found) {
     return {
       label: found.label,
-      price: found.monthlyPrice === 0 ? "$0/mo" : `$${found.monthlyPrice}/mo`,
+      price: `$${found.annualPrice.toLocaleString()}/yr`,
       details: found.details,
     };
   }

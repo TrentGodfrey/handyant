@@ -7,10 +7,12 @@ import Card from "@/components/Card";
 import StatusBadge from "@/components/StatusBadge";
 import Spinner from "@/components/Spinner";
 import { useDemoMode } from "@/lib/useDemoMode";
+import { toast } from "@/components/Toaster";
 import {
   Search, MapPin, Clock, Star, ArrowRight, Camera,
   MessageCircle, Phone, CheckCircle2,
   CalendarDays, BadgeCheck, Users, CalendarPlus, Sparkles,
+  X,
 } from "lucide-react";
 
 // ─── Static Data (UI config, not mock) ──────────────────────────────────────
@@ -19,9 +21,9 @@ import {
 const FALLBACK_TEL = "tel:+12145550199";
 
 const PLAN_LABELS: Record<string, string> = {
-  basic: "Basic Plan · Free",
+  essential: "Essential Plan",
   pro: "Pro Plan",
-  premium: "Premium Plan",
+  elite: "Elite Plan",
 };
 
 // ─── Types ──────────────────────────────────────────────────────────────────
@@ -69,8 +71,9 @@ export default function CustomerHome() {
   const [nextBooking, setNextBooking] = useState<BookingData | null>(null);
   const [loading, setLoading] = useState(true);
   const [reviewStats, setReviewStats] = useState<{ count: number; avg: number } | null>(null);
-  const [planLabel, setPlanLabel] = useState<string>("Basic Plan · Free");
+  const [planLabel, setPlanLabel] = useState<string>("Essential Plan");
   const [techPhone, setTechPhone] = useState<string | null>(null);
+  const [rescheduleOpen, setRescheduleOpen] = useState(false);
   const { isDemo, mounted } = useDemoMode();
 
   const userName = !mounted
@@ -91,7 +94,7 @@ export default function CustomerHome() {
     if (isDemo) {
       setNextBooking(DEMO_BOOKING);
       setReviewStats({ count: 86, avg: 4.9 });
-      setPlanLabel("Basic Plan · Free");
+      setPlanLabel("Pro Plan");
       setTechPhone("+12145550199");
       setLoading(false);
       return;
@@ -135,7 +138,7 @@ export default function CustomerHome() {
         if (active) {
           setPlanLabel(PLAN_LABELS[active.plan] ?? `${active.plan[0]?.toUpperCase()}${active.plan.slice(1)} Plan`);
         } else {
-          setPlanLabel("Basic Plan · Free");
+          setPlanLabel("No active membership");
         }
       })
       .finally(() => {
@@ -337,12 +340,22 @@ export default function CustomerHome() {
         {/* ── Quick Actions Row ─────────────────────────────────────── */}
         {nextBooking && (
           <div className="mb-5 flex gap-2.5">
-            <Link href="/book" className="flex-1">
+            <button
+              type="button"
+              onClick={() => {
+                if (isDemo) {
+                  toast.info("Reschedule disabled in demo mode");
+                  return;
+                }
+                setRescheduleOpen(true);
+              }}
+              className="flex-1"
+            >
               <div className="flex flex-col items-center gap-1.5 rounded-xl border border-border bg-surface py-3 active:bg-surface-secondary transition-colors">
                 <CalendarDays size={18} className="text-primary" />
                 <span className="text-[11px] font-semibold text-text-secondary">Reschedule</span>
               </div>
-            </Link>
+            </button>
             <Link href="/account/home/photos" className="flex-1">
               <div className="flex flex-col items-center gap-1.5 rounded-xl border border-border bg-surface py-3 active:bg-surface-secondary transition-colors">
                 <Camera size={18} className="text-primary" />
@@ -418,6 +431,269 @@ export default function CustomerHome() {
           </div>
         </div>
 
+      </div>
+
+      {/* ── Reschedule modal ────────────────────────────────────────── */}
+      {rescheduleOpen && nextBooking && (
+        <RescheduleModal
+          booking={nextBooking}
+          onClose={() => setRescheduleOpen(false)}
+          onRescheduled={(updated) => {
+            setNextBooking((prev) => prev ? { ...prev, scheduledDate: updated.scheduledDate, scheduledTime: updated.scheduledTime } : prev);
+            setRescheduleOpen(false);
+            toast.success("Visit rescheduled");
+          }}
+        />
+      )}
+    </div>
+  );
+}
+
+// ─── Reschedule Modal ────────────────────────────────────────────────────────
+
+interface RescheduleModalProps {
+  booking: BookingData;
+  onClose: () => void;
+  onRescheduled: (updated: { scheduledDate: string; scheduledTime: string }) => void;
+}
+
+function toISODate(d: Date): string {
+  const y = d.getFullYear();
+  const m = String(d.getMonth() + 1).padStart(2, "0");
+  const day = String(d.getDate()).padStart(2, "0");
+  return `${y}-${m}-${day}`;
+}
+
+function formatSlotLabel(time: string): string {
+  const [hh, mm] = time.split(":");
+  const h = parseInt(hh, 10);
+  const m = parseInt(mm, 10);
+  const ampm = h >= 12 ? "PM" : "AM";
+  const h12 = h % 12 === 0 ? 12 : h % 12;
+  return `${h12}:${String(m).padStart(2, "0")} ${ampm}`;
+}
+
+function parseCurrentTime(scheduledTime: string): string {
+  // scheduledTime can be ISO or "HH:MM". Normalize to "HH:MM".
+  if (scheduledTime.includes("T")) {
+    const d = new Date(scheduledTime);
+    return `${String(d.getHours()).padStart(2, "0")}:${String(d.getMinutes()).padStart(2, "0")}`;
+  }
+  const [hh, mm] = scheduledTime.split(":");
+  return `${hh}:${mm}`;
+}
+
+function RescheduleModal({ booking, onClose, onRescheduled }: RescheduleModalProps) {
+  // Build a 30-day window starting today.
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+  const dates: Date[] = Array.from({ length: 30 }, (_, i) => {
+    const d = new Date(today);
+    d.setDate(today.getDate() + i);
+    return d;
+  });
+
+  const currentDateISO = booking.scheduledDate.includes("T")
+    ? booking.scheduledDate.slice(0, 10)
+    : booking.scheduledDate;
+  const currentTime = parseCurrentTime(booking.scheduledTime);
+
+  const initialDate = dates.find((d) => toISODate(d) === currentDateISO) ?? dates[0];
+  const [selectedDate, setSelectedDate] = useState<string>(toISODate(initialDate));
+  const [slots, setSlots] = useState<{ time: string; available: boolean }[]>([]);
+  const [selectedTime, setSelectedTime] = useState<string>(currentTime);
+  const [loadingSlots, setLoadingSlots] = useState(false);
+  const [submitting, setSubmitting] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  // Fetch slots when the date changes.
+  useEffect(() => {
+    let cancelled = false;
+    setLoadingSlots(true);
+    setError(null);
+    fetch(`/api/availability?date=${selectedDate}`)
+      .then((r) => (r.ok ? r.json() : { slots: [] }))
+      .then((data: { slots?: { time: string; available: boolean }[] }) => {
+        if (cancelled) return;
+        const list = Array.isArray(data.slots) ? data.slots : [];
+        // For the booking's current date, mark its own slot as available so the
+        // user can choose to keep the same time (it's their own booking).
+        if (selectedDate === currentDateISO) {
+          for (const s of list) {
+            if (s.time === currentTime) s.available = true;
+          }
+        }
+        setSlots(list);
+        // If the previously-selected time isn't in this date's slots, reset it.
+        const stillThere = list.find((s) => s.time === selectedTime && s.available);
+        if (!stillThere) {
+          const firstAvail = list.find((s) => s.available);
+          setSelectedTime(firstAvail?.time ?? "");
+        }
+      })
+      .catch(() => {
+        if (!cancelled) setSlots([]);
+      })
+      .finally(() => {
+        if (!cancelled) setLoadingSlots(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+    // selectedTime intentionally excluded to avoid re-fetch loops
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [selectedDate]);
+
+  async function handleConfirm() {
+    if (!selectedTime) {
+      setError("Pick a time slot");
+      return;
+    }
+    setSubmitting(true);
+    setError(null);
+    try {
+      const res = await fetch(`/api/bookings/${booking.id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          scheduledDate: selectedDate,
+          scheduledTime: selectedTime,
+        }),
+      });
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({}));
+        throw new Error(err.error ?? "Failed to reschedule");
+      }
+      onRescheduled({ scheduledDate: selectedDate, scheduledTime: selectedTime });
+    } catch (e: unknown) {
+      setError(e instanceof Error ? e.message : "Failed to reschedule");
+    } finally {
+      setSubmitting(false);
+    }
+  }
+
+  const currentDateLabel = new Date(currentDateISO + "T00:00:00").toLocaleDateString("en-US", {
+    weekday: "long", month: "long", day: "numeric",
+  });
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-black/50 p-4" onClick={onClose}>
+      <div
+        className="w-full max-w-md max-h-[85vh] flex flex-col rounded-2xl bg-surface shadow-xl overflow-hidden"
+        onClick={(e) => e.stopPropagation()}
+      >
+        {/* Header */}
+        <div className="flex items-center justify-between px-5 py-4 border-b border-border">
+          <div>
+            <h2 className="text-[16px] font-bold text-text-primary">Reschedule visit</h2>
+            <p className="text-[12px] text-text-secondary mt-0.5">
+              Currently {currentDateLabel} at {formatSlotLabel(currentTime)}
+            </p>
+          </div>
+          <button
+            onClick={onClose}
+            className="flex h-8 w-8 items-center justify-center rounded-full hover:bg-surface-secondary transition-colors"
+            aria-label="Close"
+          >
+            <X size={18} className="text-text-secondary" />
+          </button>
+        </div>
+
+        {/* Date picker (horizontal scroll) */}
+        <div className="px-5 pt-4">
+          <p className="text-[11px] font-semibold uppercase tracking-wider text-text-tertiary mb-2">Pick a date</p>
+          <div className="-mx-1 overflow-x-auto">
+            <div className="flex gap-2 px-1 pb-2">
+              {dates.map((d) => {
+                const iso = toISODate(d);
+                const isSelected = iso === selectedDate;
+                const isCurrent = iso === currentDateISO;
+                return (
+                  <button
+                    key={iso}
+                    type="button"
+                    onClick={() => setSelectedDate(iso)}
+                    className={`shrink-0 flex flex-col items-center justify-center gap-0.5 w-14 h-16 rounded-xl border transition-colors ${
+                      isSelected
+                        ? "border-primary bg-primary text-white"
+                        : isCurrent
+                          ? "border-primary/40 bg-primary-50 text-primary"
+                          : "border-border bg-surface text-text-primary hover:border-primary/30"
+                    }`}
+                  >
+                    <span className={`text-[10px] font-semibold uppercase ${isSelected ? "text-white/80" : "text-text-tertiary"}`}>
+                      {d.toLocaleDateString("en-US", { weekday: "short" })}
+                    </span>
+                    <span className="text-[16px] font-bold leading-none">{d.getDate()}</span>
+                    <span className={`text-[9px] ${isSelected ? "text-white/80" : "text-text-tertiary"}`}>
+                      {d.toLocaleDateString("en-US", { month: "short" })}
+                    </span>
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+        </div>
+
+        {/* Time slots */}
+        <div className="flex-1 overflow-y-auto px-5 pt-3 pb-4">
+          <p className="text-[11px] font-semibold uppercase tracking-wider text-text-tertiary mb-2">Pick a time</p>
+          {loadingSlots ? (
+            <div className="flex items-center justify-center py-10">
+              <Spinner size="md" />
+            </div>
+          ) : slots.length === 0 ? (
+            <p className="text-[13px] text-text-secondary py-6 text-center">No availability this day. Try another date.</p>
+          ) : (
+            <div className="grid grid-cols-3 gap-2">
+              {slots.map((slot) => {
+                const isSelected = slot.time === selectedTime;
+                return (
+                  <button
+                    key={slot.time}
+                    type="button"
+                    disabled={!slot.available}
+                    onClick={() => setSelectedTime(slot.time)}
+                    className={`rounded-lg border py-2.5 text-[12px] font-semibold transition-colors ${
+                      isSelected
+                        ? "border-primary bg-primary text-white"
+                        : slot.available
+                          ? "border-border bg-surface text-text-primary hover:border-primary/30"
+                          : "border-border bg-surface-secondary text-text-tertiary cursor-not-allowed line-through"
+                    }`}
+                  >
+                    {formatSlotLabel(slot.time)}
+                  </button>
+                );
+              })}
+            </div>
+          )}
+        </div>
+
+        {/* Footer */}
+        <div className="border-t border-border px-5 py-4 space-y-2">
+          {error && (
+            <p className="text-[12px] text-error">{error}</p>
+          )}
+          <div className="flex gap-2">
+            <button
+              type="button"
+              onClick={onClose}
+              disabled={submitting}
+              className="flex-1 rounded-xl border border-border bg-surface py-3 text-[14px] font-semibold text-text-primary active:bg-surface-secondary transition-colors disabled:opacity-60"
+            >
+              Cancel
+            </button>
+            <button
+              type="button"
+              onClick={handleConfirm}
+              disabled={submitting || !selectedTime}
+              className="flex-1 rounded-xl bg-primary py-3 text-[14px] font-semibold text-white shadow-sm active:bg-primary-dark transition-colors disabled:opacity-60"
+            >
+              {submitting ? "Rescheduling…" : "Reschedule"}
+            </button>
+          </div>
+        </div>
       </div>
     </div>
   );

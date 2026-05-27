@@ -135,12 +135,50 @@ export default function TodoList({
                     </div>
                   </div>
 
+                  {item.description && (
+                    <p className={`mt-1 text-[12px] leading-snug ${
+                      item.status === "completed" ? "text-text-tertiary" : "text-text-secondary"
+                    }`}>
+                      {item.description}
+                    </p>
+                  )}
+
                   {item.parts && (
-                    <div className="mt-2 rounded-lg bg-surface-secondary px-3 py-2">
-                      <span className="flex items-center gap-1.5 text-[11px] text-text-secondary min-w-0">
-                        <ShoppingCart size={10} className="shrink-0 text-text-tertiary" />
-                        <span className="truncate">{item.parts}</span>
-                      </span>
+                    <div className="mt-2 flex items-center gap-2 rounded-lg bg-surface-secondary px-3 py-2">
+                      <ShoppingCart size={10} className="shrink-0 text-text-tertiary" />
+                      <span className="flex-1 truncate text-[11px] text-text-secondary">{item.parts}</span>
+                      {(item.partsBuyer || item.partStatus) && (
+                        <span className={`text-[10px] font-semibold shrink-0 ${
+                          item.partsBuyer === "tech" || (item.partStatus ?? "").includes("Anthony") || item.partStatus === "Tech to Purchase"
+                            ? "text-primary"
+                            : "text-accent-amber"
+                        }`}>
+                          {item.partsBuyer === "tech"
+                            ? "Anthony buys"
+                            : item.partsBuyer === "customer"
+                            ? "Customer buys"
+                            : item.partStatus}
+                        </span>
+                      )}
+                    </div>
+                  )}
+
+                  {item.photoUrls.length > 0 && (
+                    <div className="mt-2 flex items-center gap-1.5">
+                      {item.photoUrls.slice(0, 3).map((url, idx) => (
+                        /* eslint-disable-next-line @next/next/no-img-element */
+                        <img
+                          key={idx}
+                          src={url}
+                          alt="Task photo"
+                          className="h-10 w-10 rounded-md object-cover border border-border"
+                        />
+                      ))}
+                      {item.photoUrls.length > 3 && (
+                        <div className="flex h-10 w-10 items-center justify-center rounded-md bg-surface-secondary text-[10px] font-semibold text-text-secondary border border-border">
+                          +{item.photoUrls.length - 3}
+                        </div>
+                      )}
                     </div>
                   )}
 
@@ -153,7 +191,7 @@ export default function TodoList({
 
                   <div className="mt-2 flex items-center justify-between">
                     <div className="flex items-center gap-2">
-                      {item.hasPhoto && (
+                      {item.hasPhoto && item.photoUrls.length === 0 && (
                         <span className="flex items-center gap-1 text-[10px] text-text-tertiary">
                           <Camera size={10} />
                           Photo attached

@@ -18,7 +18,7 @@ const PLAN_VISUALS: Record<PlanId, {
   borderActive: string;
   headerBg: string;
 }> = {
-  free: {
+  essential: {
     icon: Shield,
     iconBg: "bg-surface-secondary",
     iconColor: "text-text-secondary",
@@ -32,7 +32,7 @@ const PLAN_VISUALS: Record<PlanId, {
     borderActive: "border-primary",
     headerBg: "bg-gradient-to-br from-primary-50 to-[#EAF4F4]",
   },
-  premium: {
+  elite: {
     icon: Crown,
     iconBg: "bg-[#FFF7ED]",
     iconColor: "text-accent-coral",
@@ -46,49 +46,49 @@ const includedFeatures = [
     icon: Calendar,
     title: "Easy Online Booking",
     desc: "Book visits directly through the app with real-time availability.",
-    plans: ["Free", "Pro", "Premium"],
+    plans: ["Essential", "Pro", "Elite"],
   },
   {
     icon: Clock,
     title: "Priority Scheduling",
     desc: "Skip the queue and get earlier appointment slots.",
-    plans: ["Pro", "Premium"],
+    plans: ["Pro", "Elite"],
   },
   {
     icon: Package,
-    title: "Parts Tracking",
+    title: "Parts Procurement",
     desc: "We source and track parts for your repairs - no hardware store runs.",
-    plans: ["Pro", "Premium"],
+    plans: ["Pro", "Elite"],
   },
   {
     icon: Home,
     title: "Full Home Profile",
     desc: "Appliance ages, WiFi, household info, visit photos - all in one place.",
-    plans: ["Pro", "Premium"],
+    plans: ["Pro", "Elite"],
   },
   {
     icon: Star,
-    title: "Dedicated Technician",
+    title: "Dedicated Handyman",
     desc: "The same trusted tech every visit - they know your home.",
-    plans: ["Pro", "Premium"],
+    plans: ["Elite"],
   },
   {
     icon: Zap,
     title: "Same-Day Availability",
     desc: "Urgent issue? We'll get someone there the same day.",
-    plans: ["Premium"],
+    plans: ["Elite"],
   },
   {
     icon: Headphones,
-    title: "24/7 Emergency Line",
+    title: "24/7 Emergency Support",
     desc: "Direct line for urgent home issues around the clock.",
-    plans: ["Premium"],
+    plans: ["Elite"],
   },
   {
     icon: Repeat,
     title: "Annual Home Inspection",
     desc: "Comprehensive yearly walkthrough to catch issues before they grow.",
-    plans: ["Premium"],
+    plans: ["Elite"],
   },
 ];
 
@@ -102,7 +102,6 @@ interface SubscriptionRecord {
 
 export default function PlansPage() {
   const { isDemo, mounted } = useDemoMode();
-  const [billing, setBilling] = useState<"monthly" | "annual">("monthly");
   const [showDetails, setShowDetails] = useState(false);
   const [confirmingPlan, setConfirmingPlan] = useState<string | null>(null);
 
@@ -112,11 +111,11 @@ export default function PlansPage() {
   const [subscription, setSubscription] = useState<SubscriptionRecord | null>(null);
   const [busyPlan, setBusyPlan] = useState<string | null>(null);
 
-  // The currently active plan id. Demo mode keeps the original "pro"
-  // hardcode; real mode reads from the subscription (defaulting to "free").
+  // The currently active plan id. Demo mode keeps "pro" as the spotlight plan;
+  // real mode reads from the subscription (defaulting to "essential").
   const currentPlanId: PlanId = isDemo
     ? "pro"
-    : ((subscription?.status === "active" ? subscription.plan : "free") as PlanId);
+    : ((subscription?.status === "active" ? subscription.plan : "essential") as PlanId);
 
   useEffect(() => {
     if (!mounted) return;
@@ -192,43 +191,8 @@ export default function PlansPage() {
           <ChevronLeft size={16} />
           Account
         </Link>
-        <h1 className="text-[24px] font-bold text-text-primary">Subscription Plans</h1>
-        <p className="text-[13px] text-text-secondary mt-1">Choose the right plan for your home</p>
-
-        {/* Billing toggle */}
-        <div className="mt-4 flex items-center justify-center">
-          <div className="flex items-center gap-1 rounded-xl bg-surface-secondary p-1 border border-border">
-            <button
-              onClick={() => setBilling("monthly")}
-              className={`px-4 py-2 rounded-lg text-[13px] font-semibold transition-all ${
-                billing === "monthly"
-                  ? "bg-surface text-text-primary shadow-sm"
-                  : "text-text-secondary"
-              }`}
-            >
-              Monthly
-            </button>
-            <button
-              onClick={() => setBilling("annual")}
-              className={`flex items-center gap-1.5 px-4 py-2 rounded-lg text-[13px] font-semibold transition-all ${
-                billing === "annual"
-                  ? "bg-surface text-text-primary shadow-sm"
-                  : "text-text-secondary"
-              }`}
-            >
-              Annual
-              <span className="rounded-full bg-success text-white text-[9px] font-bold px-1.5 py-0.5">
-                -17%
-              </span>
-            </button>
-          </div>
-        </div>
-
-        {billing === "annual" && (
-          <p className="text-center text-[12px] text-success font-medium mt-2">
-            Save up to $300/year with annual billing
-          </p>
-        )}
+        <h1 className="text-[24px] font-bold text-text-primary">Membership Plans</h1>
+        <p className="text-[13px] text-text-secondary mt-1">Annual memberships - choose the right tier for your home</p>
       </div>
 
       <div className="px-5 py-5 space-y-4">
@@ -248,7 +212,6 @@ export default function PlansPage() {
               const visuals = PLAN_VISUALS[plan.id];
               const Icon = visuals.icon;
               const isCurrent = plan.id === currentPlanId;
-              const price = billing === "annual" ? plan.annualPrice : plan.monthlyPrice;
               const justConfirmed = confirmingPlan === plan.id;
               const isBusy = busyPlan === plan.id;
 
@@ -282,12 +245,9 @@ export default function PlansPage() {
                       </div>
                       <div className="text-right">
                         <div className="flex items-end gap-0.5">
-                          <span className="text-[26px] font-bold text-text-primary leading-none">${price}</span>
-                          <span className="text-[12px] text-text-secondary mb-1">/mo</span>
+                          <span className="text-[26px] font-bold text-text-primary leading-none">${plan.annualPrice.toLocaleString()}</span>
+                          <span className="text-[12px] text-text-secondary mb-1">/yr</span>
                         </div>
-                        {billing === "annual" && plan.monthlyPrice > 0 && (
-                          <p className="text-[10px] text-text-tertiary line-through">${plan.monthlyPrice}/mo</p>
-                        )}
                       </div>
                     </div>
 
@@ -369,7 +329,7 @@ export default function PlansPage() {
             {/* Header row */}
             <div className="grid grid-cols-4 border-b border-border">
               <div className="col-span-1 px-4 py-3" />
-              {["Free", "Pro", "Premium"].map((name) => (
+              {["Essential", "Pro", "Elite"].map((name) => (
                 <div
                   key={name}
                   className={`px-2 py-3 text-center text-[11px] font-bold border-l border-border ${
@@ -391,7 +351,7 @@ export default function PlansPage() {
                     <Icon size={13} className="text-text-tertiary shrink-0 mt-0.5" />
                     <span className="text-[11px] font-medium text-text-secondary leading-snug">{feat.title}</span>
                   </div>
-                  {["Free", "Pro", "Premium"].map((name) => (
+                  {["Essential", "Pro", "Elite"].map((name) => (
                     <div
                       key={name}
                       className={`flex items-center justify-center border-l border-border ${

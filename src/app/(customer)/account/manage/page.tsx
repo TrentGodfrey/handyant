@@ -5,15 +5,23 @@ import Link from "next/link";
 import Image from "next/image";
 import Card from "@/components/Card";
 import Button from "@/components/Button";
+import ChipMultiSelect from "@/components/ChipMultiSelect";
+import { toast } from "@/components/Toaster";
 import { useSession, signOut } from "next-auth/react";
 import {
   ChevronLeft, User, Mail, Phone, MapPin, CreditCard,
   Bell, Shield, Check, Pencil, Trash2, LogOut, Loader2,
-  Camera, X, AlertTriangle,
+  Camera, X, AlertTriangle, BellRing,
 } from "lucide-react";
 import { useDemoMode } from "@/lib/useDemoMode";
 import { PLANS, planMeta as sharedPlanMeta } from "@/lib/plans";
 import { demoCustomerBy } from "@/lib/demoData";
+import {
+  DEFAULT_APPOINTMENT_REMINDERS,
+  REMINDER_LEAD_OPTIONS,
+  normalizeAppointmentReminders,
+  type AppointmentReminders,
+} from "@/lib/reminders";
 
 const DEMO_USER = (() => {
   const c = demoCustomerBy("Sarah Mitchell")!;
@@ -101,7 +109,12 @@ export default function AccountManagePage() {
     sms: true,
     email: true,
   });
-  const [reminderTime, setReminderTime] = useState("24h"); // local-only display
+  // Appointment reminder preferences (multi-select lead times + channels).
+  const [reminders, setReminders] = useState<AppointmentReminders>(
+    DEFAULT_APPOINTMENT_REMINDERS,
+  );
+  // Debounce timer for chip changes so rapid taps don't spam the API.
+  const reminderSaveTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   // Subscription
   const [subscription, setSubscription] = useState<SubscriptionRecord | null>(null);
@@ -186,12 +199,15 @@ export default function AccountManagePage() {
         }
         if (prefsRes.ok) {
           const p = await prefsRes.json();
-          if (!cancelled) setPrefs({
-            jobReminders: p.jobReminders ?? true,
-            promos: p.promos ?? false,
-            sms: p.sms ?? true,
-            email: p.email ?? true,
-          });
+          if (!cancelled) {
+            setPrefs({
+              jobReminders: p.jobReminders ?? true,
+              promos: p.promos ?? false,
+              sms: p.sms ?? true,
+              email: p.email ?? true,
+            });
+            setReminders(normalizeAppointmentReminders(p.appointmentReminders));
+          }
         }
         if (subsRes.ok) {
           const subs = await subsRes.json();
@@ -261,6 +277,37 @@ export default function AccountManagePage() {
     },
     [prefs, isDemo]
   );
+
+  // Debounced persist of appointment reminders. Optimistic UI; on error we
+  // surface a toast but keep the in-memory state so the user isn't whip-sawed.
+  const persistReminders = useCallback(
+    (next: AppointmentReminders) => {
+      if (reminderSaveTimer.current) clearTimeout(reminderSaveTimer.current);
+      if (isDemo) return; // demo mode: state changes only, no API call
+      reminderSaveTimer.current = setTimeout(async () => {
+        try {
+          const res = await fetch("/api/me/preferences", {
+            method: "PATCH",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ appointmentReminders: next }),
+          });
+          if (!res.ok) throw new Error(`HTTP ${res.status}`);
+          toast.success("Reminders saved");
+        } catch (e) {
+          toast.error(
+            "Couldn't save reminder preferences: " +
+              (e instanceof Error ? e.message : String(e)),
+          );
+        }
+      }, 500);
+    },
+    [isDemo],
+  );
+
+  function updateReminders(next: AppointmentReminders) {
+    setReminders(next);
+    persistReminders(next);
+  }
 
   // Avatar upload
   function openFilePicker() {
@@ -824,20 +871,20 @@ export default function AccountManagePage() {
                 <div className="flex items-center justify-between mb-4">
                   <div>
                     <div className="flex items-center gap-2">
-                      <span className="text-[15px] font-semibold text-text-primary">Monthly Plan</span>
+                      <span className="text-[15px] font-semibold text-text-primary">Pro Plan</span>
                       <span className="rounded-full bg-success-light px-2.5 py-0.5 text-[10px] font-semibold text-success">Active</span>
                     </div>
-                    <p className="text-[13px] text-text-secondary mt-0.5">2 visits/month &middot; Renews April 15</p>
+                    <p className="text-[13px] text-text-secondary mt-0.5">25 visits/year &middot; Renews April 15</p>
                   </div>
-                  <span className="text-[20px] font-bold text-text-primary">$149<span className="text-[12px] font-normal text-text-tertiary">/mo</span></span>
+                  <span className="text-[20px] font-bold text-text-primary">$4,000<span className="text-[12px] font-normal text-text-tertiary">/yr</span></span>
                 </div>
                 <div className="mb-3">
                   <div className="flex items-center justify-between mb-1.5">
-                    <span className="text-[12px] font-medium text-text-secondary">Visits this cycle</span>
-                    <span className="text-[12px] font-semibold text-text-primary">1 of 2 used</span>
+                    <span className="text-[12px] font-medium text-text-secondary">Visits this year</span>
+                    <span className="text-[12px] font-semibold text-text-primary">12 of 25 used</span>
                   </div>
                   <div className="h-2 rounded-full bg-surface-secondary overflow-hidden">
-                    <div className="h-full w-1/2 rounded-full bg-primary transition-all" />
+                    <div className="h-full rounded-full bg-primary transition-all" style={{ width: `${(12 / 25) * 100}%` }} />
                   </div>
                 </div>
               </>
@@ -861,8 +908,8 @@ export default function AccountManagePage() {
               </div>
             ) : (
               <div className="mb-4">
-                <p className="text-[15px] font-semibold text-text-primary">No subscription</p>
-                <p className="text-[13px] text-text-secondary mt-0.5">You&apos;re on Basic Free - pay per visit.</p>
+                <p className="text-[15px] font-semibold text-text-primary">No active membership</p>
+                <p className="text-[13px] text-text-secondary mt-0.5">Choose an annual plan below to schedule visits.</p>
               </div>
             )}
 
@@ -1095,23 +1142,83 @@ export default function AccountManagePage() {
               </button>
             </div>
             <div className="h-px bg-border" />
+            {/* Appointment reminders ── master toggle + multi-select chips + channels */}
             <div>
-              <p className="text-[13px] font-semibold text-text-primary mb-2">Appointment reminders</p>
-              <div className="flex gap-2">
-                {["1h", "3h", "24h", "48h"].map((t) => (
-                  <button
-                    key={t}
-                    onClick={() => setReminderTime(t)}
-                    className={`flex-1 rounded-lg py-2 text-[12px] font-semibold transition-all ${
-                      reminderTime === t
-                        ? "bg-primary text-white shadow-sm"
-                        : "bg-surface-secondary text-text-secondary"
-                    }`}
-                  >
-                    {t === "1h" ? "1 hour" : t === "3h" ? "3 hours" : t === "24h" ? "1 day" : "2 days"}
-                  </button>
-                ))}
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-3">
+                  <BellRing size={16} className="text-text-secondary" />
+                  <div>
+                    <p className="text-[13px] font-semibold text-text-primary">Appointment reminders</p>
+                    <p className="text-[11px] text-text-tertiary">Pick when we&apos;ll nudge you before each visit</p>
+                  </div>
+                </div>
+                <button
+                  onClick={() => updateReminders({ ...reminders, enabled: !reminders.enabled })}
+                  disabled={loading}
+                  aria-label={reminders.enabled ? "Disable appointment reminders" : "Enable appointment reminders"}
+                  className={`relative h-7 w-12 rounded-full transition-colors disabled:opacity-50 ${reminders.enabled ? "bg-primary" : "bg-border"}`}
+                >
+                  <div className={`absolute top-0.5 h-6 w-6 rounded-full bg-white shadow transition-transform ${reminders.enabled ? "translate-x-5" : "translate-x-0.5"}`} />
+                </button>
               </div>
+
+              {reminders.enabled && (
+                <div className="mt-3 space-y-3 animate-fade-in">
+                  <div>
+                    <p className="text-[11px] font-semibold uppercase tracking-wider text-text-tertiary mb-2">When to remind me</p>
+                    <ChipMultiSelect
+                      options={REMINDER_LEAD_OPTIONS}
+                      selected={reminders.leadTimes}
+                      onChange={(next) =>
+                        updateReminders({
+                          ...reminders,
+                          // keep stored array sorted descending so storage is canonical
+                          leadTimes: [...next].sort((a, b) => b - a),
+                        })
+                      }
+                      disabled={loading}
+                      ariaLabel="Appointment reminder lead times"
+                    />
+                    {reminders.leadTimes.length === 0 && (
+                      <p className="mt-1.5 text-[11px] text-text-tertiary">Pick at least one lead time to receive reminders.</p>
+                    )}
+                  </div>
+
+                  <div>
+                    <p className="text-[11px] font-semibold uppercase tracking-wider text-text-tertiary mb-2">Send via</p>
+                    <div className="flex gap-2">
+                      {([
+                        { key: "email" as const, label: "Email" },
+                        { key: "sms" as const, label: "SMS" },
+                        { key: "push" as const, label: "Push" },
+                      ]).map(({ key, label }) => {
+                        const on = reminders.channels[key];
+                        return (
+                          <button
+                            key={key}
+                            type="button"
+                            onClick={() =>
+                              updateReminders({
+                                ...reminders,
+                                channels: { ...reminders.channels, [key]: !on },
+                              })
+                            }
+                            disabled={loading}
+                            aria-pressed={on}
+                            className={`flex-1 rounded-lg border px-3 py-2 text-[12px] font-semibold transition-all disabled:opacity-50 ${
+                              on
+                                ? "border-primary bg-primary text-white shadow-sm"
+                                : "border-border bg-surface text-text-secondary hover:border-primary/40 hover:text-primary"
+                            }`}
+                          >
+                            {label}
+                          </button>
+                        );
+                      })}
+                    </div>
+                  </div>
+                </div>
+              )}
             </div>
           </Card>
         </div>

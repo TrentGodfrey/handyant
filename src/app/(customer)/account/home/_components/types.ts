@@ -42,12 +42,16 @@ export interface TodoRecord {
   id: string;
   homeId: string;
   task: string;
+  description?: string | null;
   priority: string;
   status: string;
   parts: string | null;
   partStatus: string | null;
+  partsDescription?: string | null;
+  partsBuyer?: string | null;
   specialist: boolean | null;
   hasPhoto: boolean | null;
+  photoIds?: string[] | null;
   notes: string | null;
 }
 

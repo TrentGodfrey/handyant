@@ -7,6 +7,13 @@ import dynamic from "next/dynamic";
 import Card from "@/components/Card";
 import Button from "@/components/Button";
 import Spinner from "@/components/Spinner";
+import ChipMultiSelect from "@/components/ChipMultiSelect";
+import {
+  DEFAULT_APPOINTMENT_REMINDERS,
+  REMINDER_LEAD_OPTIONS,
+  normalizeAppointmentReminders,
+  type AppointmentReminders,
+} from "@/lib/reminders";
 import {
   ChevronLeft,
   Check,
@@ -157,6 +164,13 @@ export default function SettingsPage() {
     email: true,
   });
 
+  // Appointment reminder preferences (multi-select lead times + channels).
+  // Backed by BusinessProfile.appointmentReminders.
+  const [reminders, setReminders] = useState<AppointmentReminders>(
+    DEFAULT_APPOINTMENT_REMINDERS,
+  );
+  const reminderSaveTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+
   // Payment methods - backed by BusinessProfile
   const [venmoHandle, setVenmoHandle] = useState("");
   const [zelleHandle, setZelleHandle] = useState("");
@@ -246,6 +260,11 @@ export default function SettingsPage() {
           if (business.notifyPrefs && typeof business.notifyPrefs === "object") {
             setNotifyPrefs((prev) => ({ ...prev, ...(business.notifyPrefs as NotifyPrefs) }));
           }
+          setReminders(
+            normalizeAppointmentReminders(
+              business.appointmentReminders as Partial<AppointmentReminders> | null,
+            ),
+          );
           const v = business.venmoHandle ?? "";
           const z = business.zelleHandle ?? "";
           const c = business.cashappHandle ?? "";
@@ -591,6 +610,31 @@ export default function SettingsPage() {
       void persistNotifyPrefs(next);
       return next;
     });
+  }
+
+  // Debounced persist for the staff-side appointment reminders. Same shape and
+  // semantics as the customer version - chip taps update state optimistically
+  // and we flush after 500ms of quiet.
+  function updateReminders(next: AppointmentReminders) {
+    setReminders(next);
+    if (reminderSaveTimer.current) clearTimeout(reminderSaveTimer.current);
+    if (isDemo) return;
+    reminderSaveTimer.current = setTimeout(async () => {
+      try {
+        const res = await fetch("/api/admin/business", {
+          method: "PATCH",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ appointmentReminders: next }),
+        });
+        if (!res.ok) throw new Error(`HTTP ${res.status}`);
+        toast.success("Reminders saved");
+      } catch (e) {
+        toast.error(
+          "Couldn't save reminder preferences: " +
+            (e instanceof Error ? e.message : String(e)),
+        );
+      }
+    }, 500);
   }
 
   async function savePaymentField(
@@ -1188,6 +1232,82 @@ export default function SettingsPage() {
                 </div>
               );
             })}
+
+            {/* Appointment reminders ── chip multi-select + channel picker */}
+            <div className="py-3.5 first:pt-0 last:pb-0">
+              <div className="flex items-center gap-3">
+                <div className="flex-1 min-w-0">
+                  <p className="text-[14px] font-semibold text-text-primary">Appointment reminders</p>
+                  <p className="text-[12px] text-text-tertiary mt-0.5">When to remind you about upcoming jobs</p>
+                </div>
+                <button
+                  onClick={() => updateReminders({ ...reminders, enabled: !reminders.enabled })}
+                  aria-label={reminders.enabled ? "Disable appointment reminders" : "Enable appointment reminders"}
+                  className="shrink-0 transition-colors"
+                >
+                  {reminders.enabled ? (
+                    <ToggleRight size={32} className="text-primary" />
+                  ) : (
+                    <ToggleLeft size={32} className="text-text-tertiary" />
+                  )}
+                </button>
+              </div>
+
+              {reminders.enabled && (
+                <div className="mt-3 space-y-3 animate-fade-in">
+                  <div>
+                    <p className="text-[11px] font-semibold uppercase tracking-wider text-text-tertiary mb-2">Lead time</p>
+                    <ChipMultiSelect
+                      options={REMINDER_LEAD_OPTIONS}
+                      selected={reminders.leadTimes}
+                      onChange={(next) =>
+                        updateReminders({
+                          ...reminders,
+                          leadTimes: [...next].sort((a, b) => b - a),
+                        })
+                      }
+                      ariaLabel="Appointment reminder lead times"
+                    />
+                    {reminders.leadTimes.length === 0 && (
+                      <p className="mt-1.5 text-[11px] text-text-tertiary">Pick at least one lead time to receive reminders.</p>
+                    )}
+                  </div>
+
+                  <div>
+                    <p className="text-[11px] font-semibold uppercase tracking-wider text-text-tertiary mb-2">Send via</p>
+                    <div className="flex gap-2">
+                      {([
+                        { key: "email" as const, label: "Email" },
+                        { key: "sms" as const, label: "SMS" },
+                        { key: "push" as const, label: "Push" },
+                      ]).map(({ key, label }) => {
+                        const on = reminders.channels[key];
+                        return (
+                          <button
+                            key={key}
+                            type="button"
+                            onClick={() =>
+                              updateReminders({
+                                ...reminders,
+                                channels: { ...reminders.channels, [key]: !on },
+                              })
+                            }
+                            aria-pressed={on}
+                            className={`flex-1 rounded-lg border px-3 py-2 text-[12px] font-semibold transition-all ${
+                              on
+                                ? "border-primary bg-primary text-white shadow-sm"
+                                : "border-border bg-surface text-text-secondary hover:border-primary/40 hover:text-primary"
+                            }`}
+                          >
+                            {label}
+                          </button>
+                        );
+                      })}
+                    </div>
+                  </div>
+                </div>
+              )}
+            </div>
           </Card>
         </section>
 

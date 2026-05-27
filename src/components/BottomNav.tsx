@@ -6,12 +6,14 @@ import { useSession, signOut } from "next-auth/react";
 import {
   Home, Wrench, CalendarPlus, User, LayoutDashboard, Calendar,
   ClipboardList, Building2, MessageCircle, Settings, LogOut, Users,
+  ListChecks,
 } from "lucide-react";
 
 const customerTabs = [
   { href: "/home", icon: Home, label: "Home" },
   { href: "/services", icon: Wrench, label: "Services" },
   { href: "/book", icon: CalendarPlus, label: "Book" },
+  { href: "/todo", icon: ListChecks, label: "To-Do" },
   { href: "/messages", icon: MessageCircle, label: "Messages" },
   { href: "/account", icon: User, label: "Account" },
 ];

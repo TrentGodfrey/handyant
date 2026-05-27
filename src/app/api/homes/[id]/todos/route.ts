@@ -30,15 +30,24 @@ export async function POST(req: NextRequest, ctx: { params: Promise<{ id: string
   const body = await req.json();
   if (!body.task || typeof body.task !== "string") return badRequest("task required");
 
+  const photoIds = Array.isArray(body.photoIds)
+    ? body.photoIds.filter((v: unknown): v is string => typeof v === "string")
+    : [];
+
   const todo = await prisma.homeTodo.create({
     data: {
       homeId: id,
       task: body.task,
+      description: body.description ?? null,
       priority: body.priority ?? "medium",
       status: body.status ?? "pending",
       parts: body.parts ?? null,
       partStatus: body.partStatus ?? null,
+      partsDescription: body.partsDescription ?? null,
+      partsBuyer: body.partsBuyer ?? null,
       specialist: body.specialist ?? false,
+      hasPhoto: photoIds.length > 0 || body.hasPhoto === true,
+      photoIds,
       notes: body.notes ?? null,
     },
   });

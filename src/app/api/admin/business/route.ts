@@ -1,6 +1,10 @@
 import { NextRequest } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { requireTech, unauthorized } from "@/lib/session";
+import {
+  normalizeAppointmentReminders,
+  type AppointmentReminders,
+} from "@/lib/reminders";
 
 const DEFAULT_HOURS = {
   mon: { start: "08:00", end: "17:00", enabled: true },
@@ -59,6 +63,13 @@ export async function PATCH(req: NextRequest) {
   if (body.zelleHandle !== undefined) data.zelleHandle = body.zelleHandle;
   if (body.cashappHandle !== undefined) data.cashappHandle = body.cashappHandle;
   if (body.paypalEmail !== undefined) data.paypalEmail = body.paypalEmail;
+  if (body.appointmentReminders !== undefined) {
+    // Coerce to a known-good shape before storing (drops unknown lead times,
+    // fills missing channel keys).
+    data.appointmentReminders = normalizeAppointmentReminders(
+      body.appointmentReminders as Partial<AppointmentReminders> | null,
+    );
+  }
 
   const profile = await prisma.businessProfile.update({
     where: { techId: tech.id },
