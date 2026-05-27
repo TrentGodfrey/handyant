@@ -98,16 +98,14 @@ export async function GET(req: NextRequest) {
     return Response.json({ slots: [] });
   }
 
-  // Lunch break (optional).
-  const lunch = hours.lunch;
-  const lunchStart = lunch?.start ? parseHHMM(lunch.start) : NaN;
-  const lunchEnd = lunch?.end ? parseHHMM(lunch.end) : NaN;
-  const lunchEnabled = lunch?.enabled !== false; // default to enabled if defined
-  const hasLunch =
-    lunchEnabled &&
-    !Number.isNaN(lunchStart) &&
-    !Number.isNaN(lunchEnd) &&
-    lunchEnd > lunchStart;
+  // Fixed 4-slot day, each visit is 1h 45m (105 min):
+  //   08:00 - 09:45
+  //   10:00 - 11:45
+  //   12:00 - 13:45
+  //   14:00 - 15:45
+  // Slots are only shown if they fall within the tech's working hours for the day.
+  const VISIT_LENGTH = 105;
+  const SLOT_STARTS = [8 * 60, 10 * 60, 12 * 60, 14 * 60];
 
   // Pull bookings for that tech on that date.
   const bookings = await prisma.booking.findMany({
@@ -119,31 +117,27 @@ export async function GET(req: NextRequest) {
     select: { scheduledTime: true, durationMinutes: true },
   });
 
-  // Build a set of "blocked" minute marks (every 30-min slot intersecting an existing booking).
-  const blocked = new Set<number>();
+  // Mark slot starts that overlap any existing booking.
+  const blockedStarts = new Set<number>();
   for (const b of bookings) {
     if (!b.scheduledTime) continue;
     const t = new Date(b.scheduledTime);
     if (Number.isNaN(t.getTime())) continue;
     const bookingStart = t.getUTCHours() * 60 + t.getUTCMinutes();
-    const duration = b.durationMinutes ?? 120;
-    const bookingEnd = bookingStart + duration;
-    // Mark every 30-min slot that overlaps this booking.
-    for (let m = Math.floor(bookingStart / 30) * 30; m < bookingEnd; m += 30) {
-      blocked.add(m);
+    const bookingEnd = bookingStart + (b.durationMinutes ?? VISIT_LENGTH);
+    for (const slotStart of SLOT_STARTS) {
+      const slotEnd = slotStart + VISIT_LENGTH;
+      // Overlap if intervals intersect at all.
+      if (slotStart < bookingEnd && bookingStart < slotEnd) {
+        blockedStarts.add(slotStart);
+      }
     }
   }
 
-  // Generate slots in 30-min increments from start to end (exclusive of end).
-  const slots: { time: string; available: boolean }[] = [];
-  for (let m = startMin; m < endMin; m += 30) {
-    let available = !blocked.has(m);
-    // Skip lunch break.
-    if (available && hasLunch && m >= lunchStart && m < lunchEnd) {
-      available = false;
-    }
-    slots.push({ time: fmtHHMM(m), available });
-  }
+  // Build the slot list. Skip any slot that falls outside working hours.
+  const slots: { time: string; available: boolean }[] = SLOT_STARTS
+    .filter((m) => m >= startMin && m + VISIT_LENGTH <= endMin)
+    .map((m) => ({ time: fmtHHMM(m), available: !blockedStarts.has(m) }));
 
   return Response.json({ slots });
 }

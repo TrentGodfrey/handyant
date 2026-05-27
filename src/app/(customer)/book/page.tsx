@@ -78,21 +78,39 @@ function buildCalendar(start: Date, weeksCount: number): CalendarDay[][] {
 const WEEKS_TOTAL = 10;
 const WEEKS_PER_PAGE = 3;
 
-// Demo-mode time slots - kept hardcoded so the demo doesn't hit the API.
+// Demo-mode time slots - 4 fixed 1h 45m slots, matches /api/availability.
 const demoMorningSlots = [
   { time: "8:00 AM", available: true },
-  { time: "9:00 AM", available: true },
   { time: "10:00 AM", available: true },
-  { time: "11:00 AM", available: true },
 ];
 
 const demoAfternoonSlots = [
   { time: "12:00 PM", available: false },
-  { time: "1:00 PM", available: true },
   { time: "2:00 PM", available: true },
-  { time: "3:00 PM", available: false },
-  { time: "4:00 PM", available: true },
 ];
+
+// Render a slot start time as a range, e.g. "8:00 AM" -> "8:00 - 9:45 AM".
+const VISIT_LENGTH_MINUTES = 105;
+function slotRangeLabel(displayTime: string): string {
+  const [timePart, period] = displayTime.split(" ");
+  if (!timePart || !period) return displayTime;
+  const [hStr, mStr] = timePart.split(":");
+  const h12 = parseInt(hStr, 10);
+  const m = parseInt(mStr ?? "0", 10);
+  if (Number.isNaN(h12) || Number.isNaN(m)) return displayTime;
+  const isPm = period === "PM";
+  const startH24 = (isPm ? (h12 % 12) + 12 : h12 % 12);
+  const startMins = startH24 * 60 + m;
+  const endMins = startMins + VISIT_LENGTH_MINUTES;
+  const endH24 = Math.floor(endMins / 60) % 24;
+  const endMin = endMins % 60;
+  const endPeriod = endH24 >= 12 ? "PM" : "AM";
+  const endH12 = endH24 % 12 === 0 ? 12 : endH24 % 12;
+  // Compress to a single period suffix when both halves agree.
+  const sameHalf = period === endPeriod;
+  const startStr = sameHalf ? `${h12}:${String(m).padStart(2, "0")}` : `${h12}:${String(m).padStart(2, "0")} ${period}`;
+  return `${startStr} - ${endH12}:${String(endMin).padStart(2, "0")} ${endPeriod}`;
+}
 
 interface ApiSlot { time: string; available: boolean; }
 interface DisplaySlot { time: string; available: boolean; }
@@ -362,7 +380,7 @@ function BookingPageInner() {
           description: combinedDescription,
           customerNotes: partsNote || null,
           serviceType: apiServiceType,
-          durationMinutes: 120,
+          durationMinutes: VISIT_LENGTH_MINUTES,
         }),
       });
 
@@ -569,7 +587,7 @@ function BookingPageInner() {
                           <Sun size={14} className="text-warning" />
                           <span className="text-[12px] font-semibold text-text-secondary">Morning</span>
                         </div>
-                        <div className="grid grid-cols-4 gap-2">
+                        <div className="grid grid-cols-1 gap-2">
                           {morningSlots.map(({ time, available }) => {
                             const isSelected = selectedTime === time;
                             return (
@@ -577,15 +595,16 @@ function BookingPageInner() {
                                 key={time}
                                 disabled={!available}
                                 onClick={() => setSelectedTime(time)}
-                                className={`rounded-xl py-3 text-[13px] font-semibold transition-all ${
+                                className={`rounded-xl py-3.5 px-4 text-[14px] font-semibold transition-all text-left ${
                                   isSelected
                                     ? "bg-primary text-white shadow-[0_2px_8px_rgba(79,149,152,0.3)]"
                                     : available
-                                    ? "bg-surface border border-border text-text-secondary hover:border-primary/40 hover:bg-primary-50"
-                                    : "bg-surface-secondary text-text-tertiary/40 cursor-not-allowed"
+                                    ? "bg-surface border border-border text-text-primary hover:border-primary/40 hover:bg-primary-50"
+                                    : "bg-surface-secondary text-text-tertiary/40 cursor-not-allowed line-through"
                                 }`}
                               >
-                                {time.replace(" AM", "a").replace(" PM", "p")}
+                                {slotRangeLabel(time)}
+                                {!available && <span className="ml-2 text-[11px] font-medium no-underline">booked</span>}
                               </button>
                             );
                           })}
@@ -600,7 +619,7 @@ function BookingPageInner() {
                           <Sunset size={14} className="text-accent-coral" />
                           <span className="text-[12px] font-semibold text-text-secondary">Afternoon</span>
                         </div>
-                        <div className="grid grid-cols-4 gap-2">
+                        <div className="grid grid-cols-1 gap-2">
                           {afternoonSlots.map(({ time, available }) => {
                             const isSelected = selectedTime === time;
                             return (
@@ -608,15 +627,16 @@ function BookingPageInner() {
                                 key={time}
                                 disabled={!available}
                                 onClick={() => setSelectedTime(time)}
-                                className={`rounded-xl py-3 text-[13px] font-semibold transition-all ${
+                                className={`rounded-xl py-3.5 px-4 text-[14px] font-semibold transition-all text-left ${
                                   isSelected
                                     ? "bg-primary text-white shadow-[0_2px_8px_rgba(79,149,152,0.3)]"
                                     : available
-                                    ? "bg-surface border border-border text-text-secondary hover:border-primary/40 hover:bg-primary-50"
-                                    : "bg-surface-secondary text-text-tertiary/40 cursor-not-allowed"
+                                    ? "bg-surface border border-border text-text-primary hover:border-primary/40 hover:bg-primary-50"
+                                    : "bg-surface-secondary text-text-tertiary/40 cursor-not-allowed line-through"
                                 }`}
                               >
-                                {time.replace(" AM", "a").replace(" PM", "p")}
+                                {slotRangeLabel(time)}
+                                {!available && <span className="ml-2 text-[11px] font-medium no-underline">booked</span>}
                               </button>
                             );
                           })}
@@ -633,7 +653,7 @@ function BookingPageInner() {
               <Card variant="flat" padding="sm" className="mb-5 flex items-center gap-3 border border-success/20 bg-success-light animate-scale-in">
                 <Check size={18} className="text-success shrink-0" />
                 <p className="text-[13px] font-semibold text-text-primary">
-                  {selectedLabel} at {selectedTime}
+                  {selectedLabel} · {selectedTime ? slotRangeLabel(selectedTime) : ""}
                 </p>
               </Card>
             )}
@@ -652,7 +672,7 @@ function BookingPageInner() {
                 <Calendar size={16} className="text-primary" />
               </div>
               <div>
-                <p className="text-[13px] font-semibold text-text-primary">{selectedLabel} at {selectedTime}</p>
+                <p className="text-[13px] font-semibold text-text-primary">{selectedLabel} · {selectedTime ? slotRangeLabel(selectedTime) : ""}</p>
                 <p className="text-[11px] text-text-tertiary capitalize">{serviceType.replace("-", " ")} visit</p>
               </div>
             </Card>
@@ -736,7 +756,7 @@ function BookingPageInner() {
               <div className="space-y-4">
                 <div className="flex items-center justify-between">
                   <div className="flex items-center gap-2.5 text-text-tertiary"><Calendar size={15} /><span className="text-[12px] font-medium uppercase tracking-wide">Date & Time</span></div>
-                  <span className="text-[14px] font-semibold text-text-primary">{selectedLabel} at {selectedTime}</span>
+                  <span className="text-[14px] font-semibold text-text-primary">{selectedLabel} · {selectedTime ? slotRangeLabel(selectedTime) : ""}</span>
                 </div>
                 <div className="h-px bg-border" />
                 <div className="flex items-center justify-between">
