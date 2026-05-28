@@ -117,10 +117,10 @@ export default function LandingPage() {
                   Book a visit
                 </Link>
                 <Link
-                  href="/demo"
+                  href="#memberships"
                   className="inline-flex items-center justify-center gap-2 rounded-xl border border-border bg-white px-6 py-3.5 text-[15px] font-bold text-text-primary hover:bg-surface-secondary transition-colors"
                 >
-                  Try the demo
+                  See memberships
                   <ArrowRight size={16} />
                 </Link>
               </div>
@@ -334,7 +334,7 @@ export default function LandingPage() {
       </section>
 
       {/* ── Plans ─────────────────────────────────────────────────── */}
-      <section className="bg-gradient-to-b from-white to-primary-50 border-t border-border">
+      <section id="memberships" className="bg-gradient-to-b from-white to-primary-50 border-t border-border scroll-mt-16">
         <div className="mx-auto max-w-6xl px-5 py-16 lg:py-20">
           <div className="text-center mb-10">
             <p className="text-[12px] font-semibold uppercase tracking-wider text-primary mb-2">Pricing</p>
@@ -484,7 +484,7 @@ export default function LandingPage() {
             <div className="flex flex-wrap items-center gap-x-6 gap-y-2 text-[13px] text-text-secondary">
               <Link href="/login" className="hover:text-text-primary transition-colors">Sign in</Link>
               <Link href="/signup" className="hover:text-text-primary transition-colors">Sign up</Link>
-              <Link href="/demo" className="hover:text-text-primary transition-colors">Try demo</Link>
+              <Link href="#memberships" className="hover:text-text-primary transition-colors">Memberships</Link>
               <a href="tel:9253502269" className="hover:text-text-primary transition-colors flex items-center gap-1.5">
                 <MessageCircle size={12} />
                 (925) 350-2269

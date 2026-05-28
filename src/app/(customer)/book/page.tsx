@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useEffect, useMemo, Suspense } from "react";
+import Link from "next/link";
 import { useSearchParams, useRouter } from "next/navigation";
 import { useSession } from "next-auth/react";
 import Card from "@/components/Card";
@@ -8,7 +9,7 @@ import Button from "@/components/Button";
 import Spinner from "@/components/Spinner";
 import {
   Calendar, Clock, Camera, ChevronLeft, ChevronRight,
-  Upload, X, Check, Repeat, Zap, Info, Sun, Sunset,
+  Upload, X, Check, Repeat, Info, Sun, Sunset,
 } from "lucide-react";
 import { useDemoMode } from "@/lib/useDemoMode";
 
@@ -135,10 +136,8 @@ const fallbackCategories = [
   "Painting", "Carpentry", "Smart Home", "HVAC", "Other",
 ];
 
-const serviceTypes = [
-  { id: "one-time", label: "One-Time Visit", desc: "Single service call", icon: Zap },
-  { id: "subscription", label: "Subscription", desc: "Ongoing maintenance plan", icon: Repeat },
-];
+// Booking flow is always one-off. Membership sign-up lives on /account/plans.
+const BOOKING_SERVICE_TYPE = "one_time" as const;
 
 // Convert display time (e.g. "9:00 AM") to HH:MM (24-hour)
 function timeToHHMM(displayTime: string): string {
@@ -185,7 +184,6 @@ function BookingPageInner() {
   const [selectedMonth, setSelectedMonth] = useState<string | null>(null);
   const [selectedYear, setSelectedYear] = useState<number | null>(null);
   const [selectedTime, setSelectedTime] = useState<string | null>(null);
-  const [serviceType, setServiceType] = useState("one-time");
   const [description, setDescription] = useState("");
   const [photos, setPhotos] = useState<Photo[]>([]);
   const [calendarPage, setCalendarPage] = useState(0);
@@ -370,7 +368,6 @@ function BookingPageInner() {
     try {
       const scheduledDate = toISODate(selectedDay!, selectedMonth!, selectedYear!);
       const scheduledTime = timeToHHMM(selectedTime!);
-      const apiServiceType = serviceType === "subscription" ? "subscription" : "one_time";
 
       // Combine description and partsNote since the schema has no separate parts field on booking
       const combinedDescription = description + (partsNote ? `\n\nParts to bring: ${partsNote}` : "");
@@ -383,7 +380,7 @@ function BookingPageInner() {
           scheduledTime,
           description: combinedDescription,
           customerNotes: partsNote || null,
-          serviceType: apiServiceType,
+          serviceType: BOOKING_SERVICE_TYPE,
           durationMinutes: VISIT_LENGTH_MINUTES,
         }),
       });
@@ -451,31 +448,22 @@ function BookingPageInner() {
         {/* ═══ STEP 1: Date & Time ═══ */}
         {step === 1 && (
           <div className="space-y-0">
-            {/* Service Type */}
-            <div className="mb-6">
-              <p className="mb-3 text-sm font-semibold uppercase tracking-wider text-text-secondary">Service Type</p>
-              <div className="flex gap-3">
-                {serviceTypes.map(({ id, label, desc, icon: Icon }) => (
-                  <button
-                    key={id}
-                    onClick={() => setServiceType(id)}
-                    className={`flex-1 rounded-xl border-2 p-4 text-left transition-all ${
-                      serviceType === id
-                        ? "border-primary bg-primary-50 shadow-[0_0_0_1px_#4F9598]"
-                        : "border-border bg-surface hover:border-primary/40"
-                    }`}
-                  >
-                    <div className={`mb-2 inline-flex h-8 w-8 items-center justify-center rounded-lg ${
-                      serviceType === id ? "bg-primary/10" : "bg-surface-secondary"
-                    }`}>
-                      <Icon size={16} className={serviceType === id ? "text-primary" : "text-text-tertiary"} />
-                    </div>
-                    <p className={`text-[13px] font-semibold ${serviceType === id ? "text-primary" : "text-text-primary"}`}>{label}</p>
-                    <p className="text-[11px] text-text-tertiary mt-0.5">{desc}</p>
-                  </button>
-                ))}
+            {/* Membership upsell - subtle pointer to /account/plans */}
+            <Link
+              href="/account/plans"
+              className="mb-6 flex items-center justify-between gap-3 rounded-xl border border-primary/20 bg-primary-50 px-4 py-3 hover:border-primary/40 transition-colors"
+            >
+              <div className="flex items-center gap-3 min-w-0">
+                <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-primary/10">
+                  <Repeat size={16} className="text-primary" />
+                </div>
+                <div className="min-w-0">
+                  <p className="text-[13px] font-semibold text-primary">Looking for a membership?</p>
+                  <p className="text-[11px] text-text-tertiary mt-0.5">Save with Essential, Pro, or Elite plans</p>
+                </div>
               </div>
-            </div>
+              <ChevronRight size={16} className="text-primary shrink-0" />
+            </Link>
 
             {/* Calendar Grid */}
             <div className="mb-6">
@@ -677,7 +665,7 @@ function BookingPageInner() {
               </div>
               <div>
                 <p className="text-[13px] font-semibold text-text-primary">{selectedLabel} · {selectedTime ? slotRangeLabel(selectedTime) : ""}</p>
-                <p className="text-[11px] text-text-tertiary capitalize">{serviceType.replace("-", " ")} visit</p>
+                <p className="text-[11px] text-text-tertiary">1 hr 45 min visit</p>
               </div>
             </Card>
 
@@ -764,8 +752,8 @@ function BookingPageInner() {
                 </div>
                 <div className="h-px bg-border" />
                 <div className="flex items-center justify-between">
-                  <div className="flex items-center gap-2.5 text-text-tertiary"><Zap size={15} /><span className="text-[12px] font-medium uppercase tracking-wide">Type</span></div>
-                  <span className="text-[14px] font-semibold text-text-primary capitalize">{serviceType === "subscription" ? "Subscription" : "One-Time"}</span>
+                  <div className="flex items-center gap-2.5 text-text-tertiary"><Clock size={15} /><span className="text-[12px] font-medium uppercase tracking-wide">Duration</span></div>
+                  <span className="text-[14px] font-semibold text-text-primary">1 hr 45 min</span>
                 </div>
                 {selectedCategories.length > 0 && (<><div className="h-px bg-border" /><div><span className="text-[12px] font-medium uppercase tracking-wide text-text-tertiary">Categories</span><div className="mt-2 flex flex-wrap gap-1.5">{selectedCategories.map((c) => (<span key={c} className="rounded-full bg-primary-50 px-3 py-1 text-[11px] font-medium text-primary">{c}</span>))}</div></div></>)}
                 {description && (<><div className="h-px bg-border" /><div><span className="text-[12px] font-medium uppercase tracking-wide text-text-tertiary">Description</span><p className="mt-1.5 text-[13px] text-text-secondary leading-relaxed">{description}</p></div></>)}
