@@ -463,25 +463,27 @@ function RealConfirmation() {
           </div>
         </Card>
 
-        <Card padding="md" className="border border-success/20 bg-success-light">
-          <div className="flex items-center gap-3.5">
-            <div className="relative shrink-0">
-              <div className="flex h-12 w-12 items-center justify-center rounded-full bg-primary text-[15px] font-bold text-white shadow-[0_2px_10px_rgba(79,149,152,0.25)]">{techInitials}</div>
-              <div className="absolute -bottom-0.5 -right-0.5 h-3.5 w-3.5 rounded-full border-2 border-surface bg-success" />
+        {booking.tech && (
+          <Card padding="md" className="border border-success/20 bg-success-light">
+            <div className="flex items-center gap-3.5">
+              <div className="relative shrink-0">
+                <div className="flex h-12 w-12 items-center justify-center rounded-full bg-primary text-[15px] font-bold text-white shadow-[0_2px_10px_rgba(79,149,152,0.25)]">{techInitials}</div>
+                <div className="absolute -bottom-0.5 -right-0.5 h-3.5 w-3.5 rounded-full border-2 border-surface bg-success" />
+              </div>
+              <div className="flex-1 min-w-0">
+                <p className="text-[15px] font-bold text-text-primary">
+                  {techName} will be there
+                </p>
+                <p className="text-[12px] text-text-secondary mt-0.5">
+                  Your dedicated tech
+                </p>
+              </div>
+              <span className="shrink-0 flex items-center gap-1 rounded-full bg-success px-2.5 py-1 text-[11px] font-bold text-white">
+                <Check size={10} strokeWidth={3} />Confirmed
+              </span>
             </div>
-            <div className="flex-1 min-w-0">
-              <p className="text-[15px] font-bold text-text-primary">
-                {booking.tech ? `${techName} will be there` : "Tech assignment pending"}
-              </p>
-              <p className="text-[12px] text-text-secondary mt-0.5">
-                {booking.tech ? "Your dedicated tech" : "We'll match you with a pro shortly"}
-              </p>
-            </div>
-            <span className="shrink-0 flex items-center gap-1 rounded-full bg-success px-2.5 py-1 text-[11px] font-bold text-white">
-              <Check size={10} strokeWidth={3} />Confirmed
-            </span>
-          </div>
-        </Card>
+          </Card>
+        )}
 
         <div>
           <p className="text-[11px] font-semibold uppercase tracking-wider text-text-secondary mb-3 px-1">What happens next</p>

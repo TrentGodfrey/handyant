@@ -30,6 +30,21 @@ export async function POST(req: NextRequest) {
   const isTechCreating = user.role === "tech" && typeof body.customerId === "string" && body.customerId.length > 0;
   const customerId = isTechCreating ? (body.customerId as string) : user.id;
 
+  // Auto-assign a tech for customer-created bookings. For now there's a single
+  // default tech (Anthony); pick the earliest tech in the system. If none
+  // exists, leave techId null (admin will assign manually).
+  let assignedTechId: string | null = null;
+  if (isTechCreating) {
+    assignedTechId = user.id;
+  } else {
+    const defaultTech = await prisma.user.findFirst({
+      where: { role: "tech" },
+      orderBy: { createdAt: "asc" },
+      select: { id: true },
+    });
+    assignedTechId = defaultTech?.id ?? null;
+  }
+
   // Normalize parts payload - accept string[] of items, drop blanks.
   const partItems: string[] = Array.isArray(body.parts)
     ? (body.parts as unknown[])
@@ -41,7 +56,7 @@ export async function POST(req: NextRequest) {
   const booking = await prisma.booking.create({
     data: {
       customerId,
-      techId: isTechCreating ? user.id : null,
+      techId: assignedTechId,
       homeId: body.homeId ?? null,
       scheduledDate: new Date(body.scheduledDate),
       scheduledTime: new Date(`1970-01-01T${body.scheduledTime}`),

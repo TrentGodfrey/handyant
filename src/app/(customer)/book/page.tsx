@@ -78,8 +78,11 @@ function buildCalendar(start: Date, weeksCount: number): CalendarDay[][] {
 const WEEKS_TOTAL = 10;
 const WEEKS_PER_PAGE = 3;
 
-// Demo-mode time slots - 4 fixed 1h 45m slots, matches /api/availability.
+// Demo-mode time slots - 6 fixed 1h 45m slots, matches /api/availability.
+// The 12 PM is shown booked in demo to illustrate how unavailable slots
+// look (real prod API filters booked slots out entirely).
 const demoMorningSlots = [
+  { time: "6:00 AM", available: true },
   { time: "8:00 AM", available: true },
   { time: "10:00 AM", available: true },
 ];
@@ -87,6 +90,7 @@ const demoMorningSlots = [
 const demoAfternoonSlots = [
   { time: "12:00 PM", available: false },
   { time: "2:00 PM", available: true },
+  { time: "4:00 PM", available: true },
 ];
 
 // Render a slot start time as a range, e.g. "8:00 AM" -> "8:00 - 9:45 AM".

@@ -98,14 +98,19 @@ export async function GET(req: NextRequest) {
     return Response.json({ slots: [] });
   }
 
-  // Fixed 4-slot day, each visit is 1h 45m (105 min):
+  // Fixed 6-slot day, each visit is 1h 45m (105 min) with a 15-min buffer
+  // before the next start:
+  //   06:00 - 07:45
   //   08:00 - 09:45
   //   10:00 - 11:45
   //   12:00 - 13:45
   //   14:00 - 15:45
-  // Slots are only shown if they fall within the tech's working hours for the day.
+  //   16:00 - 17:45
+  // Slots are only shown if they fall within the tech's working hours for
+  // the day AND are not already booked. Booked slots are filtered out
+  // entirely so customers only see what they can actually pick.
   const VISIT_LENGTH = 105;
-  const SLOT_STARTS = [8 * 60, 10 * 60, 12 * 60, 14 * 60];
+  const SLOT_STARTS = [6 * 60, 8 * 60, 10 * 60, 12 * 60, 14 * 60, 16 * 60];
 
   // Pull bookings for that tech on that date.
   const bookings = await prisma.booking.findMany({
@@ -134,10 +139,11 @@ export async function GET(req: NextRequest) {
     }
   }
 
-  // Build the slot list. Skip any slot that falls outside working hours.
+  // Build the slot list. Skip any slot outside working hours or already booked.
   const slots: { time: string; available: boolean }[] = SLOT_STARTS
     .filter((m) => m >= startMin && m + VISIT_LENGTH <= endMin)
-    .map((m) => ({ time: fmtHHMM(m), available: !blockedStarts.has(m) }));
+    .filter((m) => !blockedStarts.has(m))
+    .map((m) => ({ time: fmtHHMM(m), available: true }));
 
   return Response.json({ slots });
 }
