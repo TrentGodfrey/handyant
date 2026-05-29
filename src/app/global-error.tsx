@@ -10,6 +10,16 @@ interface GlobalErrorProps {
 export default function GlobalError({ error, reset }: GlobalErrorProps) {
   useEffect(() => {
     console.error(error);
+    const isStaleDeployment =
+      typeof error?.message === "string" &&
+      error.message.includes("Failed to find Server Action");
+    if (isStaleDeployment && typeof window !== "undefined") {
+      const reloaded = sessionStorage.getItem("mcq.staleReload");
+      if (!reloaded) {
+        sessionStorage.setItem("mcq.staleReload", String(Date.now()));
+        window.location.replace(window.location.pathname + window.location.search);
+      }
+    }
   }, [error]);
 
   const isDev = process.env.NODE_ENV === "development";

@@ -8,6 +8,7 @@ import StatusBadge from "@/components/StatusBadge";
 import Spinner from "@/components/Spinner";
 import { useDemoMode } from "@/lib/useDemoMode";
 import { toast } from "@/components/Toaster";
+import { PLANS, type PlanId } from "@/lib/plans";
 import {
   Search, MapPin, Clock, Star, ArrowRight, Camera,
   MessageCircle, Phone, CheckCircle2,
@@ -20,11 +21,10 @@ import {
 // Fallback contact for the "Call" button when the tech's phone isn't loaded yet.
 const FALLBACK_TEL = "tel:+19253502269";
 
-const PLAN_LABELS: Record<string, string> = {
-  essential: "Essential Plan",
-  pro: "Pro Plan",
-  elite: "Elite Plan",
-};
+function planById(id: string | null): (typeof PLANS)[number] | null {
+  if (!id) return null;
+  return PLANS.find((p) => p.id === (id as PlanId)) ?? null;
+}
 
 // ─── Types ──────────────────────────────────────────────────────────────────
 
@@ -71,7 +71,8 @@ export default function CustomerHome() {
   const [nextBooking, setNextBooking] = useState<BookingData | null>(null);
   const [loading, setLoading] = useState(true);
   const [reviewStats, setReviewStats] = useState<{ count: number; avg: number } | null>(null);
-  const [planLabel, setPlanLabel] = useState<string>("Essential Plan");
+  const [activePlanId, setActivePlanId] = useState<string | null>(null);
+  const [completedCount, setCompletedCount] = useState(0);
   const [techPhone, setTechPhone] = useState<string | null>(null);
   const [rescheduleOpen, setRescheduleOpen] = useState(false);
   const { isDemo, mounted } = useDemoMode();
@@ -94,7 +95,8 @@ export default function CustomerHome() {
     if (isDemo) {
       setNextBooking(DEMO_BOOKING);
       setReviewStats({ count: 86, avg: 4.9 });
-      setPlanLabel("Pro Plan");
+      setActivePlanId("pro");
+      setCompletedCount(12);
       setTechPhone("+19253502269");
       setLoading(false);
       return;
@@ -114,6 +116,7 @@ export default function CustomerHome() {
           ["pending", "confirmed", "in_progress"].includes(b.status)
         );
         setNextBooking(upcoming || null);
+        setCompletedCount(bookingList.filter((b) => b.status === "completed").length);
 
         // Surface a tech phone for the Call button (prefer the upcoming booking's tech).
         const phone =
@@ -135,11 +138,7 @@ export default function CustomerHome() {
 
         const subsList: ApiSubscription[] = Array.isArray(subs) ? subs : [];
         const active = subsList.find((s) => s.status === "active") ?? subsList[0];
-        if (active) {
-          setPlanLabel(PLAN_LABELS[active.plan] ?? `${active.plan[0]?.toUpperCase()}${active.plan.slice(1)} Plan`);
-        } else {
-          setPlanLabel("No active membership");
-        }
+        setActivePlanId(active ? active.plan : null);
       })
       .finally(() => {
         if (!cancelled) setLoading(false);
@@ -415,21 +414,67 @@ export default function CustomerHome() {
         </Link>
 
         {/* ── Your Plan Card ──────────────────────────────────────────── */}
-        <div className="mt-5 mb-2">
-          <div className="rounded-2xl bg-gradient-to-r from-primary-50 to-white border border-primary-100 px-4 py-3.5">
-            <div className="flex items-center justify-between">
-              <div>
-                <p className="text-[13px] font-semibold text-text-primary">{planLabel}</p>
-                <Link href="/account/plans" className="text-[12px] font-medium text-primary mt-0.5 inline-block">
-                  Upgrade to Pro for priority scheduling →
-                </Link>
+        {(() => {
+          const plan = planById(activePlanId);
+          if (!plan) {
+            // No active membership - invite them to subscribe.
+            return (
+              <Link href="/account/plans" className="block mt-5 mb-2">
+                <div className="rounded-2xl bg-gradient-to-r from-primary-50 to-white border border-primary-100 px-4 py-3.5 hover:border-primary/40 transition-colors">
+                  <div className="flex items-center justify-between gap-3">
+                    <div className="min-w-0">
+                      <p className="text-[13px] font-semibold text-text-primary">No active membership</p>
+                      <p className="text-[12px] font-medium text-primary mt-0.5">
+                        See plans starting at $1,950/yr →
+                      </p>
+                    </div>
+                    <div className="flex h-9 w-9 items-center justify-center rounded-full bg-primary-100 shrink-0">
+                      <Sparkles size={16} className="text-primary" />
+                    </div>
+                  </div>
+                </div>
+              </Link>
+            );
+          }
+          // Active membership - show plan, price, visit usage, manage link.
+          const usagePct = Math.min(100, Math.round((completedCount / plan.visits) * 100));
+          return (
+            <Link href="/account/plans" className="block mt-5 mb-2">
+              <div className="rounded-2xl bg-gradient-to-br from-primary-50 to-white border border-primary-100 px-4 py-4 hover:border-primary/40 transition-colors">
+                <div className="flex items-start justify-between gap-3">
+                  <div className="min-w-0 flex-1">
+                    <div className="flex items-center gap-2">
+                      <p className="text-[14px] font-bold text-text-primary">{plan.label} Plan</p>
+                      <span className="rounded-full bg-primary px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider text-white">
+                        Active
+                      </span>
+                    </div>
+                    <p className="text-[12px] text-text-secondary mt-0.5">
+                      ${plan.annualPrice.toLocaleString()}/yr · {plan.visits} visits/year
+                    </p>
+                    <div className="mt-2.5 flex items-center gap-2">
+                      <div className="flex-1 h-1.5 rounded-full bg-primary-100 overflow-hidden">
+                        <div
+                          className="h-full bg-primary transition-all"
+                          style={{ width: `${usagePct}%` }}
+                        />
+                      </div>
+                      <p className="text-[11px] font-semibold text-text-primary tabular-nums">
+                        {completedCount}/{plan.visits}
+                      </p>
+                    </div>
+                    <p className="text-[12px] font-medium text-primary mt-2">
+                      Manage plan →
+                    </p>
+                  </div>
+                  <div className="flex h-9 w-9 items-center justify-center rounded-full bg-primary-100 shrink-0">
+                    <Sparkles size={16} className="text-primary" />
+                  </div>
+                </div>
               </div>
-              <div className="flex h-9 w-9 items-center justify-center rounded-full bg-primary-100 shrink-0">
-                <Sparkles size={16} className="text-primary" />
-              </div>
-            </div>
-          </div>
-        </div>
+            </Link>
+          );
+        })()}
 
       </div>
 

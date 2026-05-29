@@ -15,6 +15,22 @@ export default function ErrorPage({ error, reset }: ErrorPageProps) {
   useEffect(() => {
     // Log to console (in a real app, send to monitoring service)
     console.error(error);
+
+    // When the user's browser tab is from an OLDER deployment, the Server
+    // Action IDs in the cached bundle don't exist in the new build. Next.js
+    // throws "Failed to find Server Action ...". Auto-reload to pick up the
+    // current bundle instead of stranding the user on the error page.
+    const isStaleDeployment =
+      typeof error?.message === "string" &&
+      error.message.includes("Failed to find Server Action");
+    if (isStaleDeployment && typeof window !== "undefined") {
+      const reloaded = sessionStorage.getItem("mcq.staleReload");
+      if (!reloaded) {
+        sessionStorage.setItem("mcq.staleReload", String(Date.now()));
+        // Force a network fetch (bypass cached HTML) by re-navigating.
+        window.location.replace(window.location.pathname + window.location.search);
+      }
+    }
   }, [error]);
 
   const isDev = process.env.NODE_ENV === "development";
