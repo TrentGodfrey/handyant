@@ -61,8 +61,17 @@ export async function proxy(req: NextRequest) {
   }
 
   const token = await getToken({ req, secret: process.env.NEXTAUTH_SECRET });
+  const isApi = pathname.startsWith("/api/");
 
   if (!token) {
+    // API requests get a real 401 JSON response so the client-side fetch
+    // doesn't follow a redirect into an HTML login page and choke on r.json().
+    if (isApi) {
+      return new NextResponse(JSON.stringify({ error: "Unauthorized" }), {
+        status: 401,
+        headers: { "content-type": "application/json" },
+      });
+    }
     const loginUrl = new URL("/login", req.url);
     loginUrl.searchParams.set("callbackUrl", pathname);
     return NextResponse.redirect(loginUrl);
@@ -71,6 +80,12 @@ export async function proxy(req: NextRequest) {
   // Admin routes require tech role
   const adminPaths = ["/dashboard", "/schedule", "/jobs", "/homes", "/people", "/admin-messages", "/reports", "/settings"];
   if (adminPaths.some((p) => pathname.startsWith(p)) && token.role !== "tech") {
+    if (isApi) {
+      return new NextResponse(JSON.stringify({ error: "Forbidden" }), {
+        status: 403,
+        headers: { "content-type": "application/json" },
+      });
+    }
     return NextResponse.redirect(new URL("/", req.url));
   }
 
