@@ -9,12 +9,7 @@ export default function SignupPage() {
   const router = useRouter();
   const [name, setName] = useState("");
   const [email, setEmail] = useState("");
-  const [phone, setPhone] = useState("");
   const [password, setPassword] = useState("");
-  const [address, setAddress] = useState("");
-  const [city, setCity] = useState("");
-  const [state, setState] = useState("TX");
-  const [zip, setZip] = useState("");
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
   const [showGoogle, setShowGoogle] = useState(false);
@@ -45,20 +40,12 @@ export default function SignupPage() {
     setError("");
     setLoading(true);
 
-    // Register
+    // Register - minimal fields only. Phone + address get collected at
+    // first booking (or in /account/manage).
     const res = await fetch("/api/auth/register", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        name,
-        email,
-        phone,
-        password,
-        address,
-        city,
-        state,
-        zip,
-      }),
+      body: JSON.stringify({ name, email, password }),
     });
 
     if (!res.ok) {
@@ -148,81 +135,6 @@ export default function SignupPage() {
               className="w-full px-4 py-3 rounded-xl border border-border bg-white text-foreground focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary"
               placeholder="you@example.com"
             />
-          </div>
-
-          <div>
-            <label className="block text-sm font-medium text-foreground mb-1">Phone</label>
-            <input
-              type="tel"
-              value={phone}
-              onChange={(e) => setPhone(e.target.value)}
-              required
-              className="w-full px-4 py-3 rounded-xl border border-border bg-white text-foreground focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary"
-              placeholder="(555) 123-4567"
-            />
-          </div>
-
-          {/* Home address section */}
-          <div className="rounded-xl border border-border bg-surface-secondary/40 p-4 space-y-3">
-            <div>
-              <h3 className="text-sm font-semibold text-foreground">Your home address</h3>
-              <p className="text-xs text-secondary mt-0.5">
-                We&rsquo;ll create your home profile automatically.
-              </p>
-            </div>
-
-            <div>
-              <label className="block text-xs font-medium text-foreground mb-1">Street address</label>
-              <input
-                type="text"
-                value={address}
-                onChange={(e) => setAddress(e.target.value)}
-                required
-                className="w-full px-4 py-2.5 rounded-xl border border-border bg-white text-foreground focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary text-sm"
-                placeholder="1330 Fletcher Street"
-              />
-            </div>
-
-            <div>
-              <label className="block text-xs font-medium text-foreground mb-1">City</label>
-              <input
-                type="text"
-                value={city}
-                onChange={(e) => setCity(e.target.value)}
-                required
-                className="w-full px-4 py-2.5 rounded-xl border border-border bg-white text-foreground focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary text-sm"
-                placeholder="Dallas"
-              />
-            </div>
-
-            <div className="grid grid-cols-3 gap-2">
-              <div>
-                <label className="block text-xs font-medium text-foreground mb-1">State</label>
-                <input
-                  type="text"
-                  value={state}
-                  onChange={(e) => setState(e.target.value.toUpperCase())}
-                  required
-                  maxLength={2}
-                  className="w-full px-3 py-2.5 rounded-xl border border-border bg-white text-foreground focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary uppercase text-sm"
-                  placeholder="TX"
-                />
-              </div>
-              <div className="col-span-2">
-                <label className="block text-xs font-medium text-foreground mb-1">ZIP</label>
-                <input
-                  type="text"
-                  inputMode="numeric"
-                  pattern="\d{5}"
-                  maxLength={5}
-                  value={zip}
-                  onChange={(e) => setZip(e.target.value.replace(/\D/g, ""))}
-                  required
-                  className="w-full px-4 py-2.5 rounded-xl border border-border bg-white text-foreground focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary text-sm"
-                  placeholder="75201"
-                />
-              </div>
-            </div>
           </div>
 
           <div>

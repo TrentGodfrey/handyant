@@ -5,15 +5,13 @@ import { prisma } from "@/lib/prisma";
 export async function POST(req: NextRequest) {
   const body = await req.json();
 
+  // Only name, email, and password are required at signup. Everything else
+  // (phone, address) is collected later - at first booking or in
+  // /account/manage - so the door is as easy to walk through as possible.
   const required: Array<[keyof typeof body, string]> = [
     ["name", "Name"],
     ["email", "Email"],
     ["password", "Password"],
-    ["phone", "Phone"],
-    ["address", "Street address"],
-    ["city", "City"],
-    ["state", "State"],
-    ["zip", "ZIP"],
   ];
 
   for (const [key, label] of required) {
@@ -23,51 +21,37 @@ export async function POST(req: NextRequest) {
     }
   }
 
-  if (!/^\d{5}$/.test(String(body.zip).trim())) {
+  if (String(body.password).length < 8) {
     return Response.json(
-      { error: "ZIP must be 5 digits" },
+      { error: "Password must be at least 8 characters" },
       { status: 400 }
     );
   }
 
-  const existing = await prisma.user.findUnique({
-    where: { email: body.email },
-  });
-
+  const email = String(body.email).trim().toLowerCase();
+  const existing = await prisma.user.findUnique({ where: { email } });
   if (existing) {
     return Response.json({ error: "Email already registered" }, { status: 409 });
   }
 
   const passwordHash = await hash(body.password, 12);
 
-  // Create user + their initial home atomically; if either fails, neither
-  // persists. The customer onboarding flow assumes a Home exists.
-  const { user, home } = await prisma.$transaction(async (tx) => {
-    const user = await tx.user.create({
-      data: {
-        email: body.email,
-        passwordHash,
-        name: body.name,
-        phone: body.phone,
-        role: "customer",
-      },
-    });
-
-    const home = await tx.home.create({
-      data: {
-        customerId: user.id,
-        address: String(body.address).trim(),
-        city: String(body.city).trim(),
-        state: String(body.state).trim().toUpperCase(),
-        zip: String(body.zip).trim(),
-      },
-    });
-
-    return { user, home };
+  const user = await prisma.user.create({
+    data: {
+      email,
+      passwordHash,
+      name: String(body.name).trim(),
+      // Optional - accept if the form sends it, otherwise leave null.
+      phone:
+        typeof body.phone === "string" && body.phone.trim().length > 0
+          ? String(body.phone).trim()
+          : null,
+      role: "customer",
+    },
   });
 
   return Response.json(
-    { id: user.id, email: user.email, name: user.name, homeId: home.id },
+    { id: user.id, email: user.email, name: user.name },
     { status: 201 }
   );
 }

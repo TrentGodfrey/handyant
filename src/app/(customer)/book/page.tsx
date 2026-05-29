@@ -198,6 +198,16 @@ function BookingPageInner() {
   const [slotsLoading, setSlotsLoading] = useState(false);
   const [slotsError, setSlotsError] = useState<string | null>(null);
 
+  // First-time home setup: if customer has no home record, collect the
+  // address inline as part of this booking. We submit it (and create the
+  // Home) just before the booking POST.
+  const [existingHomeId, setExistingHomeId] = useState<string | null>(null);
+  const [needsHomeSetup, setNeedsHomeSetup] = useState(false);
+  const [homeAddress, setHomeAddress] = useState("");
+  const [homeCity, setHomeCity] = useState("");
+  const [homeState, setHomeState] = useState("TX");
+  const [homeZip, setHomeZip] = useState("");
+
   // Build a dynamic calendar starting from today
   const allCalendarWeeks = useMemo(() => buildCalendar(new Date(), WEEKS_TOTAL), []);
 
@@ -217,6 +227,31 @@ function BookingPageInner() {
         // keep fallbackCategories
       });
   }, []);
+
+  // Find out whether the customer already has a home on file. If not, we'll
+  // collect their address as part of this booking and create it on submit.
+  useEffect(() => {
+    if (isDemo) {
+      setExistingHomeId("demo-home");
+      setNeedsHomeSetup(false);
+      return;
+    }
+    fetch("/api/homes")
+      .then((r) => (r.ok ? r.json() : []))
+      .then((homes) => {
+        if (Array.isArray(homes) && homes.length > 0) {
+          setExistingHomeId(homes[0].id);
+          setNeedsHomeSetup(false);
+        } else {
+          setExistingHomeId(null);
+          setNeedsHomeSetup(true);
+        }
+      })
+      .catch(() => {
+        // assume needs setup so we never block them from booking
+        setNeedsHomeSetup(true);
+      });
+  }, [isDemo]);
 
   // Pre-fill from URL params (coming from Services page)
   useEffect(() => {
@@ -327,7 +362,14 @@ function BookingPageInner() {
   function removePhoto(id: string) { setPhotos((prev) => prev.filter((p) => p.id !== id)); }
 
   const selectedLabel = selectedDay && selectedMonth ? `${selectedMonth} ${selectedDay}` : null;
-  const canStep1Continue = selectedDay !== null && selectedTime !== null && selectedYear !== null;
+  const homeFieldsFilled =
+    homeAddress.trim().length > 0 &&
+    homeCity.trim().length > 0 &&
+    homeState.trim().length > 0 &&
+    /^\d{5}$/.test(homeZip.trim());
+  const homeReady = !needsHomeSetup || homeFieldsFilled;
+  const canStep1Continue =
+    selectedDay !== null && selectedTime !== null && selectedYear !== null && homeReady;
 
   // Build morning/afternoon arrays from either the API (real) or the demo set.
   const { morningSlots, afternoonSlots } = useMemo(() => {
@@ -369,6 +411,26 @@ function BookingPageInner() {
       const scheduledDate = toISODate(selectedDay!, selectedMonth!, selectedYear!);
       const scheduledTime = timeToHHMM(selectedTime!);
 
+      // If this is the customer's first booking and we haven't created a Home
+      // record yet, do that first so the booking can reference it.
+      let homeIdToUse = existingHomeId;
+      if (!homeIdToUse && needsHomeSetup && homeFieldsFilled) {
+        const homeRes = await fetch("/api/homes", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            address: homeAddress.trim(),
+            city: homeCity.trim(),
+            state: homeState.trim(),
+            zip: homeZip.trim(),
+          }),
+        });
+        if (homeRes.ok) {
+          const home = await homeRes.json();
+          homeIdToUse = home?.id ?? null;
+        }
+      }
+
       // Combine description and partsNote since the schema has no separate parts field on booking
       const combinedDescription = description + (partsNote ? `\n\nParts to bring: ${partsNote}` : "");
 
@@ -382,6 +444,7 @@ function BookingPageInner() {
           customerNotes: partsNote || null,
           serviceType: BOOKING_SERVICE_TYPE,
           durationMinutes: VISIT_LENGTH_MINUTES,
+          homeId: homeIdToUse,
         }),
       });
 
@@ -448,6 +511,59 @@ function BookingPageInner() {
         {/* ═══ STEP 1: Date & Time ═══ */}
         {step === 1 && (
           <div className="space-y-0">
+            {/* One-time home address setup. Only renders for customers who
+                haven't booked before - after this booking we keep it on file. */}
+            {needsHomeSetup && (
+              <div className="mb-6 rounded-2xl border border-primary/20 bg-primary-50/40 p-4">
+                <p className="text-sm font-semibold uppercase tracking-wider text-primary mb-1">
+                  Your home address
+                </p>
+                <p className="text-[12px] text-text-secondary mb-3">
+                  We&apos;ll save this so you don&apos;t need to re-enter it next time.
+                </p>
+                <div className="space-y-2">
+                  <input
+                    type="text"
+                    value={homeAddress}
+                    onChange={(e) => setHomeAddress(e.target.value)}
+                    placeholder="Street address"
+                    autoComplete="street-address"
+                    className="w-full rounded-xl border border-border bg-white px-3.5 py-2.5 text-[14px] text-text-primary placeholder:text-text-tertiary focus:outline-none focus:border-primary focus:ring-2 focus:ring-primary/10"
+                  />
+                  <input
+                    type="text"
+                    value={homeCity}
+                    onChange={(e) => setHomeCity(e.target.value)}
+                    placeholder="City"
+                    autoComplete="address-level2"
+                    className="w-full rounded-xl border border-border bg-white px-3.5 py-2.5 text-[14px] text-text-primary placeholder:text-text-tertiary focus:outline-none focus:border-primary focus:ring-2 focus:ring-primary/10"
+                  />
+                  <div className="grid grid-cols-3 gap-2">
+                    <input
+                      type="text"
+                      value={homeState}
+                      onChange={(e) => setHomeState(e.target.value.toUpperCase())}
+                      maxLength={2}
+                      placeholder="TX"
+                      autoComplete="address-level1"
+                      className="w-full rounded-xl border border-border bg-white px-3 py-2.5 text-[14px] uppercase text-text-primary placeholder:text-text-tertiary focus:outline-none focus:border-primary focus:ring-2 focus:ring-primary/10"
+                    />
+                    <input
+                      type="text"
+                      inputMode="numeric"
+                      pattern="\d{5}"
+                      maxLength={5}
+                      value={homeZip}
+                      onChange={(e) => setHomeZip(e.target.value.replace(/\D/g, ""))}
+                      placeholder="75201"
+                      autoComplete="postal-code"
+                      className="col-span-2 w-full rounded-xl border border-border bg-white px-3.5 py-2.5 text-[14px] text-text-primary placeholder:text-text-tertiary focus:outline-none focus:border-primary focus:ring-2 focus:ring-primary/10"
+                    />
+                  </div>
+                </div>
+              </div>
+            )}
+
             {/* Membership upsell - subtle pointer to /account/plans */}
             <Link
               href="/account/plans"
