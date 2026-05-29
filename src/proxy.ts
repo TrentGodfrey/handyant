@@ -66,9 +66,8 @@ export async function proxy(req: NextRequest) {
   if (!token) {
     // API requests get a real 401 JSON response so the client-side fetch
     // doesn't follow a redirect into an HTML login page and choke on r.json().
-    console.log("[proxy] !token isApi=", isApi, "pathname=", pathname);
     if (isApi) {
-      return new NextResponse(JSON.stringify({ error: "Unauthorized", marker: "PROXY_401_V2" }), {
+      return new NextResponse(JSON.stringify({ error: "Unauthorized" }), {
         status: 401,
         headers: { "content-type": "application/json" },
       });
