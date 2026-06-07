@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { ChevronLeft, CheckCircle2, Sparkles, MessageCircle, Info } from "lucide-react";
+import { ChevronLeft, CheckCircle2, Sparkles, MessageCircle, Info, CreditCard } from "lucide-react";
 import Card from "@/components/Card";
 import { PLANS, VISIT_USES } from "@/lib/plans";
 
@@ -23,15 +23,15 @@ export default function AccountPlansPage() {
       </div>
 
       <div className="px-5 py-5 space-y-6">
-        {/* Payments coming soon banner */}
+        {/* Heads-up banner: only Essential has live payment for now */}
         <div className="rounded-xl border border-primary/20 bg-primary-50 px-4 py-3 flex items-start gap-3">
           <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-primary/10">
             <Info size={16} className="text-primary" />
           </div>
           <div className="min-w-0">
-            <p className="text-[13px] font-semibold text-text-primary">Payments coming soon</p>
+            <p className="text-[13px] font-semibold text-text-primary">Pay online securely</p>
             <p className="text-[12px] text-text-secondary mt-0.5">
-              To activate a membership, message Anthony directly and he&apos;ll set you up.
+              The Essential plan is available for online payment now. For Pro or Elite, message Anthony to activate.
             </p>
           </div>
         </div>
@@ -75,13 +75,29 @@ export default function AccountPlansPage() {
                   </div>
                 ))}
               </div>
-              <Link
-                href="/messages?topic=membership"
-                className="flex items-center justify-center gap-2 w-full rounded-xl border border-primary bg-white py-2.5 text-[13px] font-semibold text-primary hover:bg-primary-50 transition-colors"
-              >
-                <MessageCircle size={14} />
-                Contact us to activate
-              </Link>
+              {plan.paymentUrl ? (
+                <a
+                  href={plan.paymentUrl}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className={`flex items-center justify-center gap-2 w-full rounded-xl py-2.5 text-[13px] font-semibold transition-colors ${
+                    plan.popular
+                      ? "bg-primary text-white hover:bg-primary-dark shadow-[0_2px_10px_rgba(79,149,152,0.25)]"
+                      : "bg-primary text-white hover:bg-primary-dark"
+                  }`}
+                >
+                  <CreditCard size={14} />
+                  Pay ${plan.annualPrice.toLocaleString()} & activate
+                </a>
+              ) : (
+                <Link
+                  href="/messages?topic=membership"
+                  className="flex items-center justify-center gap-2 w-full rounded-xl border border-primary bg-white py-2.5 text-[13px] font-semibold text-primary hover:bg-primary-50 transition-colors"
+                >
+                  <MessageCircle size={14} />
+                  Contact us to activate
+                </Link>
+              )}
             </Card>
           ))}
         </div>

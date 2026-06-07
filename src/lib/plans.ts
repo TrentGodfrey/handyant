@@ -18,6 +18,10 @@ export interface PlanDefinition {
   details: string;
   popular?: boolean;
   features: string[];
+  // Square checkout link Anthony generated. When present, the plan card
+  // sends the customer here to pay. When null, we fall back to
+  // /messages?topic=membership (gated until payment link is provided).
+  paymentUrl: string | null;
 }
 
 // Shared by all plans: ways customers can use a visit.
@@ -56,6 +60,7 @@ export const PLANS: PlanDefinition[] = [
       "1 Hour 45 Minutes Per Visit",
       "Ideal for maintenance & small repairs",
     ],
+    paymentUrl: "https://square.link/u/C6Nq4mFy",
   },
   {
     id: "pro",
@@ -73,6 +78,7 @@ export const PLANS: PlanDefinition[] = [
       "Priority Scheduling",
       "Perfect for active households",
     ],
+    paymentUrl: null,
   },
   {
     id: "elite",
@@ -89,6 +95,7 @@ export const PLANS: PlanDefinition[] = [
       "VIP Scheduling + Flexibility",
       "Dedicated handyman experience",
     ],
+    paymentUrl: null,
   },
 ];
 

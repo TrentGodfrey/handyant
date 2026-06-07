@@ -424,17 +424,33 @@ export default function LandingPage() {
                       </li>
                     ))}
                   </ul>
-                  <Link
-                    href="/signup"
-                    className={`mt-6 flex items-center justify-center gap-2 rounded-xl py-3 text-[14px] font-bold transition-colors ${
-                      isPopular
-                        ? "bg-primary text-white shadow-[0_2px_8px_rgba(79,149,152,0.30)] hover:bg-primary-dark"
-                        : "border border-border bg-white text-text-primary hover:bg-surface-secondary"
-                    }`}
-                  >
-                    {isPopular && <Sparkles size={15} />}
-                    Get started
-                  </Link>
+                  {plan.paymentUrl ? (
+                    <a
+                      href={plan.paymentUrl}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className={`mt-6 flex items-center justify-center gap-2 rounded-xl py-3 text-[14px] font-bold transition-colors ${
+                        isPopular
+                          ? "bg-primary text-white shadow-[0_2px_8px_rgba(79,149,152,0.30)] hover:bg-primary-dark"
+                          : "bg-primary text-white hover:bg-primary-dark"
+                      }`}
+                    >
+                      {isPopular && <Sparkles size={15} />}
+                      Pay ${plan.annualPrice.toLocaleString()} & activate
+                    </a>
+                  ) : (
+                    <Link
+                      href="/signup"
+                      className={`mt-6 flex items-center justify-center gap-2 rounded-xl py-3 text-[14px] font-bold transition-colors ${
+                        isPopular
+                          ? "bg-primary text-white shadow-[0_2px_8px_rgba(79,149,152,0.30)] hover:bg-primary-dark"
+                          : "border border-border bg-white text-text-primary hover:bg-surface-secondary"
+                      }`}
+                    >
+                      {isPopular && <Sparkles size={15} />}
+                      Get started
+                    </Link>
+                  )}
                 </div>
               );
             })}
