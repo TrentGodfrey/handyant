@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { ChevronLeft, CheckCircle2, Sparkles, MessageCircle, Info, CreditCard } from "lucide-react";
+import { ChevronLeft, CheckCircle2, Sparkles, MessageCircle, CreditCard } from "lucide-react";
 import Card from "@/components/Card";
 import { PLANS, VISIT_USES } from "@/lib/plans";
 
@@ -23,15 +23,15 @@ export default function AccountPlansPage() {
       </div>
 
       <div className="px-5 py-5 space-y-6">
-        {/* Heads-up banner: only Essential has live payment for now */}
+        {/* Secure payment banner */}
         <div className="rounded-xl border border-primary/20 bg-primary-50 px-4 py-3 flex items-start gap-3">
           <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-primary/10">
-            <Info size={16} className="text-primary" />
+            <CreditCard size={16} className="text-primary" />
           </div>
           <div className="min-w-0">
-            <p className="text-[13px] font-semibold text-text-primary">Pay online securely</p>
+            <p className="text-[13px] font-semibold text-text-primary">Secure online payment</p>
             <p className="text-[12px] text-text-secondary mt-0.5">
-              The Essential plan is available for online payment now. For Pro or Elite, message Anthony to activate.
+              Pay securely via Square. Your membership activates after payment confirmation.
             </p>
           </div>
         </div>

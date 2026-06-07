@@ -5,7 +5,7 @@ import {
   CalendarPlus, MessageCircle, Sparkles, MapPin, ChevronRight,
 } from "lucide-react";
 import { DEMO_TECH } from "@/lib/demoData";
-import { WHY_MCQ, PLANS, VISIT_USES } from "@/lib/plans";
+import { WHY_MCQ, PLANS, VISIT_USES, ONE_OFF_PAYMENT_URL } from "@/lib/plans";
 
 const categories = [
   { name: "Plumbing", icon: Droplet, color: "text-blue-500", bg: "bg-blue-50" },
@@ -144,13 +144,15 @@ export default function LandingPage() {
               </div>
 
               <div className="mt-3 flex flex-wrap items-center justify-center lg:justify-start gap-2">
-                <Link
-                  href="/book?type=oneoff"
+                <a
+                  href={ONE_OFF_PAYMENT_URL}
+                  target="_blank"
+                  rel="noopener noreferrer"
                   className="inline-flex items-center gap-1.5 rounded-full border border-primary-100 bg-primary-50/60 px-3.5 py-1.5 text-[12px] font-semibold text-primary hover:bg-primary-50 transition-colors"
                 >
                   <Hammer size={12} />
                   Book a one-off visit · $250
-                </Link>
+                </a>
                 <Link
                   href="/book?type=walkthrough"
                   className="inline-flex items-center gap-1.5 rounded-full border border-success/30 bg-success-light/60 px-3.5 py-1.5 text-[12px] font-semibold text-success hover:bg-success-light transition-colors"

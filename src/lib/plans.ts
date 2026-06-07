@@ -78,7 +78,7 @@ export const PLANS: PlanDefinition[] = [
       "Priority Scheduling",
       "Perfect for active households",
     ],
-    paymentUrl: null,
+    paymentUrl: "https://square.link/u/C60RLstN",
   },
   {
     id: "elite",
@@ -95,9 +95,13 @@ export const PLANS: PlanDefinition[] = [
       "VIP Scheduling + Flexibility",
       "Dedicated handyman experience",
     ],
-    paymentUrl: null,
+    paymentUrl: "https://square.link/u/NEROpzVf",
   },
 ];
+
+// One-off visit payment (not a plan/subscription). Used on the booking
+// confirmation and the landing page "Book a one-off visit" CTA.
+export const ONE_OFF_PAYMENT_URL = "https://square.link/u/KRYz6SPX";
 
 export function planMeta(plan: string): { label: string; price: string; details: string } {
   const found = PLANS.find((p) => p.id === plan);
