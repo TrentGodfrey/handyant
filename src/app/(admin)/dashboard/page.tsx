@@ -586,7 +586,11 @@ export default function AdminDashboard() {
   async function handleAccept(id: string) {
     setDismissedOfferIds((prev) => new Set(prev).add(id));
     try {
-      const res = await fetch(`/api/bookings/${id}/accept`, { method: "POST" });
+      const res = await fetch(`/api/bookings/${id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ status: "confirmed" }),
+      });
       if (!res.ok) throw new Error("Failed");
     } catch {
       // Roll back optimistic dismissal
@@ -672,6 +676,119 @@ export default function AdminDashboard() {
           }
         }}
       />
+
+      {/* ── Pending Confirmation ── */}
+      <div className="mb-6">
+        <div className="mb-3 flex items-center justify-between">
+          <h2 className="text-sm font-semibold uppercase tracking-wider text-text-secondary">
+            Pending Confirmation
+          </h2>
+          {(isDemo ? demoPendingOffers.length : realPendingOffers.length) > 0 && (
+            <span className="rounded-full bg-primary-100 px-2.5 py-0.5 text-[11px] font-bold text-primary">
+              {isDemo ? demoPendingOffers.length : realPendingOffers.length} waiting
+            </span>
+          )}
+        </div>
+
+        {isDemo ? (
+          <div className="space-y-2.5">
+            {demoPendingOffers.map((offer) => (
+              <Card key={offer.id} padding="sm">
+                <div className="flex items-center gap-3">
+                  <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-primary-50 text-[14px] font-bold text-primary">
+                    {offer.client.split(" ").map((n) => n[0]).join("")}
+                  </div>
+
+                  <div className="flex-1 min-w-0">
+                    <p className="text-[14px] font-semibold text-text-primary">{offer.client}</p>
+                    <p className="text-[12px] text-text-secondary truncate">{offer.service}</p>
+                    <p className="text-[11px] text-text-tertiary mt-0.5">
+                      {offer.date} · {offer.area}
+                      <span className="ml-2 font-semibold text-success">{offer.est}</span>
+                    </p>
+                  </div>
+
+                  <div className="flex gap-2 shrink-0">
+                    <Button variant="ghost" size="sm" className="!bg-success-light !text-success hover:!bg-green-100">
+                      Confirm
+                    </Button>
+                    <Button variant="ghost" size="sm">
+                      Decline
+                    </Button>
+                  </div>
+                </div>
+              </Card>
+            ))}
+          </div>
+        ) : realPendingOffers.length === 0 ? (
+          <Card padding="md" variant="outlined">
+            <p className="text-[12px] text-text-tertiary text-center py-2">
+              No bookings waiting for confirmation.
+            </p>
+          </Card>
+        ) : (
+          <div className="space-y-2.5">
+            {realPendingOffers.map((offer) => {
+              const initials = offer.customerName
+                .split(" ")
+                .map((n) => n[0])
+                .join("")
+                .slice(0, 2)
+                .toUpperCase();
+              const cost = offer.estimatedCost
+                ? `$${Math.round(Number(offer.estimatedCost))}`
+                : null;
+              const dateLabel = formatOfferDate(offer.scheduledDate);
+              const timeLabel = (() => {
+                try {
+                  return new Date(offer.scheduledTime).toLocaleTimeString("en-US", {
+                    hour: "numeric",
+                    minute: "2-digit",
+                  });
+                } catch {
+                  return offer.scheduledTime;
+                }
+              })();
+              return (
+                <Card key={offer.id} padding="sm">
+                  <div className="flex items-center gap-3">
+                    <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-primary-50 text-[14px] font-bold text-primary">
+                      {initials || "?"}
+                    </div>
+
+                    <div className="flex-1 min-w-0">
+                      <p className="text-[14px] font-semibold text-text-primary">
+                        {offer.customerName}
+                      </p>
+                      <p className="text-[12px] text-text-secondary truncate">
+                        {offer.description || offer.categories.join(", ") || "Service request"}
+                      </p>
+                      <p className="text-[11px] text-text-tertiary mt-0.5">
+                        {dateLabel} · {timeLabel}
+                        {cost && <span className="ml-2 font-semibold text-success">{cost}</span>}
+                      </p>
+                    </div>
+
+                    <div className="flex gap-2 shrink-0">
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        className="!bg-success-light !text-success hover:!bg-green-100"
+                        onClick={() => handleAccept(offer.id)}
+                      >
+                        Confirm
+                      </Button>
+                      <Button variant="ghost" size="sm" onClick={() => handleDecline(offer.id)}>
+                        Decline
+                      </Button>
+                    </div>
+                  </div>
+                </Card>
+              );
+            })}
+          </div>
+        )}
+      </div>
 
       {/* ── KPI Cards ── */}
       <div className="mb-6 grid grid-cols-4 gap-2.5">
@@ -817,109 +934,6 @@ export default function AdminDashboard() {
                 </Card>
               </Link>
             ))}
-          </div>
-        )}
-      </div>
-
-      {/* ── Available Offers ── */}
-      <div className="mb-7">
-        <div className="mb-3 flex items-center justify-between">
-          <h2 className="text-sm font-semibold uppercase tracking-wider text-text-secondary">
-            Available Offers
-          </h2>
-          {(isDemo ? demoPendingOffers.length : realPendingOffers.length) > 0 && (
-            <span className="rounded-full bg-primary-100 px-2.5 py-0.5 text-[11px] font-bold text-primary">
-              {isDemo ? demoPendingOffers.length : realPendingOffers.length} new
-            </span>
-          )}
-        </div>
-
-        {isDemo ? (
-          <div className="space-y-2.5">
-            {demoPendingOffers.map((offer) => (
-              <Card key={offer.id} padding="sm">
-                <div className="flex items-center gap-3">
-                  <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-primary-50 text-[14px] font-bold text-primary">
-                    {offer.client.split(" ").map((n) => n[0]).join("")}
-                  </div>
-
-                  <div className="flex-1 min-w-0">
-                    <p className="text-[14px] font-semibold text-text-primary">{offer.client}</p>
-                    <p className="text-[12px] text-text-secondary truncate">{offer.service}</p>
-                    <p className="text-[11px] text-text-tertiary mt-0.5">
-                      {offer.date} · {offer.area}
-                      <span className="ml-2 font-semibold text-success">{offer.est}</span>
-                    </p>
-                  </div>
-
-                  <div className="flex gap-2 shrink-0">
-                    <Button variant="ghost" size="sm" className="!bg-success-light !text-success hover:!bg-green-100">
-                      Accept
-                    </Button>
-                    <Button variant="ghost" size="sm">
-                      Pass
-                    </Button>
-                  </div>
-                </div>
-              </Card>
-            ))}
-          </div>
-        ) : realPendingOffers.length === 0 ? (
-          <Card padding="md" variant="outlined">
-            <p className="text-[12px] text-text-tertiary text-center py-2">
-              No pending offers right now.
-            </p>
-          </Card>
-        ) : (
-          <div className="space-y-2.5">
-            {realPendingOffers.map((offer) => {
-              const initials = offer.customerName
-                .split(" ")
-                .map((n) => n[0])
-                .join("")
-                .slice(0, 2)
-                .toUpperCase();
-              const cost = offer.estimatedCost
-                ? `$${Math.round(Number(offer.estimatedCost))}`
-                : null;
-              return (
-                <Card key={offer.id} padding="sm">
-                  <div className="flex items-center gap-3">
-                    <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-primary-50 text-[14px] font-bold text-primary">
-                      {initials || "?"}
-                    </div>
-
-                    <div className="flex-1 min-w-0">
-                      <p className="text-[14px] font-semibold text-text-primary">
-                        {offer.customerName}
-                      </p>
-                      <p className="text-[12px] text-text-secondary truncate">
-                        {offer.description || offer.categories.join(", ") || "Service request"}
-                      </p>
-                      <p className="text-[11px] text-text-tertiary mt-0.5">
-                        {formatOfferDate(offer.scheduledDate)}
-                        {offer.address ? ` · ${offer.address.split(",")[1]?.trim() || offer.address}` : ""}
-                        {cost && <span className="ml-2 font-semibold text-success">{cost}</span>}
-                      </p>
-                    </div>
-
-                    <div className="flex gap-2 shrink-0">
-                      <Button
-                        variant="ghost"
-                        size="sm"
-                        className="!bg-success-light !text-success hover:!bg-green-100"
-                        onClick={() => handleAccept(offer.id)}
-                      >
-                        Accept
-                      </Button>
-                      <Button variant="ghost" size="sm" onClick={() => handleDecline(offer.id)}>
-                        Decline
-                      </Button>
-                    </div>
-                  </div>
-                </Card>
-              );
-            })}
           </div>
         )}
       </div>

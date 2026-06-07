@@ -49,6 +49,12 @@ const DEMO_CLIENTS: ClientView[] = DEMO_CUSTOMERS.map((c) => ({
 
 const DURATIONS = ["1h", "1.5h", "2h", "2.5h", "3h", "4h+"];
 const BLOCK_REASONS = ["Personal", "Supplies Run", "Admin", "Lunch", "Travel", "Other"];
+// Fixed 6-slot day matching customer booking + /api/availability output:
+// 6 AM, 8 AM, 10 AM, 12 PM, 2 PM, 4 PM.
+const JOB_TIME_SLOTS = [
+  "6:00 AM", "8:00 AM", "10:00 AM", "12:00 PM", "2:00 PM", "4:00 PM",
+];
+// Block-time mode still needs 30-min granularity for arbitrary ranges.
 const TIME_SLOTS = [
   "7:00 AM", "7:30 AM", "8:00 AM", "8:30 AM", "9:00 AM", "9:30 AM",
   "10:00 AM", "10:30 AM", "11:00 AM", "11:30 AM", "12:00 PM", "12:30 PM",
@@ -178,7 +184,7 @@ function ScheduleNewPageInner() {
   const [selectedClient, setSelectedClient] = useState<ClientView | null>(null);
   const [showClientDropdown, setShowClientDropdown] = useState(false);
   const [selectedDate, setSelectedDate] = useState<Date | null>(null);
-  const [timeSlot, setTimeSlot] = useState("9:00 AM");
+  const [timeSlot, setTimeSlot] = useState("8:00 AM");
   const [showTimeDropdown, setShowTimeDropdown] = useState(false);
   const [duration, setDuration] = useState("2h");
   const [description, setDescription] = useState("");
@@ -560,7 +566,7 @@ function ScheduleNewPageInner() {
                 {showTimeDropdown && (
                   <div className="absolute left-0 right-0 top-full mt-1.5 z-30 rounded-2xl border border-border bg-surface shadow-[0_4px_24px_rgba(0,0,0,0.12)] overflow-hidden">
                     <div className="max-h-52 overflow-y-auto">
-                      {TIME_SLOTS.map((t) => (
+                      {JOB_TIME_SLOTS.map((t) => (
                         <button
                           key={t}
                           className={`flex w-full items-center justify-between px-4 py-2.5 text-[14px] transition-colors border-b border-border last:border-0 ${

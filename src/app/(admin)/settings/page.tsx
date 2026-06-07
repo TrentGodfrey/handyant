@@ -208,7 +208,7 @@ export default function SettingsPage() {
   useEffect(() => {
     if (!mounted) return;
     if (isDemo) {
-      setOwner("Anthony Morales");
+      setOwner("Anthony McQuade");
       setPhone("(214) 555-0199");
       setEmail("anthony@handyant.com");
       setActiveCities(new Set(DEFAULT_ACTIVE));

@@ -5,7 +5,7 @@ import {
   CalendarPlus, MessageCircle, Sparkles, MapPin, ChevronRight,
 } from "lucide-react";
 import { DEMO_TECH } from "@/lib/demoData";
-import { WHY_MCQ } from "@/lib/plans";
+import { WHY_MCQ, PLANS, VISIT_USES } from "@/lib/plans";
 
 const categories = [
   { name: "Plumbing", icon: Droplet, color: "text-blue-500", bg: "bg-blue-50" },
@@ -18,7 +18,25 @@ const categories = [
   { name: "Smart Home", icon: Wifi, color: "text-violet-500", bg: "bg-violet-50" },
 ];
 
-const cities = ["Plano", "Frisco", "McKinney", "Allen", "Roanoke", "Waxahachie"];
+const cities = [
+  "Highland Park",
+  "University Park",
+  "Dallas",
+  "Hurst",
+  "Bedford",
+  "Southlake",
+  "Colleyville",
+  "Grapevine",
+  "Fort Worth",
+  "Arlington",
+  "Grand Prairie",
+  "Plano",
+  "Frisco",
+  "McKinney",
+  "Allen",
+  "Roanoke",
+  "Waxahachie",
+];
 
 const testimonials = [
   {
@@ -105,7 +123,7 @@ export default function LandingPage() {
               </p>
 
               <p className="mt-4 max-w-xl mx-auto lg:mx-0 text-[13px] font-semibold text-primary tracking-wide">
-                Reliable <span className="text-text-tertiary mx-1.5">·</span> Skilled <span className="text-text-tertiary mx-1.5">·</span> Overly communicative <span className="text-text-tertiary mx-1.5">·</span> Done right the first time
+                Reliable <span className="text-text-tertiary mx-1.5">·</span> Skilled <span className="text-text-tertiary mx-1.5">·</span> Fully insured <span className="text-text-tertiary mx-1.5">·</span> Overly communicative <span className="text-text-tertiary mx-1.5">·</span> Done right the first time
               </p>
 
               <div className="mt-7 flex flex-col sm:flex-row items-stretch sm:items-center gap-3 sm:justify-center lg:justify-start">
@@ -122,6 +140,23 @@ export default function LandingPage() {
                 >
                   See memberships
                   <ArrowRight size={16} />
+                </Link>
+              </div>
+
+              <div className="mt-3 flex flex-wrap items-center justify-center lg:justify-start gap-2">
+                <Link
+                  href="/book?type=oneoff"
+                  className="inline-flex items-center gap-1.5 rounded-full border border-primary-100 bg-primary-50/60 px-3.5 py-1.5 text-[12px] font-semibold text-primary hover:bg-primary-50 transition-colors"
+                >
+                  <Hammer size={12} />
+                  Book a one-off visit · $250
+                </Link>
+                <Link
+                  href="/book?type=walkthrough"
+                  className="inline-flex items-center gap-1.5 rounded-full border border-success/30 bg-success-light/60 px-3.5 py-1.5 text-[12px] font-semibold text-success hover:bg-success-light transition-colors"
+                >
+                  <Sparkles size={12} />
+                  Free home walk-through
                 </Link>
               </div>
 
@@ -283,7 +318,7 @@ export default function LandingPage() {
           </h2>
         </div>
 
-        <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+        <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
           {WHY_MCQ.map((point) => (
             <div
               key={point}
@@ -336,70 +371,73 @@ export default function LandingPage() {
       {/* ── Plans ─────────────────────────────────────────────────── */}
       <section id="memberships" className="bg-gradient-to-b from-white to-primary-50 border-t border-border scroll-mt-16">
         <div className="mx-auto max-w-6xl px-5 py-16 lg:py-20">
-          <div className="text-center mb-10">
-            <p className="text-[12px] font-semibold uppercase tracking-wider text-primary mb-2">Pricing</p>
+          <div className="text-center mb-8">
+            <p className="text-[12px] font-semibold uppercase tracking-wider text-primary mb-2">Annual memberships</p>
             <h2 className="text-[28px] sm:text-[34px] font-black tracking-tight text-text-primary">
-              Pay per visit, or skip the line.
+              Three plans. One trusted craftsman.
             </h2>
             <p className="mt-3 max-w-xl mx-auto text-[15px] text-text-secondary">
-              No subscription needed to book. But Pro members get priority scheduling and member pricing.
+              Each visit is 1 hour 45 minutes — use them however you need.
+            </p>
+            <p className="mt-3 max-w-2xl mx-auto text-[12px] text-text-tertiary">
+              <span className="font-semibold text-text-secondary">What you can use visits for:</span>{" "}
+              {VISIT_USES.join(" · ")}
             </p>
           </div>
 
-          <div className="grid gap-4 sm:grid-cols-2 max-w-3xl mx-auto">
-            {/* Basic */}
-            <div className="rounded-2xl border border-border bg-white p-7">
-              <p className="text-[13px] font-semibold text-text-secondary uppercase tracking-wider">Basic</p>
-              <p className="mt-2 text-[36px] font-black text-text-primary leading-none">Free</p>
-              <p className="mt-1 text-[13px] text-text-tertiary">Pay only for the work done.</p>
-              <ul className="mt-5 space-y-2.5">
-                {["Book any service online", "Real-time visit tracking", "Photo notes & history", "Itemized receipts"].map((f) => (
-                  <li key={f} className="flex items-start gap-2 text-[14px] text-text-primary">
-                    <CheckCircle2 size={16} className="text-success shrink-0 mt-0.5" />
-                    <span>{f}</span>
-                  </li>
-                ))}
-              </ul>
-              <Link
-                href="/signup"
-                className="mt-6 flex items-center justify-center gap-2 rounded-xl border border-border bg-white py-3 text-[14px] font-bold text-text-primary hover:bg-surface-secondary transition-colors"
-              >
-                Get started
-              </Link>
-            </div>
-
-            {/* Pro */}
-            <div className="relative rounded-2xl border-2 border-primary bg-gradient-to-br from-primary-50 to-white p-7">
-              <div className="absolute -top-3 left-7 rounded-full bg-primary px-3 py-1">
-                <span className="text-[11px] font-bold uppercase tracking-wider text-white">Most popular</span>
-              </div>
-              <p className="text-[13px] font-semibold text-primary uppercase tracking-wider">Pro</p>
-              <p className="mt-2 text-[36px] font-black text-text-primary leading-none">
-                $29<span className="text-[16px] font-bold text-text-tertiary">/mo</span>
-              </p>
-              <p className="mt-1 text-[13px] text-text-tertiary">Cancel anytime.</p>
-              <ul className="mt-5 space-y-2.5">
-                {[
-                  "Everything in Basic",
-                  "Priority scheduling (next-day)",
-                  "10% off every visit",
-                  "Free seasonal home check-up",
-                  "Direct messaging with Anthony",
-                ].map((f) => (
-                  <li key={f} className="flex items-start gap-2 text-[14px] text-text-primary">
-                    <CheckCircle2 size={16} className="text-primary shrink-0 mt-0.5" />
-                    <span>{f}</span>
-                  </li>
-                ))}
-              </ul>
-              <Link
-                href="/signup"
-                className="mt-6 flex items-center justify-center gap-2 rounded-xl bg-primary py-3 text-[14px] font-bold text-white shadow-[0_2px_8px_rgba(79,149,152,0.30)] hover:bg-primary-dark transition-colors"
-              >
-                <Sparkles size={15} />
-                Go Pro
-              </Link>
-            </div>
+          <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3 max-w-5xl mx-auto">
+            {PLANS.map((plan) => {
+              const isPopular = !!plan.popular;
+              return (
+                <div
+                  key={plan.id}
+                  className={`relative rounded-2xl p-7 flex flex-col ${
+                    isPopular
+                      ? "border-2 border-primary bg-gradient-to-br from-primary-50 to-white shadow-[0_8px_24px_rgba(79,149,152,0.18)]"
+                      : "border border-border bg-white"
+                  }`}
+                >
+                  {isPopular && (
+                    <div className="absolute -top-3 left-7 rounded-full bg-primary px-3 py-1">
+                      <span className="text-[11px] font-bold uppercase tracking-wider text-white">Most popular</span>
+                    </div>
+                  )}
+                  <p className={`text-[13px] font-semibold uppercase tracking-wider ${isPopular ? "text-primary" : "text-text-secondary"}`}>
+                    {plan.label}
+                  </p>
+                  <p className="mt-2 text-[36px] font-black text-text-primary leading-none">
+                    ${plan.annualPrice.toLocaleString()}
+                    <span className="text-[16px] font-bold text-text-tertiary">/yr</span>
+                  </p>
+                  <p className="mt-1 text-[13px] text-text-tertiary">{plan.visitLabel}</p>
+                  <p className="mt-3 text-[13px] font-semibold text-text-primary">
+                    {plan.tagline}
+                  </p>
+                  <ul className="mt-5 space-y-2.5 flex-1">
+                    {plan.features.map((f) => (
+                      <li key={f} className="flex items-start gap-2 text-[14px] text-text-primary">
+                        <CheckCircle2
+                          size={16}
+                          className={`shrink-0 mt-0.5 ${isPopular ? "text-primary" : "text-success"}`}
+                        />
+                        <span>{f}</span>
+                      </li>
+                    ))}
+                  </ul>
+                  <Link
+                    href="/signup"
+                    className={`mt-6 flex items-center justify-center gap-2 rounded-xl py-3 text-[14px] font-bold transition-colors ${
+                      isPopular
+                        ? "bg-primary text-white shadow-[0_2px_8px_rgba(79,149,152,0.30)] hover:bg-primary-dark"
+                        : "border border-border bg-white text-text-primary hover:bg-surface-secondary"
+                    }`}
+                  >
+                    {isPopular && <Sparkles size={15} />}
+                    Get started
+                  </Link>
+                </div>
+              );
+            })}
           </div>
         </div>
       </section>
@@ -420,7 +458,7 @@ export default function LandingPage() {
                 Serving North Texas, one neighborhood at a time.
               </h2>
               <p className="mt-3 text-[15px] text-white/70 leading-relaxed">
-                Based in Plano. We service homes across the DFW metro and surrounding suburbs.
+                Centrally based to the entire DFW. We service homes across the DFW metro and surrounding suburbs.
                 Don&apos;t see your city? <Link href="/signup" className="text-white underline hover:text-primary-200">Ask anyway</Link>.
               </p>
             </div>
@@ -477,7 +515,7 @@ export default function LandingPage() {
               </div>
               <div>
                 <p className="text-[14px] font-black text-text-primary">MCQ Property Care</p>
-                <p className="text-[11px] text-text-tertiary">Plano, TX · Insured &amp; Reliable</p>
+                <p className="text-[11px] text-text-tertiary">Dallas, TX · Insured &amp; Reliable</p>
               </div>
             </div>
 
@@ -485,9 +523,9 @@ export default function LandingPage() {
               <Link href="/login" className="hover:text-text-primary transition-colors">Sign in</Link>
               <Link href="/signup" className="hover:text-text-primary transition-colors">Sign up</Link>
               <Link href="#memberships" className="hover:text-text-primary transition-colors">Memberships</Link>
-              <a href="tel:9253502269" className="hover:text-text-primary transition-colors flex items-center gap-1.5">
+              <a href="tel:2144697795" className="hover:text-text-primary transition-colors flex items-center gap-1.5">
                 <MessageCircle size={12} />
-                (925) 350-2269
+                (214) 469-7795
               </a>
             </div>
           </div>

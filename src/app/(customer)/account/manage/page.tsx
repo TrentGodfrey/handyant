@@ -9,9 +9,9 @@ import ChipMultiSelect from "@/components/ChipMultiSelect";
 import { toast } from "@/components/Toaster";
 import { useSession, signOut } from "next-auth/react";
 import {
-  ChevronLeft, User, Mail, Phone, MapPin, CreditCard,
+  ChevronLeft, User, Mail, Phone, MapPin,
   Bell, Shield, Check, Pencil, Trash2, LogOut, Loader2,
-  Camera, X, AlertTriangle, BellRing,
+  Camera, AlertTriangle, BellRing,
 } from "lucide-react";
 import { useDemoMode } from "@/lib/useDemoMode";
 import { PLANS, planMeta as sharedPlanMeta } from "@/lib/plans";
@@ -127,10 +127,6 @@ export default function AccountManagePage() {
   const fileInputRef = useRef<HTMLInputElement | null>(null);
   const [avatarUploading, setAvatarUploading] = useState(false);
   const [avatarError, setAvatarError] = useState<string | null>(null);
-
-  // Payment methods (display-only stub)
-  const [showAddCard, setShowAddCard] = useState(false);
-  const [paymentToast, setPaymentToast] = useState<string | null>(null);
 
   // Password
   const [showPasswordForm, setShowPasswordForm] = useState(false);
@@ -993,81 +989,6 @@ export default function AccountManagePage() {
               <p className="mt-3 text-[12px] font-medium text-text-secondary">{subMessage}</p>
             )}
           </Card>
-        </div>
-
-        {/* Payment Methods */}
-        <div>
-          <p className="mb-2 text-sm font-semibold uppercase tracking-wider text-text-secondary">Payment Methods</p>
-          <Card className="space-y-3">
-            {isDemo ? (
-              <div className="flex items-center justify-between">
-                <div className="flex items-center gap-3">
-                  <div className="flex h-10 w-14 items-center justify-center rounded-lg bg-[#1A1F71] text-[11px] font-bold text-white tracking-wider">VISA</div>
-                  <div>
-                    <p className="text-[13px] font-semibold text-text-primary">Visa ending in 4242</p>
-                    <p className="text-[11px] text-text-tertiary">Expires 08/27</p>
-                  </div>
-                </div>
-                <span className="rounded-full bg-success-light px-2 py-0.5 text-[10px] font-semibold text-success">Default</span>
-              </div>
-            ) : (
-              <p className="text-[13px] text-text-secondary">
-                Add a card to enable in-app payments.
-              </p>
-            )}
-            <Button
-              variant="outline"
-              size="sm"
-              fullWidth
-              icon={<CreditCard size={14} />}
-              onClick={() => setShowAddCard(true)}
-            >
-              Add card
-            </Button>
-            {paymentToast && (
-              <p className="text-[12px] font-medium text-text-secondary">{paymentToast}</p>
-            )}
-          </Card>
-
-          {/* Add card form (display-only) */}
-          {showAddCard && (
-            <Card className="mt-3 space-y-3">
-              <div className="flex items-center justify-between">
-                <p className="text-[13px] font-semibold text-text-primary">Add a card</p>
-                <button onClick={() => setShowAddCard(false)} className="text-text-tertiary hover:text-text-primary">
-                  <X size={16} />
-                </button>
-              </div>
-              <input
-                type="text"
-                placeholder="Card number"
-                className="w-full rounded-lg border border-border bg-surface px-3 py-2 text-[13px] outline-none focus:border-primary"
-              />
-              <div className="grid grid-cols-2 gap-2">
-                <input
-                  type="text"
-                  placeholder="MM/YY"
-                  className="rounded-lg border border-border bg-surface px-3 py-2 text-[13px] outline-none focus:border-primary"
-                />
-                <input
-                  type="text"
-                  placeholder="CVC"
-                  className="rounded-lg border border-border bg-surface px-3 py-2 text-[13px] outline-none focus:border-primary"
-                />
-              </div>
-              <Button
-                size="sm"
-                fullWidth
-                onClick={() => {
-                  setPaymentToast("Coming soon - card storage isn't enabled yet.");
-                  setShowAddCard(false);
-                  setTimeout(() => setPaymentToast(null), 4000);
-                }}
-              >
-                Save card
-              </Button>
-            </Card>
-          )}
         </div>
 
         {/* Notifications */}

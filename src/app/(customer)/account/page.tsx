@@ -48,6 +48,7 @@ export default function AccountPage() {
   const [pastJobs, setPastJobs] = useState<PastJob[]>([]);
   const [showAllJobs, setShowAllJobs] = useState(false);
   const [planVisitAllowance, setPlanVisitAllowance] = useState<number | null>(null);
+  const [tasksDone, setTasksDone] = useState<number | null>(null);
 
   const userName = !mounted ? "User" : isDemo ? (demoCustomerBy("Sarah Mitchell")?.name ?? "User") : session?.user?.name || "User";
   const userInitials = userName.split(" ").map((n) => n[0]).join("").toUpperCase().slice(0, 2);
@@ -58,27 +59,56 @@ export default function AccountPage() {
       setPastJobs(DEMO_JOBS);
       return;
     }
-    // Fetch completed bookings + active subscription for real users
+    // Fetch completed bookings + active subscription + homes (for todo counts)
     Promise.all([
       fetch("/api/bookings").then((r) => (r.ok ? r.json() : [])).catch(() => []),
       fetch("/api/subscriptions").then((r) => (r.ok ? r.json() : [])).catch(() => []),
-    ]).then(([bookings, subs]) => {
+      fetch("/api/homes").then((r) => (r.ok ? r.json() : [])).catch(() => []),
+    ]).then(async ([bookings, subs, homes]) => {
+      let completedBookings: Array<Record<string, unknown>> = [];
       if (Array.isArray(bookings)) {
-        const completed = bookings
-          .filter((b: Record<string, unknown>) => b.status === "completed")
-          .map((b: Record<string, unknown>) => ({
-            date: new Date(b.scheduledDate as string).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" }),
-            tasks: (b.description as string) || "Service visit",
-            status: "completed" as const,
-            rating: 0,
-            hours: `${(b.durationMinutes as number || 120) / 60}h`,
-          }));
+        completedBookings = bookings.filter((b: Record<string, unknown>) => b.status === "completed");
+        const completed = completedBookings.map((b: Record<string, unknown>) => ({
+          date: new Date(b.scheduledDate as string).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" }),
+          tasks: (b.description as string) || "Service visit",
+          status: "completed" as const,
+          rating: 0,
+          hours: `${(b.durationMinutes as number || 120) / 60}h`,
+        }));
         setPastJobs(completed);
       }
       if (Array.isArray(subs)) {
         const active = (subs as SubscriptionRecord[]).find((s) => s.status === "active");
         const plan = active ? PLANS.find((p) => p.id === active.plan) : null;
         setPlanVisitAllowance(plan ? plan.visits : null);
+      }
+
+      // Tasks Done = completed home-profile todos across all the customer's
+      // homes + completed sub-tasks on past bookings. Use Promise.all to fetch
+      // each home's detail (which includes todos).
+      try {
+        const completedBookingTasks = completedBookings.reduce((sum, b) => {
+          const tasks = Array.isArray((b as Record<string, unknown>).tasks)
+            ? ((b as Record<string, unknown>).tasks as Array<{ done?: boolean | null }>)
+            : [];
+          return sum + tasks.filter((t) => t.done === true).length;
+        }, 0);
+
+        let completedTodos = 0;
+        if (Array.isArray(homes) && homes.length) {
+          const details = await Promise.all(
+            (homes as Array<{ id: string }>).map((h) =>
+              fetch(`/api/homes/${h.id}`).then((r) => (r.ok ? r.json() : null)).catch(() => null)
+            )
+          );
+          for (const detail of details) {
+            if (!detail || !Array.isArray(detail.todos)) continue;
+            completedTodos += detail.todos.filter((t: { status?: string }) => t.status === "completed").length;
+          }
+        }
+        setTasksDone(completedTodos + completedBookingTasks);
+      } catch {
+        setTasksDone(0);
       }
     });
   }, [isDemo, mounted]);
@@ -134,7 +164,7 @@ export default function AccountPage() {
               color: "text-accent-teal",
               bg: "bg-[#F0FDFA]",
             },
-            { label: "Tasks Done", value: !mounted ? "-" : isDemo ? "31" : "-", icon: Wrench, color: "text-accent-amber", bg: "bg-warning-light" },
+            { label: "Tasks Done", value: !mounted ? "-" : isDemo ? "31" : String(tasksDone ?? 0), icon: Wrench, color: "text-accent-amber", bg: "bg-warning-light" },
           ].map((stat) => (
             <div key={stat.label} className="rounded-xl bg-surface-secondary p-3.5 text-center">
               <div className={`mx-auto mb-2 flex h-8 w-8 items-center justify-center rounded-lg ${stat.bg}`}>

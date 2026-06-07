@@ -9,7 +9,7 @@ import Button from "@/components/Button";
 import Spinner from "@/components/Spinner";
 import {
   Calendar, Clock, Camera, ChevronLeft, ChevronRight,
-  Upload, X, Check, Repeat, Info, Sun, Sunset,
+  Upload, X, Check, Repeat, Info, Sun, Sunset, ListChecks,
 } from "lucide-react";
 import { useDemoMode } from "@/lib/useDemoMode";
 
@@ -162,6 +162,17 @@ function toISODate(day: number, month: string, year: number): string {
 
 interface Photo { id: string; url: string; name: string; dataUrl?: string; }
 interface ServiceCategory { id: string; name: string; }
+interface BookingTodo { id: string; task: string; priority?: string | null; }
+
+// Max number of to-dos a customer can attach to a single booking visit.
+const MAX_TODOS_PER_BOOKING = 3;
+
+const DEMO_BOOKING_TODOS: BookingTodo[] = [
+  { id: "demo-todo-1", task: "Fix bathroom exhaust fan", priority: "high" },
+  { id: "demo-todo-2", task: "Install smart thermostat", priority: "medium" },
+  { id: "demo-todo-3", task: "Patch drywall in hallway", priority: "low" },
+  { id: "demo-todo-4", task: "Replace garage door weatherstrip", priority: "low" },
+];
 
 function readFileAsDataUrl(file: File): Promise<string> {
   return new Promise((resolve, reject) => {
@@ -208,6 +219,10 @@ function BookingPageInner() {
   const [homeState, setHomeState] = useState("TX");
   const [homeZip, setHomeZip] = useState("");
 
+  // To-dos available to attach to this booking (open todos from the customer's home).
+  const [availableTodos, setAvailableTodos] = useState<BookingTodo[]>([]);
+  const [selectedTodoIds, setSelectedTodoIds] = useState<string[]>([]);
+
   // Build a dynamic calendar starting from today
   const allCalendarWeeks = useMemo(() => buildCalendar(new Date(), WEEKS_TOTAL), []);
 
@@ -230,28 +245,65 @@ function BookingPageInner() {
 
   // Find out whether the customer already has a home on file. If not, we'll
   // collect their address as part of this booking and create it on submit.
+  // Also pre-fetch open to-dos from their primary home so they can attach them
+  // to this booking in Step 2.
   useEffect(() => {
     if (isDemo) {
       setExistingHomeId("demo-home");
       setNeedsHomeSetup(false);
+      setAvailableTodos(DEMO_BOOKING_TODOS);
       return;
     }
+    let cancelled = false;
     fetch("/api/homes")
       .then((r) => (r.ok ? r.json() : []))
-      .then((homes) => {
+      .then(async (homes) => {
+        if (cancelled) return;
         if (Array.isArray(homes) && homes.length > 0) {
-          setExistingHomeId(homes[0].id);
+          const primary = homes[0];
+          setExistingHomeId(primary.id);
           setNeedsHomeSetup(false);
+          // Pull the home's full detail (which includes todos) so we can let
+          // the customer pick from their existing list.
+          try {
+            const detailRes = await fetch(`/api/homes/${primary.id}`);
+            if (detailRes.ok && !cancelled) {
+              const detail = await detailRes.json();
+              const open = (Array.isArray(detail?.todos) ? detail.todos : [])
+                .filter((t: { status?: string }) => t.status !== "completed")
+                .map((t: { id: string; task: string; priority?: string | null }) => ({
+                  id: t.id,
+                  task: t.task,
+                  priority: t.priority ?? null,
+                }));
+              setAvailableTodos(open);
+            }
+          } catch {
+            // ignore; the picker simply won't show any to-dos
+          }
         } else {
           setExistingHomeId(null);
           setNeedsHomeSetup(true);
+          setAvailableTodos([]);
         }
       })
       .catch(() => {
+        if (cancelled) return;
         // assume needs setup so we never block them from booking
         setNeedsHomeSetup(true);
       });
+    return () => {
+      cancelled = true;
+    };
   }, [isDemo]);
+
+  function toggleTodo(id: string) {
+    setSelectedTodoIds((prev) => {
+      if (prev.includes(id)) return prev.filter((t) => t !== id);
+      if (prev.length >= MAX_TODOS_PER_BOOKING) return prev;
+      return [...prev, id];
+    });
+  }
 
   // Pre-fill from URL params (coming from Services page)
   useEffect(() => {
@@ -431,8 +483,18 @@ function BookingPageInner() {
         }
       }
 
-      // Combine description and partsNote since the schema has no separate parts field on booking
-      const combinedDescription = description + (partsNote ? `\n\nParts to bring: ${partsNote}` : "");
+      // Resolve picked to-do labels (most flows that don't yet support a
+      // tasks[] on the booking POST still surface them in the description).
+      const selectedTodos = availableTodos.filter((t) => selectedTodoIds.includes(t.id));
+      const todoLines = selectedTodos.map((t) => `• ${t.task}`).join("\n");
+
+      // Combine description, picked to-dos, and partsNote since the schema
+      // has no separate parts field on booking.
+      const descParts: string[] = [];
+      if (todoLines) descParts.push(`Tasks from to-do list:\n${todoLines}`);
+      if (description) descParts.push(description);
+      if (partsNote) descParts.push(`Parts to bring: ${partsNote}`);
+      const combinedDescription = descParts.join("\n\n");
 
       const res = await fetch("/api/bookings", {
         method: "POST",
@@ -455,6 +517,19 @@ function BookingPageInner() {
 
       const booking = await res.json();
       const bookingId: string | undefined = booking?.id;
+
+      // Create booking tasks from picked to-dos - best effort. The booking POST
+      // doesn't accept a tasks[] array, so we POST them individually after.
+      if (bookingId && selectedTodos.length) {
+        const taskPosts = selectedTodos.map((t, i) =>
+          fetch(`/api/bookings/${bookingId}/tasks`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ label: t.task, sortOrder: i }),
+          }).catch(() => null)
+        );
+        await Promise.all(taskPosts);
+      }
 
       // Upload any collected photos against the new booking - best effort
       if (bookingId && photos.length) {
@@ -785,12 +860,84 @@ function BookingPageInner() {
               </div>
             </Card>
 
+            {/* Pick from your to-do list */}
+            {availableTodos.length > 0 && (
+              <div className="mb-6">
+                <div className="mb-2 flex items-center justify-between">
+                  <p className="text-sm font-semibold uppercase tracking-wider text-text-secondary flex items-center gap-2">
+                    <ListChecks size={14} className="text-primary" />
+                    Pick from your to-do list
+                  </p>
+                  <span className="text-[11px] font-semibold text-text-tertiary tabular-nums">
+                    {selectedTodoIds.length}/{MAX_TODOS_PER_BOOKING} selected
+                  </span>
+                </div>
+                <Card padding="sm" className="border border-border">
+                  <div className="space-y-1.5">
+                    {availableTodos.map((t) => {
+                      const checked = selectedTodoIds.includes(t.id);
+                      const atLimit = !checked && selectedTodoIds.length >= MAX_TODOS_PER_BOOKING;
+                      return (
+                        <button
+                          key={t.id}
+                          type="button"
+                          onClick={() => toggleTodo(t.id)}
+                          disabled={atLimit}
+                          className={`flex w-full items-center gap-3 rounded-lg px-3 py-2.5 text-left transition-colors ${
+                            checked
+                              ? "bg-primary-50 border border-primary/30"
+                              : atLimit
+                              ? "bg-surface-secondary opacity-50 cursor-not-allowed border border-transparent"
+                              : "bg-surface hover:bg-surface-secondary border border-transparent"
+                          }`}
+                        >
+                          <div className={`flex h-5 w-5 shrink-0 items-center justify-center rounded-md border-2 transition-all ${
+                            checked
+                              ? "border-primary bg-primary text-white"
+                              : "border-border bg-white"
+                          }`}>
+                            {checked && (
+                              <svg width="11" height="11" viewBox="0 0 12 12" fill="none">
+                                <path d="M2.5 6.5L4.5 8.5L9.5 3.5" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
+                              </svg>
+                            )}
+                          </div>
+                          <span className={`flex-1 text-[13px] font-medium ${
+                            checked ? "text-primary" : "text-text-primary"
+                          }`}>
+                            {t.task}
+                          </span>
+                          {t.priority === "high" && (
+                            <span className="rounded-full bg-error/10 px-1.5 py-0.5 text-[10px] font-bold text-error">
+                              HIGH
+                            </span>
+                          )}
+                        </button>
+                      );
+                    })}
+                  </div>
+                </Card>
+                <p className="mt-1.5 text-[11px] text-text-tertiary">
+                  Tap up to {MAX_TODOS_PER_BOOKING} tasks to handle during this visit.
+                </p>
+              </div>
+            )}
+
             <div className="mb-6">
-              <p className="mb-2 text-sm font-semibold uppercase tracking-wider text-text-secondary">What needs to be done?</p>
+              <p className="mb-2 text-sm font-semibold uppercase tracking-wider text-text-secondary">
+                {selectedTodoIds.length > 0 ? "Additional notes" : "What needs to be done?"}
+                <span className="ml-1 text-[11px] normal-case font-normal text-text-tertiary">
+                  {selectedTodoIds.length > 0 ? "(optional)" : ""}
+                </span>
+              </p>
               <textarea
                 value={description}
                 onChange={(e) => setDescription(e.target.value)}
-                placeholder="Describe the issue or service needed in detail..."
+                placeholder={
+                  selectedTodoIds.length > 0
+                    ? "Anything else to mention?"
+                    : "Describe the issue or service needed in detail..."
+                }
                 rows={5}
                 className="w-full resize-none rounded-xl border border-border bg-surface p-4 text-[14px] text-text-primary placeholder:text-text-tertiary focus:border-primary focus:ring-3 focus:ring-primary/10 focus:outline-none transition-colors"
               />
@@ -871,6 +1018,7 @@ function BookingPageInner() {
                   <div className="flex items-center gap-2.5 text-text-tertiary"><Clock size={15} /><span className="text-[12px] font-medium uppercase tracking-wide">Duration</span></div>
                   <span className="text-[14px] font-semibold text-text-primary">1 hr 45 min</span>
                 </div>
+                {selectedTodoIds.length > 0 && (<><div className="h-px bg-border" /><div><span className="text-[12px] font-medium uppercase tracking-wide text-text-tertiary">Tasks from to-do list</span><ul className="mt-2 space-y-1.5">{availableTodos.filter((t) => selectedTodoIds.includes(t.id)).map((t) => (<li key={t.id} className="flex items-center gap-2 text-[13px] text-text-primary"><Check size={13} className="text-primary shrink-0" />{t.task}</li>))}</ul></div></>)}
                 {selectedCategories.length > 0 && (<><div className="h-px bg-border" /><div><span className="text-[12px] font-medium uppercase tracking-wide text-text-tertiary">Categories</span><div className="mt-2 flex flex-wrap gap-1.5">{selectedCategories.map((c) => (<span key={c} className="rounded-full bg-primary-50 px-3 py-1 text-[11px] font-medium text-primary">{c}</span>))}</div></div></>)}
                 {description && (<><div className="h-px bg-border" /><div><span className="text-[12px] font-medium uppercase tracking-wide text-text-tertiary">Description</span><p className="mt-1.5 text-[13px] text-text-secondary leading-relaxed">{description}</p></div></>)}
                 {partsNote && (<><div className="h-px bg-border" /><div className="flex items-center justify-between"><span className="text-[12px] font-medium uppercase tracking-wide text-text-tertiary">Parts</span><span className="text-[13px] text-text-secondary">{partsNote}</span></div></>)}

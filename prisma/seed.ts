@@ -32,12 +32,12 @@ async function main() {
   // Tech account (owner)
   const tech = await prisma.user.upsert({
     where: { email: "anthony@handyant.com" },
-    update: {},
+    update: { name: "Anthony McQuade" },
     create: {
       email: "anthony@handyant.com",
       passwordHash: await hash("anthony123", 12),
-      name: "Anthony Bell",
-      phone: "(214) 555-0199",
+      name: "Anthony McQuade",
+      phone: "(214) 469-7795",
       role: "tech",
       emailVerified: true,
     },

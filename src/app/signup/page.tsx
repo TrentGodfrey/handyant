@@ -1,18 +1,27 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { signIn } from "next-auth/react";
+import { signIn, useSession } from "next-auth/react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 
 export default function SignupPage() {
   const router = useRouter();
+  const { status } = useSession();
   const [name, setName] = useState("");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
   const [showGoogle, setShowGoogle] = useState(false);
+
+  // If a signed-in user lands here via the back button after signup, bounce
+  // them straight to /home so the empty form doesn't look like a logout state.
+  useEffect(() => {
+    if (status === "authenticated") {
+      router.replace("/home");
+    }
+  }, [status, router]);
 
   // Detect whether Google provider is configured server-side. Default to NOT
   // showing the button until /api/auth/providers confirms it's available - the

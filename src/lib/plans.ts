@@ -33,10 +33,12 @@ export const VISIT_USES: string[] = [
 
 // Trust points for the landing page.
 export const WHY_MCQ: string[] = [
-  "Trusted by High-End Homeowners",
-  "150+ 5-Star References",
-  "Clear Communication Every Step",
-  "No Guesswork. No Runaround.",
+  "Attention to detail and pride in workmanship on every project.",
+  "Spend less time managing home repairs, more time enjoying your home.",
+  "24-hour on-call emergency response.",
+  "Fully insured — $1M / $2M coverage.",
+  "Trusted by high-end homeowners across DFW.",
+  "Clear communication every step. No guesswork, no runaround.",
 ];
 
 export const PLANS: PlanDefinition[] = [

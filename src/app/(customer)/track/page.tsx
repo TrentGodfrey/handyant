@@ -8,9 +8,10 @@ import Spinner from "@/components/Spinner";
 import {
   ArrowLeft, Phone, MessageCircle, Star, ChevronDown, ChevronUp,
   CheckCircle2, MapPin, Clock, Share2, Truck, Check,
-  Wrench, Package, DollarSign, CalendarDays, Sparkles,
+  Wrench, Package, DollarSign, CalendarDays, Sparkles, XCircle,
 } from "lucide-react";
 import { useDemoMode } from "@/lib/useDemoMode";
+import { toast } from "@/components/Toaster";
 
 function combineDateTime(scheduledDate: string, scheduledTime: string): Date | null {
   // Date may be "YYYY-MM-DD" or full ISO; time may be "HH:mm[:ss]" or full ISO
@@ -351,6 +352,8 @@ export default function TrackPage() {
   const [phase, setPhase] = useState<Phase>(0);
   const [detailsOpen, setDetailsOpen] = useState(false);
   const [shareToast, setShareToast] = useState<string | null>(null);
+  const [cancelOpen, setCancelOpen] = useState(false);
+  const [cancelling, setCancelling] = useState(false);
 
   useEffect(() => {
     if (!mounted) return;
@@ -775,22 +778,33 @@ export default function TrackPage() {
       <div className="fixed bottom-20 lg:bottom-0 left-0 right-0 lg:left-64 z-30">
         <div className="lg:max-w-3xl lg:mx-auto bg-surface/95 backdrop-blur-md border-t border-border px-5 py-3.5">
           {phase === 0 && (
-            <div className="flex gap-3">
-              <Link href="/messages" className="flex-1">
-                <Button variant="outline" fullWidth icon={<MessageCircle size={16} />}>
-                  Message {booking.techName.split(" ")[0]}
-                </Button>
-              </Link>
-              {booking.techPhone ? (
-                <a href={`tel:${booking.techPhone}`} className="flex-1">
+            <div className="space-y-2">
+              <div className="flex gap-3">
+                <Link href="/messages" className="flex-1">
+                  <Button variant="outline" fullWidth icon={<MessageCircle size={16} />}>
+                    Message {booking.techName.split(" ")[0]}
+                  </Button>
+                </Link>
+                {booking.techPhone ? (
+                  <a href={`tel:${booking.techPhone}`} className="flex-1">
+                    <Button variant="primary" fullWidth icon={<Phone size={16} />}>
+                      Call {booking.techName.split(" ")[0]}
+                    </Button>
+                  </a>
+                ) : (
                   <Button variant="primary" fullWidth icon={<Phone size={16} />}>
                     Call {booking.techName.split(" ")[0]}
                   </Button>
-                </a>
-              ) : (
-                <Button variant="primary" fullWidth icon={<Phone size={16} />}>
-                  Call {booking.techName.split(" ")[0]}
-                </Button>
+                )}
+              </div>
+              {!isDemo && (
+                <button
+                  type="button"
+                  onClick={() => setCancelOpen(true)}
+                  className="w-full text-center text-[12px] font-semibold text-error py-1.5 hover:underline transition-colors"
+                >
+                  Cancel visit
+                </button>
               )}
             </div>
           )}
@@ -820,6 +834,64 @@ export default function TrackPage() {
           )}
         </div>
       </div>
+
+      {/* Cancel modal */}
+      {cancelOpen && (
+        <div
+          className="fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-black/50 p-4"
+          onClick={() => !cancelling && setCancelOpen(false)}
+        >
+          <div
+            className="w-full max-w-sm rounded-2xl bg-surface shadow-xl overflow-hidden"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="px-5 pt-5 pb-3 flex flex-col items-center text-center">
+              <div className="mb-3 flex h-14 w-14 items-center justify-center rounded-full bg-error-light">
+                <XCircle size={26} className="text-error" />
+              </div>
+              <h2 className="text-[17px] font-bold text-text-primary">Cancel this visit?</h2>
+              <p className="mt-1.5 text-[13px] text-text-secondary">
+                We&apos;ll let {booking.techName.split(" ")[0]} know.
+              </p>
+            </div>
+            <div className="px-5 pb-5 pt-2 flex gap-2">
+              <button
+                type="button"
+                onClick={() => setCancelOpen(false)}
+                disabled={cancelling}
+                className="flex-1 rounded-xl border border-border bg-surface py-3 text-[14px] font-semibold text-text-primary active:bg-surface-secondary disabled:opacity-60"
+              >
+                Keep visit
+              </button>
+              <button
+                type="button"
+                onClick={async () => {
+                  setCancelling(true);
+                  try {
+                    const res = await fetch(`/api/bookings/${booking.id}`, {
+                      method: "PATCH",
+                      headers: { "Content-Type": "application/json" },
+                      body: JSON.stringify({ status: "cancelled" }),
+                    });
+                    if (!res.ok) throw new Error("Failed");
+                    setBooking(null);
+                    setCancelOpen(false);
+                    toast.success("Visit cancelled");
+                  } catch {
+                    toast.error("Couldn't cancel - please try again");
+                  } finally {
+                    setCancelling(false);
+                  }
+                }}
+                disabled={cancelling}
+                className="flex-1 rounded-xl bg-error py-3 text-[14px] font-semibold text-white active:opacity-90 disabled:opacity-60"
+              >
+                {cancelling ? "Cancelling…" : "Cancel visit"}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

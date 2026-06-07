@@ -75,11 +75,25 @@ export interface BookingRecord {
   reviews: { id: string; rating: number }[];
 }
 
+export interface ApplianceRecord {
+  id: string;
+  homeId: string;
+  name: string;
+  brand: string | null;
+  modelNumber: string | null;
+  installedAt: string | null;
+  intervalDays: number | null;
+  lastServicedAt: string | null;
+  notes: string | null;
+  createdAt: string | null;
+}
+
 export interface HomeFull extends HomeRecord {
   householdMembers: MemberRecord[];
   todos: TodoRecord[];
   techNotes: NoteRecord[];
   bookings: BookingRecord[];
+  appliances?: ApplianceRecord[];
 }
 
 export const PRIORITY_CONFIG: Record<Priority, { dot: string; label: string; ring: string }> = {

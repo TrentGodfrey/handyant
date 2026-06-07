@@ -10,16 +10,16 @@ import { useDemoMode } from "@/lib/useDemoMode";
 import { toast } from "@/components/Toaster";
 import { PLANS, type PlanId } from "@/lib/plans";
 import {
-  Search, MapPin, Clock, Star, ArrowRight, Camera,
+  MapPin, Clock, Star, ArrowRight, Camera,
   MessageCircle, Phone, CheckCircle2,
   CalendarDays, BadgeCheck, Users, CalendarPlus, Sparkles,
-  X,
+  X, XCircle,
 } from "lucide-react";
 
 // ─── Static Data (UI config, not mock) ──────────────────────────────────────
 
 // Fallback contact for the "Call" button when the tech's phone isn't loaded yet.
-const FALLBACK_TEL = "tel:+19253502269";
+const FALLBACK_TEL = "tel:+12144697795";
 
 function planById(id: string | null): (typeof PLANS)[number] | null {
   if (!id) return null;
@@ -75,6 +75,8 @@ export default function CustomerHome() {
   const [completedCount, setCompletedCount] = useState(0);
   const [techPhone, setTechPhone] = useState<string | null>(null);
   const [rescheduleOpen, setRescheduleOpen] = useState(false);
+  const [cancelOpen, setCancelOpen] = useState(false);
+  const [cancelling, setCancelling] = useState(false);
   const { isDemo, mounted } = useDemoMode();
 
   const userName = !mounted
@@ -97,7 +99,7 @@ export default function CustomerHome() {
       setReviewStats({ count: 86, avg: 4.9 });
       setActivePlanId("pro");
       setCompletedCount(12);
-      setTechPhone("+19253502269");
+      setTechPhone("+12144697795");
       setLoading(false);
       return;
     }
@@ -168,7 +170,7 @@ export default function CustomerHome() {
 
   return (
     <div className="min-h-screen bg-background pb-28">
-      {/* ── Header + Search ─────────────────────────────────────────── */}
+      {/* ── Header + Membership CTA ─────────────────────────────────── */}
       <div className="bg-surface border-b border-border px-5 pt-12 lg:pt-8 pb-4">
         <div className="flex items-center justify-between mb-4">
           <div>
@@ -192,10 +194,10 @@ export default function CustomerHome() {
           </div>
         </div>
 
-        <Link href="/services">
+        <Link href="/account/plans">
           <div className="flex items-center gap-3 rounded-xl border border-border bg-surface-secondary px-4 py-3 active:scale-[0.99] transition-transform">
-            <Search size={18} className="text-text-tertiary shrink-0" />
-            <span className="text-[14px] text-text-tertiary">Search services…</span>
+            <BadgeCheck size={18} className="text-primary shrink-0" />
+            <span className="text-[14px] font-semibold text-text-primary">Choose your membership</span>
           </div>
         </Link>
       </div>
@@ -338,7 +340,7 @@ export default function CustomerHome() {
 
         {/* ── Quick Actions Row ─────────────────────────────────────── */}
         {nextBooking && (
-          <div className="mb-5 flex gap-2.5">
+          <div className="mb-5 grid grid-cols-4 gap-2">
             <button
               type="button"
               onClick={() => {
@@ -348,23 +350,39 @@ export default function CustomerHome() {
                 }
                 setRescheduleOpen(true);
               }}
-              className="flex-1"
+              className="block"
             >
               <div className="flex flex-col items-center gap-1.5 rounded-xl border border-border bg-surface py-3 active:bg-surface-secondary transition-colors">
                 <CalendarDays size={18} className="text-primary" />
                 <span className="text-[11px] font-semibold text-text-secondary">Reschedule</span>
               </div>
             </button>
-            <Link href="/account/home/photos" className="flex-1">
+            <button
+              type="button"
+              onClick={() => {
+                if (isDemo) {
+                  toast.info("Cancel disabled in demo mode");
+                  return;
+                }
+                setCancelOpen(true);
+              }}
+              className="block"
+            >
+              <div className="flex flex-col items-center gap-1.5 rounded-xl border border-border bg-surface py-3 active:bg-surface-secondary transition-colors">
+                <XCircle size={18} className="text-error" />
+                <span className="text-[11px] font-semibold text-text-secondary">Cancel</span>
+              </div>
+            </button>
+            <Link href="/account/home/photos" className="block">
               <div className="flex flex-col items-center gap-1.5 rounded-xl border border-border bg-surface py-3 active:bg-surface-secondary transition-colors">
                 <Camera size={18} className="text-primary" />
-                <span className="text-[11px] font-semibold text-text-secondary">Add Photos</span>
+                <span className="text-[11px] font-semibold text-text-secondary">Photos</span>
               </div>
             </Link>
-            <Link href="/account/receipts" className="flex-1">
+            <Link href="/account/receipts" className="block">
               <div className="flex flex-col items-center gap-1.5 rounded-xl border border-border bg-surface py-3 active:bg-surface-secondary transition-colors">
                 <Clock size={18} className="text-primary" />
-                <span className="text-[11px] font-semibold text-text-secondary">Past Visits</span>
+                <span className="text-[11px] font-semibold text-text-secondary">History</span>
               </div>
             </Link>
           </div>
@@ -489,6 +507,64 @@ export default function CustomerHome() {
             toast.success("Visit rescheduled");
           }}
         />
+      )}
+
+      {/* ── Cancel modal ────────────────────────────────────────────── */}
+      {cancelOpen && nextBooking && (
+        <div
+          className="fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-black/50 p-4"
+          onClick={() => !cancelling && setCancelOpen(false)}
+        >
+          <div
+            className="w-full max-w-sm rounded-2xl bg-surface shadow-xl overflow-hidden"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="px-5 pt-5 pb-3 flex flex-col items-center text-center">
+              <div className="mb-3 flex h-14 w-14 items-center justify-center rounded-full bg-error-light">
+                <XCircle size={26} className="text-error" />
+              </div>
+              <h2 className="text-[17px] font-bold text-text-primary">Cancel this visit?</h2>
+              <p className="mt-1.5 text-[13px] text-text-secondary">
+                We&apos;ll let {nextBooking.tech?.name ?? "your tech"} know. You can always rebook later.
+              </p>
+            </div>
+            <div className="px-5 pb-5 pt-2 flex gap-2">
+              <button
+                type="button"
+                onClick={() => setCancelOpen(false)}
+                disabled={cancelling}
+                className="flex-1 rounded-xl border border-border bg-surface py-3 text-[14px] font-semibold text-text-primary active:bg-surface-secondary disabled:opacity-60"
+              >
+                Keep visit
+              </button>
+              <button
+                type="button"
+                onClick={async () => {
+                  setCancelling(true);
+                  try {
+                    const res = await fetch(`/api/bookings/${nextBooking.id}`, {
+                      method: "PATCH",
+                      headers: { "Content-Type": "application/json" },
+                      body: JSON.stringify({ status: "cancelled" }),
+                    });
+                    if (!res.ok) throw new Error("Failed");
+                    setNextBooking(null);
+                    setCancelOpen(false);
+                    toast.success("Visit cancelled");
+                  } catch {
+                    toast.error("Couldn't cancel - please try again");
+                  } finally {
+                    setCancelling(false);
+                  }
+                }}
+                disabled={cancelling}
+                className="flex-1 rounded-xl bg-error py-3 text-[14px] font-semibold text-white active:opacity-90 disabled:opacity-60"
+              >
+                {cancelling ? "Cancelling…" : "Cancel visit"}
+              </button>
+            </div>
+          </div>
+        </div>
       )}
     </div>
   );

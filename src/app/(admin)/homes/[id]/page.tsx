@@ -17,7 +17,7 @@ import HomeOverview from "./_components/HomeOverview";
 import Photos from "./_components/Photos";
 import TodoList from "./_components/TodoList";
 import {
-  HandymanNotes, Receipts, VisitHistory,
+  Appliances, HandymanNotes, Receipts, VisitHistory,
   type ReceiptRow, type VisitRow,
 } from "./_components/HistoryAndNotes";
 
@@ -455,6 +455,8 @@ export default function HomeDetailPage({ params }: { params: Promise<{ id: strin
         toggleTaskComplete={toggleTaskComplete}
         deleteTask={deleteTask}
       />
+
+      <Appliances appliances={home.appliances ?? []} />
 
       <VisitHistory visits={visitHistory} />
 

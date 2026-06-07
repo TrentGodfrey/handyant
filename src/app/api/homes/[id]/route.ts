@@ -46,11 +46,38 @@ export async function GET(_req: NextRequest, ctx: { params: Promise<{ id: string
       householdMembers: { orderBy: { sortOrder: "asc" } },
       todos: { orderBy: [{ sortOrder: "asc" }, { createdAt: "desc" }] },
       techNotes: { orderBy: { createdAt: "desc" } },
+      appliances: { orderBy: { createdAt: "asc" } },
     },
   });
 
   if (!home) return notFound("Home not found");
   if (!(await canAccessHome(user, home))) return forbidden();
+
+  // Backfill: if this is the customer's primary (only) home and they have
+  // completed bookings without a homeId set, surface those in the home's
+  // visit history so the UI doesn't show "no visits yet" for legitimate work.
+  // Tech viewers see the home's own bookings only (no need to back-fill).
+  if (home.customerId === user.id) {
+    const homeCount = await prisma.home.count({ where: { customerId: home.customerId } });
+    if (homeCount === 1) {
+      const orphanBookings = await prisma.booking.findMany({
+        where: { customerId: home.customerId, homeId: null },
+        orderBy: { scheduledDate: "desc" },
+        include: {
+          tasks: true,
+          categories: { include: { category: true } },
+          tech: { select: { id: true, name: true, avatarUrl: true } },
+          reviews: true,
+        },
+      });
+      if (orphanBookings.length) {
+        const merged = [...home.bookings, ...orphanBookings].sort(
+          (a, b) => new Date(b.scheduledDate).getTime() - new Date(a.scheduledDate).getTime(),
+        );
+        return Response.json({ ...home, bookings: merged });
+      }
+    }
+  }
 
   return Response.json(home);
 }

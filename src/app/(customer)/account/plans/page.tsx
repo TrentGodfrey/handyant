@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { ChevronLeft, CheckCircle2, Sparkles } from "lucide-react";
+import { ChevronLeft, CheckCircle2, Sparkles, MessageCircle, Info } from "lucide-react";
 import Card from "@/components/Card";
 import { PLANS, VISIT_USES } from "@/lib/plans";
 
@@ -23,6 +23,19 @@ export default function AccountPlansPage() {
       </div>
 
       <div className="px-5 py-5 space-y-6">
+        {/* Payments coming soon banner */}
+        <div className="rounded-xl border border-primary/20 bg-primary-50 px-4 py-3 flex items-start gap-3">
+          <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-primary/10">
+            <Info size={16} className="text-primary" />
+          </div>
+          <div className="min-w-0">
+            <p className="text-[13px] font-semibold text-text-primary">Payments coming soon</p>
+            <p className="text-[12px] text-text-secondary mt-0.5">
+              To activate a membership, message Anthony directly and he&apos;ll set you up.
+            </p>
+          </div>
+        </div>
+
         {/* Plan cards */}
         <div className="space-y-3">
           {PLANS.map((plan) => (
@@ -54,7 +67,7 @@ export default function AccountPlansPage() {
                   {plan.tagline}
                 </p>
               </div>
-              <div className="space-y-1.5">
+              <div className="space-y-1.5 mb-4">
                 {plan.features.map((f) => (
                   <div key={f} className="flex items-center gap-2">
                     <CheckCircle2 size={14} className="text-primary shrink-0" />
@@ -62,6 +75,13 @@ export default function AccountPlansPage() {
                   </div>
                 ))}
               </div>
+              <Link
+                href="/messages?topic=membership"
+                className="flex items-center justify-center gap-2 w-full rounded-xl border border-primary bg-white py-2.5 text-[13px] font-semibold text-primary hover:bg-primary-50 transition-colors"
+              >
+                <MessageCircle size={14} />
+                Contact us to activate
+              </Link>
             </Card>
           ))}
         </div>
@@ -84,10 +104,11 @@ export default function AccountPlansPage() {
         </div>
 
         <Link
-          href="/account/manage"
-          className="block w-full rounded-xl bg-primary py-3.5 text-center text-[14px] font-bold text-white shadow-[0_2px_10px_rgba(79,149,152,0.25)] hover:bg-primary-dark transition-colors"
+          href="/messages?topic=membership"
+          className="flex items-center justify-center gap-2 w-full rounded-xl bg-primary py-3.5 text-center text-[14px] font-bold text-white shadow-[0_2px_10px_rgba(79,149,152,0.25)] hover:bg-primary-dark transition-colors"
         >
-          Manage your plan
+          <MessageCircle size={16} />
+          Message Anthony to activate
         </Link>
       </div>
     </div>

@@ -3,8 +3,9 @@
 import Card from "@/components/Card";
 import {
   Plus, AlertTriangle, CheckCircle2, Receipt, FileText, Info, Star, X, Wrench, Trash2,
+  Settings2, Calendar,
 } from "lucide-react";
-import type { ApiTechNote } from "./types";
+import type { ApiAppliance, ApiTechNote } from "./types";
 import { formatShortDate } from "./types";
 
 // ─── Visit row data shape (computed in parent) ─────────────────────────────────
@@ -100,6 +101,78 @@ export function Receipts({ receipts, totalSpent }: { receipts: ReceiptRow[]; tot
           <span className="text-[15px] font-bold text-text-primary">${totalSpent.toFixed(2)}</span>
         </div>
       </Card>
+    </section>
+  );
+}
+
+// ─── Appliances (read-only) ────────────────────────────────────────────────────
+
+function applianceNextDue(a: ApiAppliance): { due: Date | null; overdue: boolean; daysUntil: number | null } {
+  if (!a.intervalDays || a.intervalDays <= 0) return { due: null, overdue: false, daysUntil: null };
+  const baseStr = a.lastServicedAt ?? a.installedAt;
+  if (!baseStr) return { due: null, overdue: false, daysUntil: null };
+  const base = new Date(baseStr);
+  if (Number.isNaN(base.getTime())) return { due: null, overdue: false, daysUntil: null };
+  const due = new Date(base);
+  due.setDate(due.getDate() + a.intervalDays);
+  const now = new Date();
+  const daysUntil = Math.ceil((due.getTime() - now.getTime()) / (1000 * 60 * 60 * 24));
+  return { due, overdue: daysUntil < 0, daysUntil };
+}
+
+export function Appliances({ appliances }: { appliances: ApiAppliance[] }) {
+  if (!appliances || appliances.length === 0) return null;
+  return (
+    <section className="mb-6">
+      <h2 className="mb-3 text-[11px] font-semibold uppercase tracking-wider text-text-secondary">
+        Appliances &amp; Maintenance
+      </h2>
+      <div className="space-y-2">
+        {appliances.map((a) => {
+          const { due, overdue, daysUntil } = applianceNextDue(a);
+          const subline = [a.brand, a.modelNumber].filter(Boolean).join(" · ");
+          return (
+            <Card key={a.id} padding="sm" variant="outlined">
+              <div className="flex items-start gap-3">
+                <div className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-xl ${overdue ? "bg-error-light" : "bg-primary-50"}`}>
+                  <Settings2 size={15} className={overdue ? "text-error" : "text-primary"} />
+                </div>
+                <div className="flex-1 min-w-0">
+                  <div className="flex items-center gap-2">
+                    <p className="text-[13px] font-semibold text-text-primary truncate">{a.name}</p>
+                    {overdue && <span className="inline-flex h-1.5 w-1.5 rounded-full bg-error" />}
+                  </div>
+                  {subline && <p className="text-[11px] text-text-tertiary mt-0.5 truncate">{subline}</p>}
+                  <div className="mt-1.5 flex flex-wrap gap-x-3 gap-y-1 text-[11px] text-text-secondary">
+                    {a.intervalDays != null && a.intervalDays > 0 && (
+                      <span className="inline-flex items-center gap-1">
+                        <Calendar size={10} />
+                        Every {a.intervalDays}d
+                      </span>
+                    )}
+                    {due && (
+                      <span className={`inline-flex items-center gap-1 font-semibold ${overdue ? "text-error" : "text-text-secondary"}`}>
+                        {overdue ? (
+                          <>
+                            <AlertTriangle size={10} />
+                            {Math.abs(daysUntil ?? 0)}d overdue
+                          </>
+                        ) : (
+                          <>Next: {formatShortDate(due.toISOString())}</>
+                        )}
+                      </span>
+                    )}
+                    {a.lastServicedAt && (
+                      <span className="text-text-tertiary">Serviced {formatShortDate(a.lastServicedAt)}</span>
+                    )}
+                  </div>
+                  {a.notes && <p className="mt-1.5 text-[12px] text-text-tertiary leading-snug">{a.notes}</p>}
+                </div>
+              </div>
+            </Card>
+          );
+        })}
+      </div>
     </section>
   );
 }

@@ -9,11 +9,48 @@ import {
   ChevronLeft, Plus, Camera, Wifi, Users, Phone, MapPin,
   ShoppingCart, AlertTriangle, Check, ChevronRight,
   Eye, EyeOff, Home, Droplets, Zap, Info, Star, X,
-  CheckCircle2, Flag,
+  CheckCircle2, Flag, Settings2, Calendar,
 } from "lucide-react";
 import type { DemoTodoItem, Priority } from "./types";
 import { PRIORITY_CONFIG } from "./types";
 import { demoCustomerBy, DEMO_TECH } from "@/lib/demoData";
+
+interface DemoAppliance {
+  id: string;
+  name: string;
+  brand?: string;
+  modelNumber?: string;
+  installedAt: string;
+  intervalDays: number;
+  lastServicedAt: string | null;
+  notes?: string;
+}
+
+const DEMO_APPLIANCES: DemoAppliance[] = [
+  { id: "a1", name: "HVAC filter", brand: "Honeywell", modelNumber: "FC100A1037", installedAt: "2024-05-01", intervalDays: 90, lastServicedAt: "2026-02-10", notes: "20x25x4 Merv 11" },
+  { id: "a2", name: "Water heater", brand: "Rheem", modelNumber: "XE50T06ST45U1", installedAt: "2012-08-15", intervalDays: 365, lastServicedAt: "2025-09-20" },
+  { id: "a3", name: "Garage door opener", brand: "LiftMaster", modelNumber: "8550W", installedAt: "2018-03-01", intervalDays: 180, lastServicedAt: null, notes: "Lubricate spring + chain" },
+];
+
+function fmtDemoDate(iso: string | null): string {
+  if (!iso) return "";
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return "";
+  return d.toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" });
+}
+
+function demoApplianceStatus(a: DemoAppliance): { due: Date | null; overdue: boolean; daysUntil: number | null } {
+  if (!a.intervalDays) return { due: null, overdue: false, daysUntil: null };
+  const baseStr = a.lastServicedAt ?? a.installedAt;
+  if (!baseStr) return { due: null, overdue: false, daysUntil: null };
+  const base = new Date(baseStr);
+  if (Number.isNaN(base.getTime())) return { due: null, overdue: false, daysUntil: null };
+  const due = new Date(base);
+  due.setDate(due.getDate() + a.intervalDays);
+  const now = new Date();
+  const daysUntil = Math.ceil((due.getTime() - now.getTime()) / (1000 * 60 * 60 * 24));
+  return { due, overdue: daysUntil < 0, daysUntil };
+}
 
 // =====================================================================
 // Demo data - preserved from previous version
@@ -266,6 +303,57 @@ export default function DemoHomeProfile() {
                           </button>
                         </div>
                       )}
+                    </div>
+                  </div>
+                </Card>
+              );
+            })}
+          </div>
+        </div>
+
+        <div>
+          <div className="mb-3 flex items-center justify-between">
+            <p className="text-sm font-semibold uppercase tracking-wider text-text-secondary">Appliances &amp; Maintenance</p>
+            <span className="text-[11px] text-text-tertiary">{DEMO_APPLIANCES.length} tracked</span>
+          </div>
+          <div className="space-y-2">
+            {DEMO_APPLIANCES.map((a) => {
+              const { due, overdue, daysUntil } = demoApplianceStatus(a);
+              const subline = [a.brand, a.modelNumber].filter(Boolean).join(" · ");
+              return (
+                <Card key={a.id} padding="sm">
+                  <div className="flex items-start gap-3">
+                    <div className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-xl ${overdue ? "bg-error-light" : "bg-primary-50"}`}>
+                      <Settings2 size={16} className={overdue ? "text-error" : "text-primary"} />
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <div className="flex items-center gap-2">
+                        <p className="text-[14px] font-semibold text-text-primary truncate">{a.name}</p>
+                        {overdue && <span className="inline-flex h-1.5 w-1.5 rounded-full bg-error" />}
+                      </div>
+                      {subline && <p className="text-[11px] text-text-tertiary mt-0.5 truncate">{subline}</p>}
+                      <div className="mt-1.5 flex flex-wrap gap-x-3 gap-y-1 text-[11px] text-text-secondary">
+                        <span className="inline-flex items-center gap-1">
+                          <Calendar size={10} />
+                          Every {a.intervalDays}d
+                        </span>
+                        {due && (
+                          <span className={`inline-flex items-center gap-1 font-semibold ${overdue ? "text-error" : "text-text-secondary"}`}>
+                            {overdue ? (
+                              <>
+                                <AlertTriangle size={10} />
+                                {Math.abs(daysUntil ?? 0)}d overdue
+                              </>
+                            ) : (
+                              <>Next: {fmtDemoDate(due.toISOString())}</>
+                            )}
+                          </span>
+                        )}
+                        {a.lastServicedAt && (
+                          <span className="text-text-tertiary">Serviced {fmtDemoDate(a.lastServicedAt)}</span>
+                        )}
+                      </div>
+                      {a.notes && <p className="mt-1.5 text-[12px] text-text-tertiary leading-snug">{a.notes}</p>}
                     </div>
                   </div>
                 </Card>

@@ -14,6 +14,7 @@ import HomeHeader from "./_components/HomeHeader";
 import Members from "./_components/Members";
 import TodoList from "./_components/TodoList";
 import VisitsAndNotes from "./_components/VisitsAndNotes";
+import Appliances from "./_components/Appliances";
 import AddHomeForm, { type AddHomeState } from "./_components/AddHomeForm";
 
 // =====================================================================
@@ -385,6 +386,7 @@ function RealHomeProfile() {
   const todos = home.todos ?? [];
   const members = home.householdMembers ?? [];
   const techNotes = home.techNotes ?? [];
+  const appliances = home.appliances ?? [];
   const highCount = todos.filter((t) => t.priority === "high").length;
 
   return (
@@ -459,6 +461,12 @@ function RealHomeProfile() {
           triggerPhotoUpload={triggerPhotoUpload}
           photoUploadingId={photoUploadingId}
           homeId={home.id}
+        />
+
+        <Appliances
+          homeId={home.id}
+          appliances={appliances}
+          onChange={refresh}
         />
 
         <VisitsAndNotes

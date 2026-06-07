@@ -188,6 +188,8 @@ export default function JobDetailPage({ params }: { params: Promise<{ id: string
   const [showCompleteModal, setShowCompleteModal] = useState(false);
   const [completing, setCompleting] = useState(false);
   const [completeRating, setCompleteRating] = useState<number>(5);
+  const [showCancelModal, setShowCancelModal] = useState(false);
+  const [cancelling, setCancelling] = useState(false);
   const [uploading, setUploading] = useState(false);
   const [uploadError, setUploadError] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
@@ -462,6 +464,7 @@ export default function JobDetailPage({ params }: { params: Promise<{ id: string
     if (isDemo) {
       setShowCompleteModal(false);
       setJob((prev) => (prev ? { ...prev, status: "completed", rating: completeRating } : prev));
+      toast.success("Visit completed");
       return;
     }
     setCompleting(true);
@@ -473,14 +476,43 @@ export default function JobDetailPage({ params }: { params: Promise<{ id: string
       });
       if (res.ok) {
         setJob((prev) => (prev ? { ...prev, status: "completed", rating: completeRating } : prev));
-        // The status-change handler on the booking PATCH endpoint is responsible
-        // for any customer-facing notifications. Nothing more to do client-side.
+        toast.success("Visit completed");
+      } else {
+        toast.error("Failed to complete visit");
       }
     } catch {
-      /* swallow - UI will reflect non-completed state */
+      toast.error("Failed to complete visit");
     } finally {
       setCompleting(false);
       setShowCompleteModal(false);
+    }
+  }
+
+  async function cancelVisit() {
+    if (isDemo) {
+      setShowCancelModal(false);
+      setJob((prev) => (prev ? { ...prev, status: "cancelled" } : prev));
+      toast.success("Visit cancelled");
+      return;
+    }
+    setCancelling(true);
+    try {
+      const res = await fetch(`/api/bookings/${id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ status: "cancelled" }),
+      });
+      if (res.ok) {
+        setJob((prev) => (prev ? { ...prev, status: "cancelled" } : prev));
+        toast.success("Visit cancelled");
+      } else {
+        toast.error("Failed to cancel visit");
+      }
+    } catch {
+      toast.error("Failed to cancel visit");
+    } finally {
+      setCancelling(false);
+      setShowCancelModal(false);
     }
   }
 
@@ -942,7 +974,7 @@ export default function JobDetailPage({ params }: { params: Promise<{ id: string
           </Card>
         </div>
 
-        {/* Complete Job CTA */}
+        {/* Complete Visit CTA + Cancel */}
         {tasks.length > 0 && completedCount === tasks.length ? (
           <Button
             variant="primary"
@@ -951,12 +983,22 @@ export default function JobDetailPage({ params }: { params: Promise<{ id: string
             icon={<Check size={18} />}
             onClick={() => setShowCompleteModal(true)}
           >
-            Complete Job & Send Invoice
+            Complete Visit
           </Button>
         ) : (
           <Button variant="outline" size="lg" fullWidth onClick={scrollToTasks}>
             {completedCount}/{tasks.length} Tasks Remaining
           </Button>
+        )}
+
+        {job.status !== "completed" && job.status !== "cancelled" && (
+          <button
+            type="button"
+            onClick={() => setShowCancelModal(true)}
+            className="w-full mt-1 text-center text-[13px] font-semibold text-error py-2 hover:underline transition-colors"
+          >
+            Cancel visit
+          </button>
         )}
       </div>
 
@@ -969,9 +1011,9 @@ export default function JobDetailPage({ params }: { params: Promise<{ id: string
               <div className="mb-3 flex h-16 w-16 items-center justify-center rounded-full bg-success-light">
                 <Check size={28} className="text-success" />
               </div>
-              <h3 className="text-[20px] font-bold text-text-primary">Complete Job?</h3>
+              <h3 className="text-[20px] font-bold text-text-primary">Complete Visit?</h3>
               <p className="mt-1.5 text-[13px] text-text-secondary">
-                This will mark the job as done and send {job.client} an invoice for {job.estimate}.
+                This will mark the visit as done for {job.client}.
               </p>
             </div>
             <div className="mb-4">
@@ -1006,10 +1048,41 @@ export default function JobDetailPage({ params }: { params: Promise<{ id: string
               onClick={completeJob}
               disabled={completing}
             >
-              {completing ? "Completing…" : "Confirm & Send Invoice"}
+              {completing ? "Completing…" : "Complete Visit"}
             </Button>
             <button className="mt-3 w-full text-center text-[13px] text-text-tertiary" onClick={() => setShowCompleteModal(false)}>
               Cancel
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* Cancel-visit modal */}
+      {showCancelModal && (
+        <div className="fixed inset-0 z-50 flex items-end justify-center bg-black/40 backdrop-blur-sm" onClick={() => setShowCancelModal(false)}>
+          <div className="w-full rounded-t-3xl bg-white px-6 pb-10 pt-6" onClick={(e) => e.stopPropagation()}>
+            <div className="mx-auto mb-4 h-1 w-12 rounded-full bg-border" />
+            <div className="mb-5 flex flex-col items-center text-center">
+              <div className="mb-3 flex h-16 w-16 items-center justify-center rounded-full bg-error-light">
+                <AlertTriangle size={28} className="text-error" />
+              </div>
+              <h3 className="text-[20px] font-bold text-text-primary">Cancel this visit?</h3>
+              <p className="mt-1.5 text-[13px] text-text-secondary">
+                This will cancel the visit with {job.client}. They&apos;ll be notified.
+              </p>
+            </div>
+            <Button
+              variant="primary"
+              size="lg"
+              fullWidth
+              onClick={cancelVisit}
+              disabled={cancelling}
+              className="!bg-error hover:!bg-error/90"
+            >
+              {cancelling ? "Cancelling…" : "Cancel Visit"}
+            </Button>
+            <button className="mt-3 w-full text-center text-[13px] text-text-tertiary" onClick={() => setShowCancelModal(false)}>
+              Never mind
             </button>
           </div>
         </div>

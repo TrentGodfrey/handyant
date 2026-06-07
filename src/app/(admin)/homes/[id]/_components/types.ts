@@ -66,6 +66,17 @@ export interface ApiTechNote {
   createdAt: string;
 }
 
+export interface ApiAppliance {
+  id: string;
+  name: string;
+  brand: string | null;
+  modelNumber: string | null;
+  installedAt: string | null;
+  intervalDays: number | null;
+  lastServicedAt: string | null;
+  notes: string | null;
+}
+
 export interface ApiHome {
   id: string;
   address: string;
@@ -90,6 +101,7 @@ export interface ApiHome {
   photos: ApiPhoto[];
   todos: ApiTodo[];
   techNotes: ApiTechNote[];
+  appliances?: ApiAppliance[];
 }
 
 export interface EditFormState {
