@@ -48,6 +48,7 @@ interface ApiSubscription {
   id: string;
   plan: string;
   status: string | null;
+  visitsUsed: number;
 }
 
 const DEMO_BOOKING: BookingData = {
@@ -118,7 +119,6 @@ export default function CustomerHome() {
           ["pending", "confirmed", "in_progress"].includes(b.status)
         );
         setNextBooking(upcoming || null);
-        setCompletedCount(bookingList.filter((b) => b.status === "completed").length);
 
         // Surface a tech phone for the Call button (prefer the upcoming booking's tech).
         const phone =
@@ -141,6 +141,7 @@ export default function CustomerHome() {
         const subsList: ApiSubscription[] = Array.isArray(subs) ? subs : [];
         const active = subsList.find((s) => s.status === "active") ?? subsList[0];
         setActivePlanId(active ? active.plan : null);
+        setCompletedCount(active?.visitsUsed ?? 0);
       })
       .finally(() => {
         if (!cancelled) setLoading(false);
@@ -194,12 +195,14 @@ export default function CustomerHome() {
           </div>
         </div>
 
-        <Link href="/account/plans">
-          <div className="flex items-center gap-3 rounded-xl border border-border bg-surface-secondary px-4 py-3 active:scale-[0.99] transition-transform">
-            <BadgeCheck size={18} className="text-primary shrink-0" />
-            <span className="text-[14px] font-semibold text-text-primary">Choose your membership</span>
-          </div>
-        </Link>
+        {!activePlanId && (
+          <Link href="/account/plans">
+            <div className="flex min-h-12 items-center gap-3 rounded-xl border border-border bg-surface-secondary px-4 py-3 active:scale-[0.99] transition-transform">
+              <BadgeCheck size={18} className="text-primary shrink-0" />
+              <span className="text-[14px] font-semibold text-text-primary">Choose your membership</span>
+            </div>
+          </Link>
+        )}
       </div>
 
       <div className="px-5 pt-4">
@@ -481,9 +484,10 @@ export default function CustomerHome() {
                         {completedCount}/{plan.visits}
                       </p>
                     </div>
-                    <p className="text-[12px] font-medium text-primary mt-2">
-                      Manage plan →
-                    </p>
+                    <div className="mt-2 flex flex-wrap items-center justify-between gap-2">
+                      <p className="text-[12px] font-medium text-primary">Manage plan →</p>
+                      <p className="text-[11px] font-semibold text-success">{Math.max(0, plan.visits - completedCount)} remaining</p>
+                    </div>
                   </div>
                   <div className="flex h-9 w-9 items-center justify-center rounded-full bg-primary-100 shrink-0">
                     <Sparkles size={16} className="text-primary" />

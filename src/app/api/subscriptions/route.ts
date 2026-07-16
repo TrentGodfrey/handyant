@@ -20,6 +20,10 @@ export async function POST(req: NextRequest) {
 
   const body = await req.json();
   const plan = body.plan ?? "essential";
+  const home = await prisma.home.findFirst({
+    where: { customerId: user.id },
+    orderBy: { createdAt: "asc" },
+  });
 
   // TODO: integrate Stripe before allowing customer self-upgrades.
   // For now, customers can self-select the entry-level Essential plan; upgrades
@@ -39,6 +43,7 @@ export async function POST(req: NextRequest) {
   const sub = await prisma.subscription.create({
     data: {
       customerId: user.id,
+      homeId: home?.id ?? null,
       plan,
       status: "active",
     },

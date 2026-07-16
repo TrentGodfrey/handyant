@@ -64,6 +64,8 @@ export default function SignupPage() {
       return;
     }
 
+    const registration = (await res.json()) as { claimedExisting?: boolean; linkedHomeCount?: number };
+
     // Auto sign in
     const signInRes = await signIn("credentials", {
       email,
@@ -76,7 +78,9 @@ export default function SignupPage() {
     if (signInRes?.error) {
       setError("Account created but sign-in failed. Try logging in.");
     } else {
-      router.push("/home");
+      router.push(registration.claimedExisting && registration.linkedHomeCount
+        ? "/home?linked=1"
+        : "/home");
       router.refresh();
     }
   }

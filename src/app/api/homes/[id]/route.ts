@@ -25,7 +25,22 @@ export async function GET(_req: NextRequest, ctx: { params: Promise<{ id: string
     where: { id },
     include: {
       photos: true,
-      customer: { select: { id: true, name: true, phone: true, email: true, avatarUrl: true } },
+      customer: {
+        select: {
+          id: true,
+          name: true,
+          phone: true,
+          email: true,
+          avatarUrl: true,
+          passwordHash: true,
+          googleId: true,
+        },
+      },
+      subscriptions: {
+        where: { status: "active" },
+        orderBy: { startedAt: "desc" },
+        take: 1,
+      },
       bookings: {
         orderBy: { scheduledDate: "desc" },
         include: {
@@ -45,6 +60,14 @@ export async function GET(_req: NextRequest, ctx: { params: Promise<{ id: string
   if (!home) return notFound("Home not found");
   if (!(await canAccessHome(user, home))) return forbidden();
 
+  const { passwordHash, googleId, ...customer } = home.customer;
+  const responseHome = {
+    ...home,
+    customer: { ...customer, hasLogin: Boolean(passwordHash || googleId) },
+    activeSubscription: home.subscriptions[0] ?? null,
+    subscriptions: undefined,
+  };
+
   // Backfill: if this is the customer's primary (only) home and they have
   // completed bookings without a homeId set, surface those in the home's
   // visit history so the UI doesn't show "no visits yet" for legitimate work.
@@ -63,15 +86,15 @@ export async function GET(_req: NextRequest, ctx: { params: Promise<{ id: string
         },
       });
       if (orphanBookings.length) {
-        const merged = [...home.bookings, ...orphanBookings].sort(
+        const merged = [...responseHome.bookings, ...orphanBookings].sort(
           (a, b) => new Date(b.scheduledDate).getTime() - new Date(a.scheduledDate).getTime(),
         );
-        return Response.json({ ...home, bookings: merged });
+        return Response.json({ ...responseHome, bookings: merged });
       }
     }
   }
 
-  return Response.json(home);
+  return Response.json(responseHome);
 }
 
 export async function PATCH(req: NextRequest, ctx: { params: Promise<{ id: string }> }) {

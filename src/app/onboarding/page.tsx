@@ -297,6 +297,11 @@ export default function OnboardingPage() {
         return;
       }
 
+      const registration = (await res.json()) as {
+        claimedExisting?: boolean;
+        linkedHomeCount?: number;
+      };
+
       const signInRes = await signIn("credentials", {
         email: email.trim(),
         password,
@@ -307,6 +312,13 @@ export default function OnboardingPage() {
         const msg = "Account created, but auto sign-in failed. Please log in.";
         setStep1Error(msg);
         toast.error(msg);
+        return;
+      }
+
+      if (registration.claimedExisting && registration.linkedHomeCount) {
+        toast.success("Account created — your existing home is linked.");
+        router.push("/home?linked=1");
+        router.refresh();
         return;
       }
 

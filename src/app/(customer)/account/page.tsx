@@ -39,6 +39,7 @@ interface SubscriptionRecord {
   id: string;
   plan: string;
   status: string | null;
+  visitsUsed: number;
 }
 
 export default function AccountPage() {
@@ -48,6 +49,7 @@ export default function AccountPage() {
   const [pastJobs, setPastJobs] = useState<PastJob[]>([]);
   const [showAllJobs, setShowAllJobs] = useState(false);
   const [planVisitAllowance, setPlanVisitAllowance] = useState<number | null>(null);
+  const [subscriptionVisitsUsed, setSubscriptionVisitsUsed] = useState<number | null>(null);
   const [tasksDone, setTasksDone] = useState<number | null>(null);
 
   const userName = !mounted ? "User" : isDemo ? (demoCustomerBy("Sarah Mitchell")?.name ?? "User") : session?.user?.name || "User";
@@ -56,6 +58,7 @@ export default function AccountPage() {
   useEffect(() => {
     if (!mounted) return;
     if (isDemo) {
+      // eslint-disable-next-line react-hooks/set-state-in-effect -- demo data is selected by the external demo-mode store
       setPastJobs(DEMO_JOBS);
       return;
     }
@@ -81,6 +84,7 @@ export default function AccountPage() {
         const active = (subs as SubscriptionRecord[]).find((s) => s.status === "active");
         const plan = active ? PLANS.find((p) => p.id === active.plan) : null;
         setPlanVisitAllowance(plan ? plan.visits : null);
+        setSubscriptionVisitsUsed(active?.visitsUsed ?? null);
       }
 
       // Tasks Done = completed home-profile todos across all the customer's
@@ -158,7 +162,7 @@ export default function AccountPage() {
                 : isDemo
                   ? "12/20"
                   : planVisitAllowance != null
-                    ? `${pastJobs.length}/${planVisitAllowance}`
+                    ? `${subscriptionVisitsUsed ?? 0}/${planVisitAllowance}`
                     : String(pastJobs.length),
               icon: Calendar,
               color: "text-accent-teal",

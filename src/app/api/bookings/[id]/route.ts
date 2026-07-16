@@ -1,6 +1,8 @@
 import { NextRequest } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { requireUser, unauthorized, notFound, forbidden, badRequest } from "@/lib/session";
+import { BookingStatus } from "@/generated/prisma/enums";
+import { completedStatusDelta, getVisitUsage } from "@/lib/subscription-usage";
 
 export async function GET(_req: NextRequest, ctx: { params: Promise<{ id: string }> }) {
   const user = await requireUser();
@@ -47,6 +49,9 @@ export async function PATCH(req: NextRequest, ctx: { params: Promise<{ id: strin
   const data: Record<string, unknown> = {};
 
   if (body.status !== undefined) {
+    if (!Object.values(BookingStatus).includes(body.status)) {
+      return badRequest("Invalid booking status");
+    }
     if (isTech) {
       data.status = body.status;
     } else if (isCustomer) {
@@ -67,15 +72,39 @@ export async function PATCH(req: NextRequest, ctx: { params: Promise<{ id: strin
   if (body.estimatedCost !== undefined && isTech) data.estimatedCost = body.estimatedCost;
   if (body.finalCost !== undefined && isTech) data.finalCost = body.finalCost;
 
-  const booking = await prisma.booking.update({
-    where: { id },
-    data,
-    include: {
-      home: true,
-      customer: { select: { id: true, name: true, phone: true, avatarUrl: true } },
-      tech: { select: { id: true, name: true, phone: true, avatarUrl: true } },
-      tasks: { orderBy: { sortOrder: "asc" } },
-    },
+  const nextStatus = typeof data.status === "string" ? data.status : existing.status;
+  const usageDelta = completedStatusDelta(existing.status, nextStatus);
+
+  const booking = await prisma.$transaction(async (tx) => {
+    const updated = await tx.booking.update({
+      where: { id },
+      data,
+      include: {
+        home: true,
+        customer: { select: { id: true, name: true, phone: true, avatarUrl: true } },
+        tech: { select: { id: true, name: true, phone: true, avatarUrl: true } },
+        tasks: { orderBy: { sortOrder: "asc" } },
+      },
+    });
+
+    if (usageDelta !== 0 && existing.homeId) {
+      const subscription = await tx.subscription.findFirst({
+        where: { homeId: existing.homeId, status: "active" },
+        orderBy: { startedAt: "desc" },
+      });
+      if (subscription) {
+        const allowance = getVisitUsage(subscription.plan, 0).allowance;
+        await tx.subscription.updateMany({
+          where: {
+            id: subscription.id,
+            visitsUsed: usageDelta > 0 ? { lt: allowance } : { gt: 0 },
+          },
+          data: { visitsUsed: usageDelta > 0 ? { increment: 1 } : { decrement: 1 } },
+        });
+      }
+    }
+
+    return updated;
   });
 
   return Response.json(booking);
@@ -92,6 +121,20 @@ export async function DELETE(_req: NextRequest, ctx: { params: Promise<{ id: str
   const isTech = user.role === "tech" && existing.techId === user.id;
   if (!isCustomer && !isTech) return forbidden();
 
-  await prisma.booking.update({ where: { id }, data: { status: "cancelled" } });
+  await prisma.$transaction(async (tx) => {
+    await tx.booking.update({ where: { id }, data: { status: "cancelled" } });
+    if (existing.status === "completed" && existing.homeId) {
+      const subscription = await tx.subscription.findFirst({
+        where: { homeId: existing.homeId, status: "active" },
+        orderBy: { startedAt: "desc" },
+      });
+      if (subscription) {
+        await tx.subscription.updateMany({
+          where: { id: subscription.id, visitsUsed: { gt: 0 } },
+          data: { visitsUsed: { decrement: 1 } },
+        });
+      }
+    }
+  });
   return Response.json({ ok: true });
 }

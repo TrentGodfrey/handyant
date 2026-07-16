@@ -96,7 +96,16 @@ export interface ApiHome {
     phone: string | null;
     email: string | null;
     avatarUrl: string | null;
+    hasLogin: boolean;
   };
+  activeSubscription: {
+    id: string;
+    plan: "essential" | "pro" | "elite";
+    status: string | null;
+    visitsUsed: number;
+    startedAt: string | null;
+    endsAt: string | null;
+  } | null;
   bookings: ApiBooking[];
   photos: ApiPhoto[];
   todos: ApiTodo[];
