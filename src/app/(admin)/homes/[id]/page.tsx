@@ -15,6 +15,7 @@ import {
 
 import EditHomeModal from "./_components/EditHomeModal";
 import HomeOverview from "./_components/HomeOverview";
+import HomeSubscriptionCard from "./_components/HomeSubscriptionCard";
 import Photos from "./_components/Photos";
 import TodoList from "./_components/TodoList";
 import {
@@ -434,7 +435,7 @@ export default function HomeDetailPage({ params }: { params: Promise<{ id: strin
   }
 
   return (
-    <div className="px-5 pt-12 pb-24 bg-background min-h-screen">
+    <div className="mx-auto min-h-screen w-full max-w-4xl bg-background px-4 pb-[calc(6rem+env(safe-area-inset-bottom))] pt-[calc(1.5rem+env(safe-area-inset-top))] sm:px-6 sm:pt-10">
       {/* Back Nav */}
       <Link
         href="/homes"
@@ -453,6 +454,13 @@ export default function HomeDetailPage({ params }: { params: Promise<{ id: strin
         gateCodeVisible={gateCodeVisible}
         setGateCodeVisible={setGateCodeVisible}
         onOpenEdit={() => setShowEdit(true)}
+        onCustomerSaved={loadHome}
+      />
+
+      <HomeSubscriptionCard
+        homeId={home.id}
+        subscription={home.activeSubscription}
+        onSaved={loadHome}
       />
 
       <Photos

@@ -89,6 +89,12 @@ export interface ApplianceRecord {
 }
 
 export interface HomeFull extends HomeRecord {
+  activeSubscription: {
+    id: string;
+    plan: "essential" | "pro" | "elite";
+    status: string | null;
+    visitsUsed: number;
+  } | null;
   householdMembers: MemberRecord[];
   todos: TodoRecord[];
   techNotes: NoteRecord[];

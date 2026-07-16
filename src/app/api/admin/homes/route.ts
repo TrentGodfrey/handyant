@@ -17,8 +17,12 @@ export async function GET(req: NextRequest) {
           phone: true,
           email: true,
           avatarUrl: true,
-          subscriptions: { where: { status: "active" }, take: 1 },
         },
+      },
+      subscriptions: {
+        where: { status: "active" },
+        orderBy: { startedAt: "desc" },
+        take: 1,
       },
       bookings: {
         select: {
@@ -40,15 +44,14 @@ export async function GET(req: NextRequest) {
       .filter((b) => b.status !== "completed" && b.status !== "cancelled")
       .reduce((acc, b) => acc + b.tasks.filter((t) => !t.done).length, 0);
     const totalVisits = h.bookings.filter((b) => b.status === "completed").length;
-    const subscriptionType = h.customer.subscriptions.length > 0
-      ? h.customer.subscriptions[0].plan
-      : null;
+    const activeSubscription = h.subscriptions[0] ?? null;
     return {
       ...h,
       lastVisit,
       openTasks,
       totalVisits,
-      subscriptionType,
+      subscriptionType: activeSubscription?.plan ?? null,
+      visitsUsed: activeSubscription?.visitsUsed ?? 0,
     };
   });
 

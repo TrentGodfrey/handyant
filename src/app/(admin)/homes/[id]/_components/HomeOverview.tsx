@@ -1,8 +1,9 @@
 "use client";
 
+import { useState } from "react";
 import Card from "@/components/Card";
 import {
-  MapPin, Edit, Phone, MessageCircle, Navigation, Wifi, Users,
+  MapPin, Edit, Phone, MessageCircle, Navigation, Wifi, Users, CircleCheck, Clock3,
 } from "lucide-react";
 import type { ApiHome } from "./types";
 import { initialsFor } from "./types";
@@ -16,12 +17,39 @@ interface HomeOverviewProps {
   gateCodeVisible: boolean;
   setGateCodeVisible: (v: boolean | ((p: boolean) => boolean)) => void;
   onOpenEdit: () => void;
+  onCustomerSaved: () => Promise<void>;
 }
 
 export default function HomeOverview({
   home, openTasks, totalVisits, totalSpent, fullAddress,
-  gateCodeVisible, setGateCodeVisible, onOpenEdit,
+  gateCodeVisible, setGateCodeVisible, onOpenEdit, onCustomerSaved,
 }: HomeOverviewProps) {
+  const [editingEmail, setEditingEmail] = useState(false);
+  const [email, setEmail] = useState(home.customer.email ?? "");
+  const [savingEmail, setSavingEmail] = useState(false);
+  const [emailError, setEmailError] = useState("");
+
+  async function saveCustomerEmail() {
+    setSavingEmail(true);
+    setEmailError("");
+    try {
+      const response = await fetch(`/api/admin/customers/${home.customer.id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ email }),
+      });
+      if (!response.ok) {
+        const body = await response.json().catch(() => null);
+        throw new Error(body?.error ?? "Could not save email");
+      }
+      await onCustomerSaved();
+      setEditingEmail(false);
+    } catch (error) {
+      setEmailError(error instanceof Error ? error.message : "Could not save email");
+    } finally {
+      setSavingEmail(false);
+    }
+  }
   const customerInitials = initialsFor(home.customer.name);
   const phoneHref = home.customer.phone ? `tel:${home.customer.phone}` : undefined;
   const smsHref = home.customer.phone ? `sms:${home.customer.phone}` : undefined;
@@ -31,13 +59,13 @@ export default function HomeOverview({
     <>
       {/* Client Header */}
       <div className="mb-4">
-        <div className="flex items-center gap-2.5">
+        <div className="flex items-start gap-2.5 sm:items-center">
           <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full bg-primary-50">
             <span className="text-[13px] font-bold text-primary">{customerInitials}</span>
           </div>
           <div className="flex-1 min-w-0">
             <div className="flex items-center gap-2">
-              <h1 className="text-[22px] font-bold text-text-primary leading-tight">{home.customer.name}</h1>
+              <h1 className="break-words text-[22px] font-bold leading-tight text-text-primary">{home.customer.name}</h1>
             </div>
             <div className="flex items-center gap-1 mt-0.5">
               <MapPin size={12} className="shrink-0 text-text-tertiary" />
@@ -46,7 +74,7 @@ export default function HomeOverview({
           </div>
           <button
             onClick={onOpenEdit}
-            className="shrink-0 rounded-lg border border-border bg-surface px-2.5 py-1.5 text-[11px] font-semibold text-text-secondary active:bg-surface-secondary transition-colors flex items-center gap-1"
+            className="flex min-h-11 shrink-0 items-center gap-1 rounded-lg border border-border bg-surface px-3 py-2 text-[12px] font-semibold text-text-secondary transition-colors active:bg-surface-secondary"
           >
             <Edit size={11} />
             Edit
@@ -54,16 +82,16 @@ export default function HomeOverview({
         </div>
 
         {/* Stats strip */}
-        <div className="mt-3 flex items-center gap-1.5">
-          <div className="flex flex-1 flex-col items-center rounded-xl bg-surface border border-border py-2.5 shadow-[0_1px_3px_rgba(0,0,0,0.06)]">
+        <div className="mt-3 grid grid-cols-3 gap-1.5 sm:gap-3">
+          <div className="flex min-w-0 flex-col items-center rounded-xl bg-surface border border-border px-1 py-2.5 shadow-[0_1px_3px_rgba(0,0,0,0.06)]">
             <span className="text-[17px] font-bold text-text-primary">{openTasks}</span>
             <span className="text-[10px] text-text-tertiary">Open Tasks</span>
           </div>
-          <div className="flex flex-1 flex-col items-center rounded-xl bg-surface border border-border py-2.5 shadow-[0_1px_3px_rgba(0,0,0,0.06)]">
+          <div className="flex min-w-0 flex-col items-center rounded-xl bg-surface border border-border px-1 py-2.5 shadow-[0_1px_3px_rgba(0,0,0,0.06)]">
             <span className="text-[17px] font-bold text-text-primary">{totalVisits}</span>
             <span className="text-[10px] text-text-tertiary">Total Visits</span>
           </div>
-          <div className="flex flex-1 flex-col items-center rounded-xl bg-surface border border-border py-2.5 shadow-[0_1px_3px_rgba(0,0,0,0.06)]">
+          <div className="flex min-w-0 flex-col items-center rounded-xl bg-surface border border-border px-1 py-2.5 shadow-[0_1px_3px_rgba(0,0,0,0.06)]">
             <span className="text-[17px] font-bold text-text-primary">${Math.round(totalSpent)}</span>
             <span className="text-[10px] text-text-tertiary">Total Spent</span>
           </div>
@@ -126,7 +154,7 @@ export default function HomeOverview({
       </div>
 
       {/* Info Cards: Access + Contact */}
-      <div className="mb-6 grid grid-cols-2 gap-2.5">
+      <div className="mb-6 grid grid-cols-1 gap-2.5 sm:grid-cols-2">
         {/* Access (Gate Code) */}
         <Card padding="sm" variant="default">
           <div className="mb-2 flex items-center justify-between">
@@ -183,6 +211,49 @@ export default function HomeOverview({
                   <Phone size={12} className="text-success" />
                 </a>
               )}
+            </div>
+            <div className={`flex items-start gap-2 rounded-lg p-2 ${home.customer.hasLogin ? "bg-success-light" : "bg-warning-light"}`}>
+              {home.customer.hasLogin ? (
+                <CircleCheck size={14} className="mt-0.5 shrink-0 text-success" />
+              ) : (
+                <Clock3 size={14} className="mt-0.5 shrink-0 text-warning" />
+              )}
+              <div className="min-w-0">
+                <p className="text-[11px] font-semibold text-text-primary">
+                  {home.customer.hasLogin ? "Customer login linked" : "Awaiting customer signup"}
+                </p>
+                {!home.customer.hasLogin && (
+                  <div className="mt-0.5">
+                    {editingEmail ? (
+                      <div className="space-y-2">
+                        <input
+                          type="email"
+                          value={email}
+                          onChange={(event) => setEmail(event.target.value)}
+                          placeholder="customer@example.com"
+                          className="min-h-11 w-full rounded-lg border border-border bg-surface px-2.5 text-[12px] text-text-primary outline-none focus:border-primary"
+                        />
+                        {emailError && <p className="text-[10px] font-medium text-error">{emailError}</p>}
+                        <div className="flex gap-2">
+                          <button type="button" disabled={savingEmail} onClick={() => setEditingEmail(false)} className="min-h-10 rounded-lg border border-border px-3 text-[11px] font-semibold text-text-secondary">Cancel</button>
+                          <button type="button" disabled={savingEmail || !email.trim()} onClick={saveCustomerEmail} className="min-h-10 rounded-lg bg-primary px-3 text-[11px] font-bold text-white disabled:opacity-50">{savingEmail ? "Saving…" : "Save email"}</button>
+                        </div>
+                      </div>
+                    ) : (
+                      <>
+                        <p className="break-words text-[10px] leading-relaxed text-text-secondary">
+                          {home.customer.email
+                            ? `Have them sign up with ${home.customer.email}; this home will link automatically.`
+                            : "Add their email first so the home can link when they sign up."}
+                        </p>
+                        <button type="button" onClick={() => setEditingEmail(true)} className="mt-1.5 min-h-10 rounded-lg border border-warning/30 bg-surface px-3 text-[11px] font-bold text-text-primary">
+                          {home.customer.email ? "Change signup email" : "Add signup email"}
+                        </button>
+                      </>
+                    )}
+                  </div>
+                )}
+              </div>
             </div>
           </div>
         </Card>

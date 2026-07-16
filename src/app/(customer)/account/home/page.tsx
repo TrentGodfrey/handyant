@@ -5,7 +5,9 @@ import Link from "next/link";
 import Card from "@/components/Card";
 import Button from "@/components/Button";
 import { useDemoMode } from "@/lib/useDemoMode";
-import { ChevronLeft, AlertTriangle, Loader2 } from "lucide-react";
+import { ChevronLeft, AlertTriangle, Loader2, Sparkles } from "lucide-react";
+import { PLANS } from "@/lib/plans";
+import { getVisitUsage } from "@/lib/subscription-usage";
 
 import type { HomeFull } from "./_components/types";
 import type { NewTaskPayload } from "@/components/AddTaskForm";
@@ -388,9 +390,14 @@ function RealHomeProfile() {
   const techNotes = home.techNotes ?? [];
   const appliances = home.appliances ?? [];
   const highCount = todos.filter((t) => t.priority === "high").length;
+  const membership = home.activeSubscription;
+  const usage = membership ? getVisitUsage(membership.plan, membership.visitsUsed) : null;
+  const membershipLabel = membership
+    ? PLANS.find((plan) => plan.id === membership.plan)?.label ?? membership.plan
+    : null;
 
   return (
-    <div className="min-h-screen bg-background pb-28">
+    <div className="min-h-screen bg-background pb-[calc(7rem+env(safe-area-inset-bottom))]">
       <input ref={photoInputRef} type="file" accept="image/*" className="hidden" onChange={handlePhotoFile} />
 
       <HomeHeader
@@ -421,7 +428,26 @@ function RealHomeProfile() {
         saveDetails={saveDetails}
       />
 
-      <div className="px-5 py-5 space-y-6">
+      <div className="mx-auto max-w-4xl space-y-6 px-4 py-5 sm:px-6">
+        {membership && usage && (
+          <Card className="border border-primary-100 bg-gradient-to-br from-primary-50 to-surface">
+            <div className="flex flex-wrap items-end justify-between gap-3">
+              <div className="flex min-w-0 items-start gap-3">
+                <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-primary-100">
+                  <Sparkles size={18} className="text-primary" />
+                </div>
+                <div>
+                  <p className="text-[12px] font-semibold uppercase tracking-wide text-primary">{membershipLabel} membership</p>
+                  <p className="mt-0.5 text-[22px] font-black text-text-primary">{usage.used}/{usage.allowance} <span className="text-[12px] font-semibold text-text-secondary">visits used</span></p>
+                </div>
+              </div>
+              <p className="rounded-full bg-success-light px-3 py-1.5 text-[12px] font-bold text-success">{usage.remaining} remaining</p>
+            </div>
+            <div className="mt-3 h-2 overflow-hidden rounded-full bg-primary-100">
+              <div className="h-full rounded-full bg-primary" style={{ width: `${usage.percent}%` }} />
+            </div>
+          </Card>
+        )}
         <Members
           home={home}
           members={members}

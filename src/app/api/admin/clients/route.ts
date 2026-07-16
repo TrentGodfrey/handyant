@@ -61,10 +61,15 @@ export async function POST(req: NextRequest) {
     return Response.json({ error: "Invalid subscription plan" }, { status: 400 });
   }
 
+  const normalizedEmail =
+    typeof body.email === "string" && body.email.trim()
+      ? body.email.trim().toLowerCase()
+      : null;
+
   // Dedupe by email or phone - return existing customer rather than creating
   // a duplicate User row (techs frequently re-add a client they've forgotten).
   const dedupeOr: Array<Record<string, unknown>> = [];
-  if (body.email) dedupeOr.push({ email: body.email });
+  if (normalizedEmail) dedupeOr.push({ email: normalizedEmail });
   if (body.phone) dedupeOr.push({ phone: body.phone });
 
   let client = dedupeOr.length
@@ -77,10 +82,15 @@ export async function POST(req: NextRequest) {
     client = await prisma.user.create({
       data: {
         name: body.name,
-        email: body.email ?? null,
+        email: normalizedEmail,
         phone: body.phone ?? null,
         role: "customer",
       },
+    });
+  } else if (normalizedEmail && !client.email) {
+    client = await prisma.user.update({
+      where: { id: client.id },
+      data: { email: normalizedEmail },
     });
   }
 
@@ -100,18 +110,26 @@ export async function POST(req: NextRequest) {
     });
   }
 
-  if (plan) {
+  if (plan && home) {
+    const endsAt = new Date();
+    endsAt.setFullYear(endsAt.getFullYear() + 1);
     const activeSubscription = await prisma.subscription.findFirst({
-      where: { customerId: client.id, status: "active" },
+      where: {
+        customerId: client.id,
+        status: "active",
+        OR: [{ homeId: home.id }, { homeId: null }],
+      },
       orderBy: { startedAt: "desc" },
     });
     if (activeSubscription) {
       await prisma.subscription.update({
         where: { id: activeSubscription.id },
-        data: { plan },
+        data: { plan, homeId: home.id, visitsUsed: 0, endsAt },
       });
     } else {
-      await prisma.subscription.create({ data: { customerId: client.id, plan } });
+      await prisma.subscription.create({
+        data: { customerId: client.id, homeId: home.id, plan, endsAt },
+      });
     }
   }
 
