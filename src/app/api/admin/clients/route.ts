@@ -1,6 +1,7 @@
 import { NextRequest } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { requireTech, unauthorized } from "@/lib/session";
+import { SubscriptionPlan } from "@/generated/prisma/enums";
 
 export async function GET(req: NextRequest) {
   const tech = await requireTech();
@@ -55,6 +56,11 @@ export async function POST(req: NextRequest) {
     return Response.json({ error: "Name is required" }, { status: 400 });
   }
 
+  const plan = body.plan as SubscriptionPlan | null | undefined;
+  if (plan != null && !Object.values(SubscriptionPlan).includes(plan)) {
+    return Response.json({ error: "Invalid subscription plan" }, { status: 400 });
+  }
+
   // Dedupe by email or phone - return existing customer rather than creating
   // a duplicate User row (techs frequently re-add a client they've forgotten).
   const dedupeOr: Array<Record<string, unknown>> = [];
@@ -78,8 +84,9 @@ export async function POST(req: NextRequest) {
     });
   }
 
+  let home = null;
   if (body.address) {
-    await prisma.home.create({
+    home = await prisma.home.create({
       data: {
         customerId: client.id,
         address: body.address,
@@ -88,9 +95,25 @@ export async function POST(req: NextRequest) {
         zip: body.zip ?? null,
         notes: body.notes ?? null,
         gateCode: body.gateCode ?? null,
+        yearBuilt: body.yearBuilt ?? null,
       },
     });
   }
 
-  return Response.json(client, { status: 201 });
+  if (plan) {
+    const activeSubscription = await prisma.subscription.findFirst({
+      where: { customerId: client.id, status: "active" },
+      orderBy: { startedAt: "desc" },
+    });
+    if (activeSubscription) {
+      await prisma.subscription.update({
+        where: { id: activeSubscription.id },
+        data: { plan },
+      });
+    } else {
+      await prisma.subscription.create({ data: { customerId: client.id, plan } });
+    }
+  }
+
+  return Response.json({ client, home }, { status: 201 });
 }

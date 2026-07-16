@@ -2,7 +2,8 @@
 
 import { useState, useEffect, use } from "react";
 import Link from "next/link";
-import { ChevronLeft, AlertTriangle } from "lucide-react";
+import { useRouter } from "next/navigation";
+import { ChevronLeft, AlertTriangle, Trash2 } from "lucide-react";
 import { useDemoMode } from "@/lib/useDemoMode";
 import { toast } from "@/components/Toaster";
 import Spinner from "@/components/Spinner";
@@ -25,6 +26,7 @@ import {
 
 export default function HomeDetailPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = use(params);
+  const router = useRouter();
 
   const [home, setHome] = useState<ApiHome | null>(null);
   const [loading, setLoading] = useState(true);
@@ -66,6 +68,9 @@ export default function HomeDetailPage({ params }: { params: Promise<{ id: strin
     panelAmps: "",
   });
   const [savingEdit, setSavingEdit] = useState(false);
+  const [showDelete, setShowDelete] = useState(false);
+  const [deleting, setDeleting] = useState(false);
+  const [deleteError, setDeleteError] = useState<string | null>(null);
 
   const { isDemo, mounted } = useDemoMode();
 
@@ -373,6 +378,28 @@ export default function HomeDetailPage({ params }: { params: Promise<{ id: strin
     }
   }
 
+  async function deleteHome() {
+    if (isDemo) {
+      setShowDelete(false);
+      router.push("/homes");
+      return;
+    }
+    setDeleting(true);
+    setDeleteError(null);
+    try {
+      const r = await fetch(`/api/homes/${id}`, { method: "DELETE" });
+      const data = await r.json().catch(() => ({}));
+      if (!r.ok) throw new Error(data.error || "Failed to delete home");
+      toast.success("Home deleted");
+      router.push("/homes");
+      router.refresh();
+    } catch (e) {
+      setDeleteError(e instanceof Error ? e.message : "Failed to delete home");
+    } finally {
+      setDeleting(false);
+    }
+  }
+
   // ─── Render ────────────────────────────────────────────────────────────────
 
   if (loading) {
@@ -473,6 +500,21 @@ export default function HomeDetailPage({ params }: { params: Promise<{ id: strin
         deleteNote={deleteNote}
       />
 
+      <div className="mt-6 rounded-2xl border border-error/20 bg-surface p-4">
+        <p className="text-[13px] font-semibold text-text-primary">Remove home</p>
+        <p className="mt-1 text-[12px] leading-relaxed text-text-secondary">
+          Homes with visit history are protected and cannot be deleted.
+        </p>
+        <button
+          type="button"
+          onClick={() => { setDeleteError(null); setShowDelete(true); }}
+          className="mt-3 inline-flex items-center gap-1.5 rounded-xl border border-error/30 px-3.5 py-2 text-[12px] font-semibold text-error active:bg-error-light"
+        >
+          <Trash2 size={14} />
+          Delete Home
+        </button>
+      </div>
+
       <EditHomeModal
         open={showEdit}
         editForm={editForm}
@@ -481,6 +523,43 @@ export default function HomeDetailPage({ params }: { params: Promise<{ id: strin
         onClose={() => setShowEdit(false)}
         onSave={saveEdit}
       />
+
+      {showDelete && (
+        <div className="fixed inset-0 z-50 flex items-end justify-center bg-black/40 p-4 sm:items-center">
+          <div className="w-full max-w-sm rounded-2xl bg-surface p-5 shadow-xl">
+            <div className="flex h-11 w-11 items-center justify-center rounded-xl bg-error-light">
+              <Trash2 size={20} className="text-error" />
+            </div>
+            <h2 className="mt-4 text-[18px] font-bold text-text-primary">Delete this home?</h2>
+            <p className="mt-2 text-[13px] leading-relaxed text-text-secondary">
+              This permanently removes {fullAddress}. This cannot be undone.
+            </p>
+            {deleteError && (
+              <p className="mt-3 rounded-xl bg-error-light px-3 py-2 text-[12px] font-medium text-error">
+                {deleteError}
+              </p>
+            )}
+            <div className="mt-5 flex gap-3">
+              <button
+                type="button"
+                disabled={deleting}
+                onClick={() => setShowDelete(false)}
+                className="flex-1 rounded-xl border border-border px-4 py-2.5 text-[13px] font-semibold text-text-primary disabled:opacity-50"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                disabled={deleting}
+                onClick={deleteHome}
+                className="flex-1 rounded-xl bg-error px-4 py-2.5 text-[13px] font-semibold text-white disabled:opacity-50"
+              >
+                {deleting ? "Deleting…" : "Delete Home"}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
