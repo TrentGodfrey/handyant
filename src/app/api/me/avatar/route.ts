@@ -5,7 +5,7 @@ import { prisma } from "@/lib/prisma";
 import { requireUser, unauthorized, badRequest } from "@/lib/session";
 import { parseAndValidateDataUrl } from "@/lib/imageUpload";
 
-const UPLOAD_DIR = path.join(process.cwd(), "public", "uploads");
+const UPLOAD_DIR = path.join(process.cwd(), "storage", "uploads");
 
 export async function POST(req: NextRequest) {
   const user = await requireUser();
@@ -22,7 +22,7 @@ export async function POST(req: NextRequest) {
   await writeFile(path.join(UPLOAD_DIR, filename), parsed.data.buffer);
 
   // Cache-bust by appending timestamp to URL
-  const url = `/uploads/${filename}?v=${Date.now()}`;
+  const url = `/api/uploads/${filename}?v=${Date.now()}`;
   const updated = await prisma.user.update({
     where: { id: user.id },
     data: { avatarUrl: url },

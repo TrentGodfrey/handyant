@@ -1,6 +1,7 @@
 import { NextRequest } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { requireTech, unauthorized, notFound } from "@/lib/session";
+import { decryptHomeAccess } from "@/lib/sensitive-data";
 
 export async function POST(_req: NextRequest, ctx: { params: Promise<{ id: string }> }) {
   const tech = await requireTech();
@@ -33,5 +34,5 @@ export async function POST(_req: NextRequest, ctx: { params: Promise<{ id: strin
     },
   });
 
-  return Response.json(booking);
+  return Response.json({ ...booking, home: booking.home ? decryptHomeAccess(booking.home) : null });
 }

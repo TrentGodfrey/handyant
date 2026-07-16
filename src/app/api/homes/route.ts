@@ -1,6 +1,7 @@
 import { NextRequest } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { requireUser, unauthorized } from "@/lib/session";
+import { decryptHomeAccess, encryptSensitiveValue } from "@/lib/sensitive-data";
 
 export async function GET() {
   const user = await requireUser();
@@ -10,7 +11,7 @@ export async function GET() {
     include: { photos: true },
     orderBy: { createdAt: "desc" },
   });
-  return Response.json(homes);
+  return Response.json(homes.map(decryptHomeAccess));
 }
 
 export async function POST(req: NextRequest) {
@@ -25,8 +26,9 @@ export async function POST(req: NextRequest) {
       state: body.state ?? "TX",
       zip: body.zip ?? null,
       notes: body.notes ?? null,
-      gateCode: body.gateCode ?? null,
+      gateCode: encryptSensitiveValue(body.gateCode ?? null),
+      wifiPassword: encryptSensitiveValue(body.wifiPassword ?? null),
     },
   });
-  return Response.json(home, { status: 201 });
+  return Response.json(decryptHomeAccess(home), { status: 201 });
 }

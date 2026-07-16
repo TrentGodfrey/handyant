@@ -1,5 +1,7 @@
 "use client";
 
+import Link from "next/link";
+
 import { useEffect } from "react";
 
 interface GlobalErrorProps {
@@ -74,7 +76,7 @@ export default function GlobalError({ error, reset }: GlobalErrorProps) {
             </pre>
           )}
           <div style={{ display: "flex", gap: 8, justifyContent: "center", marginTop: 20 }}>
-            <a
+            <Link
               href="/"
               style={{
                 padding: "10px 18px",
@@ -87,7 +89,7 @@ export default function GlobalError({ error, reset }: GlobalErrorProps) {
               }}
             >
               Home
-            </a>
+            </Link>
             <button
               type="button"
               onClick={() => reset()}

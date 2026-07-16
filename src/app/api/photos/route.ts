@@ -6,7 +6,7 @@ import { prisma } from "@/lib/prisma";
 import { requireUser, unauthorized, badRequest, forbidden } from "@/lib/session";
 import { parseAndValidateDataUrl } from "@/lib/imageUpload";
 
-const UPLOAD_DIR = path.join(process.cwd(), "public", "uploads");
+const UPLOAD_DIR = path.join(process.cwd(), "storage", "uploads");
 
 async function ensureDir() {
   await mkdir(UPLOAD_DIR, { recursive: true });
@@ -92,7 +92,7 @@ export async function POST(req: NextRequest) {
     data: {
       bookingId: body.bookingId ?? null,
       homeId: body.homeId ?? null,
-      url: `/uploads/${filename}`,
+      url: `/api/uploads/${filename}`,
       label: body.label ?? null,
       type: body.type ?? "before",
     },

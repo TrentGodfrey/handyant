@@ -1,4 +1,14 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+MCQ Property Care customer and staff portal, built with Next.js, PostgreSQL, Prisma, NextAuth, Resend, and Square.
+
+## Production configuration
+
+Copy `.env.example` and configure the required database/auth values. Production membership and invoice checkout also requires the Square access token, location ID, and webhook signature key. Register this exact webhook URL in Square and subscribe it to `payment.created` and `payment.updated`:
+
+`https://mcqpropertycare.com/api/webhooks/square`
+
+The application activates memberships and marks invoices paid only after a signed, amount-matched `COMPLETED` payment event. If Square credentials are absent, checkout fails closed and directs the customer to contact staff.
+
+Home gate codes and Wi-Fi passwords are encrypted with `DATA_ENCRYPTION_KEY`. After setting that key for an existing database, run `npm run db:encrypt-home-access` once to encrypt legacy plaintext values.
 
 ## Getting Started
 

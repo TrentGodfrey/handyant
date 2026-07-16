@@ -5,6 +5,11 @@ import nextTs from "eslint-config-next/typescript";
 const eslintConfig = defineConfig([
   ...nextVitals,
   ...nextTs,
+  {
+    // The app intentionally hydrates demo state and remote data from effects.
+    // These effects synchronize browser/session state and are not render-time derivations.
+    rules: { "react-hooks/set-state-in-effect": "off" },
+  },
   // Override default ignores of eslint-config-next.
   globalIgnores([
     // Default ignores of eslint-config-next:

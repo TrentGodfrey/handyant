@@ -201,16 +201,14 @@ export default function HomesPage() {
           <p className="text-[11px] font-semibold uppercase tracking-wider text-text-tertiary">Client Base</p>
           <h1 className="mt-0.5 text-[26px] font-bold text-text-primary leading-tight">Homes</h1>
         </div>
-        <Link href="/homes/new">
-          <button className="flex items-center gap-1.5 rounded-xl bg-primary px-4 py-2.5 text-[13px] font-semibold text-white shadow-[0_2px_8px_rgba(79,149,152,0.30)] active:bg-primary-dark transition-colors">
-            <Plus size={15} />
-            Add Home
-          </button>
+        <Link href="/homes/new" className="flex min-h-11 items-center gap-1.5 rounded-xl bg-primary px-4 py-2.5 text-[13px] font-semibold text-white shadow-[0_2px_8px_rgba(79,149,152,0.30)] active:bg-primary-dark transition-colors">
+          <Plus size={15} />
+          Add Home
         </Link>
       </div>
 
       {/* Search Bar */}
-      <div className="mb-5 flex items-center gap-2.5 rounded-xl border border-border bg-surface px-3.5 py-2.5 shadow-[0_1px_2px_rgba(0,0,0,0.04)]">
+      <div className="mb-5 flex min-h-12 items-center gap-2.5 rounded-xl border border-border bg-surface px-3.5 py-2.5 shadow-[0_1px_2px_rgba(0,0,0,0.04)]">
         <Search size={16} className="shrink-0 text-text-tertiary" />
         <input
           type="text"

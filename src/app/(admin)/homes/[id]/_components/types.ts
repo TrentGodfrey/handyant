@@ -106,6 +106,11 @@ export interface ApiHome {
     startedAt: string | null;
     endsAt: string | null;
   } | null;
+  pendingInvitation: {
+    email: string;
+    expiresAt: string;
+    createdAt: string;
+  } | null;
   bookings: ApiBooking[];
   photos: ApiPhoto[];
   todos: ApiTodo[];

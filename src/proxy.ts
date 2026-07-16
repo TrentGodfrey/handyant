@@ -11,6 +11,8 @@ const publicPaths = [
   "/reset-password",
   "/verify-email",
   "/api/availability",
+  "/api/home-invitations",
+  "/api/webhooks/square",
 ];
 const publicExact = new Set(["/"]);
 
@@ -49,7 +51,6 @@ export async function proxy(req: NextRequest) {
     pathname === "/icon" ||
     pathname === "/apple-icon" ||
     pathname.startsWith("/icon-") ||
-    pathname.startsWith("/uploads/") ||
     /\.(png|jpg|jpeg|svg|webp|gif|ico)$/i.test(pathname)
   ) {
     return NextResponse.next();

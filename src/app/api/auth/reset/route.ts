@@ -1,6 +1,8 @@
 import { NextRequest } from "next/server";
 import { hash } from "bcryptjs";
 import { prisma } from "@/lib/prisma";
+import { rateLimited, requestIp, takeRateLimit } from "@/lib/rate-limit";
+import { hashSecurityToken } from "@/lib/security-tokens";
 
 export async function POST(req: NextRequest) {
   let body: { token?: unknown; password?: unknown };
@@ -12,6 +14,8 @@ export async function POST(req: NextRequest) {
 
   const token = typeof body.token === "string" ? body.token : "";
   const password = typeof body.password === "string" ? body.password : "";
+  const limit = takeRateLimit(`reset:${requestIp(req)}`, 10, 15 * 60 * 1000);
+  if (!limit.allowed) return rateLimited(limit.retryAfterSeconds);
 
   if (!token) {
     return Response.json({ error: "Reset token is required" }, { status: 400 });
@@ -24,7 +28,7 @@ export async function POST(req: NextRequest) {
   }
 
   const user = await prisma.user.findFirst({
-    where: { passwordResetToken: token },
+    where: { passwordResetToken: hashSecurityToken(token) },
     select: { id: true, passwordResetExpires: true },
   });
 

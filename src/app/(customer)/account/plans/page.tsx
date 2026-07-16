@@ -1,17 +1,70 @@
 "use client";
 
+import { useEffect, useState } from "react";
 import Link from "next/link";
 import { ChevronLeft, CheckCircle2, Sparkles, MessageCircle, CreditCard } from "lucide-react";
 import Card from "@/components/Card";
 import { PLANS, VISIT_USES } from "@/lib/plans";
+import { useDemoMode } from "@/lib/useDemoMode";
 
 export default function AccountPlansPage() {
+  const { isDemo, mounted } = useDemoMode();
+  const [homes, setHomes] = useState<Array<{ id: string; address: string; city: string | null }>>([]);
+  const [homeId, setHomeId] = useState("");
+  const [loadingHomes, setLoadingHomes] = useState(true);
+  const [checkoutPlan, setCheckoutPlan] = useState<string | null>(null);
+  const [checkoutError, setCheckoutError] = useState("");
+  const [processingReturn, setProcessingReturn] = useState(false);
+
+  useEffect(() => {
+    if (!mounted) return;
+    setProcessingReturn(new URLSearchParams(window.location.search).get("checkout") === "processing");
+    if (isDemo) {
+      setHomes([]);
+      setHomeId("");
+      setLoadingHomes(false);
+      return;
+    }
+    fetch("/api/homes")
+      .then(async (response) => {
+        if (!response.ok) throw new Error("Could not load your homes");
+        return response.json();
+      })
+      .then((data) => {
+        const rows = Array.isArray(data) ? data : [];
+        setHomes(rows);
+        setHomeId(rows[0]?.id ?? "");
+      })
+      .catch(() => setCheckoutError("Could not load your homes. Refresh and try again."))
+      .finally(() => setLoadingHomes(false));
+  }, [isDemo, mounted]);
+
+  async function startCheckout(plan: string) {
+    setCheckoutPlan(plan);
+    setCheckoutError("");
+    try {
+      const response = await fetch("/api/payments/square/checkout", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ plan, homeId }),
+      });
+      const body = await response.json().catch(() => null);
+      if (!response.ok || !body?.checkoutUrl) {
+        throw new Error(body?.error ?? "Could not start secure checkout");
+      }
+      window.location.assign(body.checkoutUrl);
+    } catch (error) {
+      setCheckoutError(error instanceof Error ? error.message : "Could not start secure checkout");
+      setCheckoutPlan(null);
+    }
+  }
+
   return (
     <div className="min-h-screen bg-background pb-28 lg:pb-8">
       <div className="bg-white border-b border-border px-5 pt-14 pb-5">
         <Link
           href="/account"
-          className="mb-4 inline-flex items-center gap-1.5 text-[13px] font-medium text-text-secondary hover:text-text-primary transition-colors"
+          className="mb-4 inline-flex min-h-11 items-center gap-1.5 text-[13px] font-medium text-text-secondary hover:text-text-primary transition-colors"
         >
           <ChevronLeft size={16} />
           Account
@@ -23,6 +76,17 @@ export default function AccountPlansPage() {
       </div>
 
       <div className="px-5 py-5 space-y-6">
+        {processingReturn && (
+          <div className="rounded-xl border border-success/30 bg-success-light px-4 py-3">
+            <p className="text-[13px] font-semibold text-text-primary">Payment received by Square</p>
+            <p className="mt-0.5 text-[12px] text-text-secondary">We are confirming it now. Your membership and visit counter will update automatically.</p>
+          </div>
+        )}
+        {checkoutError && (
+          <div className="rounded-xl border border-error/20 bg-error-light px-4 py-3 text-[12px] font-medium text-error">
+            {checkoutError}
+          </div>
+        )}
         {/* Secure payment banner */}
         <div className="rounded-xl border border-primary/20 bg-primary-50 px-4 py-3 flex items-start gap-3">
           <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-primary/10">
@@ -35,6 +99,19 @@ export default function AccountPlansPage() {
             </p>
           </div>
         </div>
+
+        {!loadingHomes && homes.length === 0 ? (
+          <Link href="/account/home" className="flex min-h-12 items-center justify-center rounded-xl border border-primary bg-white px-4 text-[13px] font-semibold text-primary">
+            Add your home before choosing a plan
+          </Link>
+        ) : homes.length > 1 ? (
+          <label className="block text-[12px] font-semibold text-text-secondary">
+            Membership home
+            <select value={homeId} onChange={(event) => setHomeId(event.target.value)} className="mt-1.5 min-h-12 w-full rounded-xl border border-border bg-white px-3 text-[14px] text-text-primary">
+              {homes.map((home) => <option key={home.id} value={home.id}>{home.address}{home.city ? `, ${home.city}` : ""}</option>)}
+            </select>
+          </label>
+        ) : null}
 
         {/* Plan cards */}
         <div className="space-y-3">
@@ -75,24 +152,24 @@ export default function AccountPlansPage() {
                   </div>
                 ))}
               </div>
-              {plan.paymentUrl ? (
-                <a
-                  href={plan.paymentUrl}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className={`flex items-center justify-center gap-2 w-full rounded-xl py-2.5 text-[13px] font-semibold transition-colors ${
+              {homeId ? (
+                <button
+                  type="button"
+                  onClick={() => startCheckout(plan.id)}
+                  disabled={checkoutPlan !== null || loadingHomes}
+                  className={`flex min-h-11 items-center justify-center gap-2 w-full rounded-xl py-2.5 text-[13px] font-semibold transition-colors ${
                     plan.popular
                       ? "bg-primary text-white hover:bg-primary-dark shadow-[0_2px_10px_rgba(79,149,152,0.25)]"
                       : "bg-primary text-white hover:bg-primary-dark"
                   }`}
                 >
                   <CreditCard size={14} />
-                  Pay ${plan.annualPrice.toLocaleString()} & activate
-                </a>
+                  {checkoutPlan === plan.id ? "Opening secure checkout…" : `Pay $${plan.annualPrice.toLocaleString()} & activate`}
+                </button>
               ) : (
                 <Link
                   href="/messages?topic=membership"
-                  className="flex items-center justify-center gap-2 w-full rounded-xl border border-primary bg-white py-2.5 text-[13px] font-semibold text-primary hover:bg-primary-50 transition-colors"
+                  className="flex min-h-11 items-center justify-center gap-2 w-full rounded-xl border border-primary bg-white py-2.5 text-[13px] font-semibold text-primary hover:bg-primary-50 transition-colors"
                 >
                   <MessageCircle size={14} />
                   Contact us to activate

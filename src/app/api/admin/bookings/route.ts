@@ -1,5 +1,6 @@
 import { NextRequest } from "next/server";
 import { prisma } from "@/lib/prisma";
+import { decryptHomeAccess } from "@/lib/sensitive-data";
 import { requireTech, unauthorized } from "@/lib/session";
 
 export async function GET(req: NextRequest) {
@@ -33,5 +34,8 @@ export async function GET(req: NextRequest) {
     orderBy: [{ scheduledDate: "asc" }, { scheduledTime: "asc" }],
   });
 
-  return Response.json(bookings);
+  return Response.json(bookings.map((booking) => ({
+    ...booking,
+    home: booking.home ? decryptHomeAccess(booking.home) : null,
+  })));
 }

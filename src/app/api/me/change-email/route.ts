@@ -4,6 +4,7 @@ import { compare } from "bcryptjs";
 import { prisma } from "@/lib/prisma";
 import { requireUser, unauthorized, badRequest } from "@/lib/session";
 import { sendEmail, emailShell, escapeHtml } from "@/lib/email";
+import { hashSecurityToken } from "@/lib/security-tokens";
 
 const VERIFY_TTL_MS = 24 * 60 * 60 * 1000; // 24 hours
 
@@ -65,7 +66,7 @@ export async function POST(req: NextRequest) {
     where: { id: user.id },
     data: {
       pendingEmail: newEmail,
-      emailVerificationToken: token,
+      emailVerificationToken: hashSecurityToken(token),
       emailVerificationExpires: expires,
     },
   });

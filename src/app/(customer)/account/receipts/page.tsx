@@ -93,8 +93,10 @@ export default function ReceiptsPage() {
   const [expanded, setExpanded] = useState<string | null>(null);
   const [paying, setPaying] = useState<string | null>(null);
   const [payError, setPayError] = useState<Record<string, string>>({});
+  const [paymentProcessing, setPaymentProcessing] = useState(false);
 
   useEffect(() => {
+    setPaymentProcessing(new URLSearchParams(window.location.search).get("checkout") === "processing");
     if (!mounted) return;
     if (isDemo) {
       setDemoReceipts(DEMO_RECEIPTS);
@@ -126,19 +128,14 @@ export default function ReceiptsPage() {
       return next;
     });
     try {
-      const res = await fetch(`/api/invoices/${invoiceId}/pay`, { method: "POST" });
+      const res = await fetch(`/api/invoices/${invoiceId}/checkout`, { method: "POST" });
       if (!res.ok) {
         const err = await res.json().catch(() => ({}));
         throw new Error(err.error ?? "Payment failed");
       }
-      const updated = await res.json();
-      setInvoices((prev) =>
-        prev.map((inv) =>
-          inv.id === invoiceId
-            ? { ...inv, status: updated.status ?? "paid", paidAt: updated.paidAt ?? new Date().toISOString() }
-            : inv
-        )
-      );
+      const body = await res.json();
+      if (!body.checkoutUrl) throw new Error("Payment link was not returned");
+      window.location.assign(body.checkoutUrl);
     } catch (e: unknown) {
       setPayError((prev) => ({
         ...prev,
@@ -173,7 +170,7 @@ export default function ReceiptsPage() {
         total,
         status: "completed" as const,
         invoiceNum: inv.number,
-        paidVia: isPaid ? "Card on file" : "Unpaid",
+        paidVia: isPaid ? "Square" : "Unpaid",
       };
     });
   })();
@@ -187,7 +184,7 @@ export default function ReceiptsPage() {
   return (
     <div className="min-h-screen bg-background pb-28">
       <div className="bg-white border-b border-border px-5 pt-14 pb-5">
-        <Link href="/account" className="mb-4 inline-flex items-center gap-1.5 text-[13px] font-medium text-text-secondary hover:text-text-primary transition-colors">
+        <Link href="/account" className="mb-4 inline-flex min-h-11 items-center gap-1.5 text-[13px] font-medium text-text-secondary hover:text-text-primary transition-colors">
           <ChevronLeft size={16} />
           Account
         </Link>
@@ -196,6 +193,12 @@ export default function ReceiptsPage() {
       </div>
 
       <div className="px-5 py-5 space-y-5">
+        {paymentProcessing && (
+          <div className="rounded-xl border border-success/30 bg-success-light p-3.5">
+            <p className="text-[13px] font-semibold text-text-primary">Payment received by Square</p>
+            <p className="mt-0.5 text-[12px] text-text-secondary">We are confirming it now. Refresh shortly if the invoice still shows as unpaid.</p>
+          </div>
+        )}
         {error && !isDemo && (
           <div className="flex items-start gap-3 rounded-xl border border-error/30 bg-error-light p-3.5">
             <AlertTriangle size={18} className="mt-0.5 shrink-0 text-error" />
@@ -319,7 +322,7 @@ export default function ReceiptsPage() {
                               <button
                                 onClick={() => handlePay(r.id)}
                                 disabled={paying === r.id}
-                                className="inline-flex items-center gap-1.5 rounded-lg bg-primary px-3 py-1.5 text-[12px] font-semibold text-white hover:bg-primary-dark disabled:opacity-60"
+                                className="inline-flex min-h-11 items-center gap-1.5 rounded-lg bg-primary px-3 py-1.5 text-[12px] font-semibold text-white hover:bg-primary-dark disabled:opacity-60"
                               >
                                 {paying === r.id ? (
                                   <>
@@ -336,7 +339,7 @@ export default function ReceiptsPage() {
                             )}
                             <button
                               onClick={handleDownloadPdf}
-                              className="flex items-center gap-1 text-[12px] font-semibold text-primary"
+                              className="flex min-h-11 items-center gap-1 px-1 text-[12px] font-semibold text-primary"
                             >
                               <Download size={13} />
                               Download PDF

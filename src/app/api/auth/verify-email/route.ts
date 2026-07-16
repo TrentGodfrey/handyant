@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
+import { hashSecurityToken } from "@/lib/security-tokens";
 
 export async function GET(req: NextRequest) {
   const token = req.nextUrl.searchParams.get("token") ?? "";
@@ -13,7 +14,7 @@ export async function GET(req: NextRequest) {
   }
 
   const user = await prisma.user.findFirst({
-    where: { emailVerificationToken: token },
+    where: { emailVerificationToken: hashSecurityToken(token) },
     select: {
       id: true,
       pendingEmail: true,
