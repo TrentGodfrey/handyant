@@ -3,6 +3,7 @@
 import { useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
+import { PLANS, type PlanId } from "@/lib/plans";
 import Card from "@/components/Card";
 import Button from "@/components/Button";
 import {
@@ -22,8 +23,6 @@ import {
 import { useDemoMode } from "@/lib/useDemoMode";
 
 type HomeType = "Single Family" | "Townhouse" | "Condo";
-type Plan = "Basic" | "Pro" | "Premium";
-
 interface FormData {
   firstName: string;
   lastName: string;
@@ -38,14 +37,8 @@ interface FormData {
   bedrooms: number;
   bathrooms: number;
   specialNotes: string;
-  plan: Plan | null;
+  plan: PlanId | null;
 }
-
-const plans: { name: Plan; price: string; features: string[] }[] = [
-  { name: "Basic", price: "$79/mo", features: ["2 visits/yr", "Emergency calls", "Priority scheduling"] },
-  { name: "Pro", price: "$149/mo", features: ["4 visits/yr", "Parts discount 10%", "Same-day response"] },
-  { name: "Premium", price: "$249/mo", features: ["Monthly visits", "Parts included", "24/7 hotline"] },
-];
 
 const yearOptions = Array.from({ length: 25 }, (_, i) => String(2024 - i));
 
@@ -100,6 +93,8 @@ export default function AddNewClientPage() {
           state: "TX",
           zip: form.zip || null,
           notes: form.specialNotes || null,
+          yearBuilt: form.yearBuilt ? Number(form.yearBuilt) : null,
+          plan: form.plan,
         }),
       });
       if (!res.ok) {
@@ -140,7 +135,9 @@ export default function AddNewClientPage() {
           {form.plan && (
             <div className="mt-4 inline-flex items-center gap-2 rounded-full bg-primary-50 px-4 py-1.5">
               <Star size={13} className="text-primary" />
-              <span className="text-[13px] font-semibold text-primary">{form.plan} Plan activated</span>
+              <span className="text-[13px] font-semibold text-primary">
+                {PLANS.find((plan) => plan.id === form.plan)?.label} Plan activated
+              </span>
             </div>
           )}
           <div className="mt-8 space-y-3">
@@ -413,12 +410,12 @@ export default function AddNewClientPage() {
             <div>
               <label className={labelCls}>Subscription Plan (Optional)</label>
               <div className="space-y-2.5">
-                {plans.map((plan) => (
+                {PLANS.map((plan) => (
                   <button
-                    key={plan.name}
-                    onClick={() => set("plan", form.plan === plan.name ? null : plan.name)}
+                    key={plan.id}
+                    onClick={() => set("plan", form.plan === plan.id ? null : plan.id)}
                     className={`w-full rounded-xl border-2 p-3.5 text-left transition-all duration-150 ${
-                      form.plan === plan.name
+                      form.plan === plan.id
                         ? "border-primary bg-primary-50"
                         : "border-border bg-surface hover:border-primary/30"
                     }`}
@@ -428,37 +425,37 @@ export default function AddNewClientPage() {
                         <div className="flex items-center gap-2">
                           <span
                             className={`text-[14px] font-bold ${
-                              form.plan === plan.name ? "text-primary" : "text-text-primary"
+                              form.plan === plan.id ? "text-primary" : "text-text-primary"
                             }`}
                           >
-                            {plan.name}
+                            {plan.label}
                           </span>
-                          {plan.name === "Pro" && (
+                          {plan.popular && (
                             <span className="rounded-full bg-primary px-2 py-0.5 text-[9px] font-bold text-white uppercase tracking-wider">
                               Popular
                             </span>
                           )}
                         </div>
                         <p className="mt-0.5 text-[11px] text-text-tertiary">
-                          {plan.features.join(" · ")}
+                          {plan.visitLabel} · {plan.visitDurationMinutes} min each
                         </p>
                       </div>
                       <div className="flex items-center gap-2 shrink-0">
                         <span
                           className={`text-[15px] font-bold ${
-                            form.plan === plan.name ? "text-primary" : "text-text-primary"
+                            form.plan === plan.id ? "text-primary" : "text-text-primary"
                           }`}
                         >
-                          {plan.price}
+                          ${plan.annualPrice.toLocaleString()}/yr
                         </span>
                         <div
                           className={`flex h-5 w-5 items-center justify-center rounded-full border-2 transition-all ${
-                            form.plan === plan.name
+                            form.plan === plan.id
                               ? "border-primary bg-primary"
                               : "border-border bg-white"
                           }`}
                         >
-                          {form.plan === plan.name && (
+                          {form.plan === plan.id && (
                             <Check size={11} className="text-white" strokeWidth={2.5} />
                           )}
                         </div>
@@ -578,9 +575,11 @@ export default function AddNewClientPage() {
               </div>
               {form.plan ? (
                 <div className="flex items-center justify-between">
-                  <span className="text-[15px] font-bold text-text-primary">{form.plan} Plan</span>
+                  <span className="text-[15px] font-bold text-text-primary">
+                    {PLANS.find((plan) => plan.id === form.plan)?.label} Plan
+                  </span>
                   <span className="text-[14px] font-semibold text-primary">
-                    {plans.find((p) => p.name === form.plan)?.price}
+                    ${PLANS.find((plan) => plan.id === form.plan)?.annualPrice.toLocaleString()}/yr
                   </span>
                 </div>
               ) : (

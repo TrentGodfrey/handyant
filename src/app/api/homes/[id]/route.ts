@@ -5,23 +5,15 @@ import { requireUser, unauthorized, notFound, forbidden } from "@/lib/session";
 /**
  * Returns true if `user` is allowed to read/edit this home:
  * - The customer who owns it.
- * - A tech who has ever had a booking on this home (or with the home's customer).
+ * - Any authenticated tech. The staff Homes screen is the business-wide client list,
+ *   including newly added homes that do not have a booking yet.
  */
 async function canAccessHome(
   user: { id: string; role: "customer" | "tech" },
   home: { id: string; customerId: string }
 ): Promise<boolean> {
   if (home.customerId === user.id) return true;
-  if (user.role !== "tech") return false;
-
-  const booking = await prisma.booking.findFirst({
-    where: {
-      techId: user.id,
-      OR: [{ homeId: home.id }, { customerId: home.customerId }],
-    },
-    select: { id: true },
-  });
-  return Boolean(booking);
+  return user.role === "tech";
 }
 
 export async function GET(_req: NextRequest, ctx: { params: Promise<{ id: string }> }) {
@@ -122,8 +114,15 @@ export async function DELETE(_req: NextRequest, ctx: { params: Promise<{ id: str
 
   const home = await prisma.home.findUnique({ where: { id } });
   if (!home) return notFound("Home not found");
-  // Only the customer who owns the home may delete it (techs cannot delete).
-  if (home.customerId !== user.id) return forbidden();
+  if (!(await canAccessHome(user, home))) return forbidden();
+
+  const bookingCount = await prisma.booking.count({ where: { homeId: id } });
+  if (bookingCount > 0) {
+    return Response.json(
+      { error: "This home has visit history and cannot be deleted." },
+      { status: 409 },
+    );
+  }
 
   await prisma.home.delete({ where: { id } });
   return Response.json({ ok: true });
