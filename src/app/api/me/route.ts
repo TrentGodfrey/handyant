@@ -2,6 +2,7 @@ import { NextRequest } from "next/server";
 import { compare } from "bcryptjs";
 import { prisma } from "@/lib/prisma";
 import { requireUser, unauthorized, notFound, badRequest } from "@/lib/session";
+import { decryptHomeAccess } from "@/lib/sensitive-data";
 
 export async function GET() {
   const user = await requireUser();
@@ -18,8 +19,20 @@ export async function GET() {
 
   if (!dbUser) return notFound("User not found");
 
-  const { passwordHash: _, ...safeUser } = dbUser;
-  return Response.json(safeUser);
+  const {
+    passwordHash,
+    passwordResetToken,
+    passwordResetExpires,
+    emailVerificationToken,
+    emailVerificationExpires,
+    ...safeUser
+  } = dbUser;
+  void passwordHash;
+  void passwordResetToken;
+  void passwordResetExpires;
+  void emailVerificationToken;
+  void emailVerificationExpires;
+  return Response.json({ ...safeUser, homes: safeUser.homes.map(decryptHomeAccess) });
 }
 
 export async function PATCH(req: NextRequest) {
@@ -74,7 +87,19 @@ export async function PATCH(req: NextRequest) {
     data,
   });
 
-  const { passwordHash: _, ...safeUser } = updated;
+  const {
+    passwordHash,
+    passwordResetToken,
+    passwordResetExpires,
+    emailVerificationToken,
+    emailVerificationExpires,
+    ...safeUser
+  } = updated;
+  void passwordHash;
+  void passwordResetToken;
+  void passwordResetExpires;
+  void emailVerificationToken;
+  void emailVerificationExpires;
   return Response.json(safeUser);
 }
 

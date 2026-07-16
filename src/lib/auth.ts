@@ -56,27 +56,45 @@ export const authOptions: NextAuthOptions = {
   callbacks: {
     async signIn({ user, account }) {
       if (account?.provider === "google") {
-        const existing = await prisma.user.findUnique({
+        const existingByGoogle = await prisma.user.findUnique({
           where: { googleId: account.providerAccountId },
         });
 
-        if (!existing) {
-          // Auto-create account on first Google sign-in
-          const created = await prisma.user.create({
-            data: {
-              googleId: account.providerAccountId,
-              email: user.email,
-              name: user.name ?? "Customer",
-              avatarUrl: user.image,
-              emailVerified: true,
-              role: "customer",
-            },
-          });
-          user.id = created.id;
-          (user as unknown as Record<string, unknown>).role = created.role;
+        if (!existingByGoogle) {
+          const normalizedEmail = user.email?.trim().toLowerCase() ?? null;
+          const existingByEmail = normalizedEmail
+            ? await prisma.user.findUnique({ where: { email: normalizedEmail } })
+            : null;
+          if (existingByEmail?.googleId && existingByEmail.googleId !== account.providerAccountId) {
+            return false;
+          }
+
+          // Google has proved control of this address. Link the provider to a
+          // staff-created customer instead of creating a duplicate account.
+          const linked = existingByEmail
+            ? await prisma.user.update({
+                where: { id: existingByEmail.id },
+                data: {
+                  googleId: account.providerAccountId,
+                  emailVerified: true,
+                  avatarUrl: user.image ?? existingByEmail.avatarUrl,
+                },
+              })
+            : await prisma.user.create({
+                data: {
+                  googleId: account.providerAccountId,
+                  email: normalizedEmail,
+                  name: user.name ?? "Customer",
+                  avatarUrl: user.image,
+                  emailVerified: true,
+                  role: "customer",
+                },
+              });
+          user.id = linked.id;
+          (user as unknown as Record<string, unknown>).role = linked.role;
         } else {
-          user.id = existing.id;
-          (user as unknown as Record<string, unknown>).role = existing.role;
+          user.id = existingByGoogle.id;
+          (user as unknown as Record<string, unknown>).role = existingByGoogle.role;
         }
       }
       return true;

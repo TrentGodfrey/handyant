@@ -1,18 +1,17 @@
 import { NextRequest } from "next/server";
 import { prisma } from "@/lib/prisma";
-import { requireUser, unauthorized, notFound, forbidden } from "@/lib/session";
+import { requireTech, unauthorized, notFound } from "@/lib/session";
 
 export async function PATCH(
   req: NextRequest,
   ctx: { params: Promise<{ id: string; noteId: string }> }
 ) {
-  const user = await requireUser();
+  const user = await requireTech();
   if (!user) return unauthorized();
   const { id, noteId } = await ctx.params;
 
   const home = await prisma.home.findUnique({ where: { id } });
   if (!home) return notFound("Home not found");
-  if (home.customerId !== user.id && user.role !== "tech") return forbidden();
 
   const note = await prisma.homeNote.findUnique({ where: { id: noteId } });
   if (!note || note.homeId !== id) return notFound("Note not found");
@@ -31,13 +30,12 @@ export async function DELETE(
   _req: NextRequest,
   ctx: { params: Promise<{ id: string; noteId: string }> }
 ) {
-  const user = await requireUser();
+  const user = await requireTech();
   if (!user) return unauthorized();
   const { id, noteId } = await ctx.params;
 
   const home = await prisma.home.findUnique({ where: { id } });
   if (!home) return notFound("Home not found");
-  if (home.customerId !== user.id && user.role !== "tech") return forbidden();
 
   const note = await prisma.homeNote.findUnique({ where: { id: noteId } });
   if (!note || note.homeId !== id) return notFound("Note not found");

@@ -2,6 +2,8 @@ import { NextRequest } from "next/server";
 import { randomBytes } from "node:crypto";
 import { prisma } from "@/lib/prisma";
 import { sendEmail, emailShell, escapeHtml } from "@/lib/email";
+import { rateLimited, requestIp, takeRateLimit } from "@/lib/rate-limit";
+import { hashSecurityToken } from "@/lib/security-tokens";
 
 const RESET_TTL_MS = 60 * 60 * 1000; // 1 hour
 
@@ -16,6 +18,9 @@ export async function POST(req: NextRequest) {
   const email =
     typeof body.email === "string" ? body.email.trim().toLowerCase() : "";
 
+  const limit = takeRateLimit(`forgot:${requestIp(req)}:${email}`, 5, 15 * 60 * 1000);
+  if (!limit.allowed) return rateLimited(limit.retryAfterSeconds);
+
   // Always 200 - never reveal whether the email exists.
   if (!email) return Response.json({ ok: true });
 
@@ -28,7 +33,7 @@ export async function POST(req: NextRequest) {
     await prisma.user.update({
       where: { id: user.id },
       data: {
-        passwordResetToken: token,
+        passwordResetToken: hashSecurityToken(token),
         passwordResetExpires: expires,
       },
     });

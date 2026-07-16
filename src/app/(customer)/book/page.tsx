@@ -977,6 +977,8 @@ function BookingPageInner() {
                 </button>
                 {photos.map((photo) => (
                   <div key={photo.id} className="relative h-24 w-24 shrink-0 rounded-xl overflow-hidden border border-border">
+                    {/* Local previews use blob/data URLs and should not pass through the image optimizer. */}
+                    {/* eslint-disable-next-line @next/next/no-img-element */}
                     <img src={photo.url} alt={photo.name} className="h-full w-full object-cover" />
                     <button onClick={() => removePhoto(photo.id)} className="absolute right-1 top-1 flex h-5 w-5 items-center justify-center rounded-full bg-black/60">
                       <X size={10} className="text-white" />
@@ -1022,7 +1024,11 @@ function BookingPageInner() {
                 {selectedCategories.length > 0 && (<><div className="h-px bg-border" /><div><span className="text-[12px] font-medium uppercase tracking-wide text-text-tertiary">Categories</span><div className="mt-2 flex flex-wrap gap-1.5">{selectedCategories.map((c) => (<span key={c} className="rounded-full bg-primary-50 px-3 py-1 text-[11px] font-medium text-primary">{c}</span>))}</div></div></>)}
                 {description && (<><div className="h-px bg-border" /><div><span className="text-[12px] font-medium uppercase tracking-wide text-text-tertiary">Description</span><p className="mt-1.5 text-[13px] text-text-secondary leading-relaxed">{description}</p></div></>)}
                 {partsNote && (<><div className="h-px bg-border" /><div className="flex items-center justify-between"><span className="text-[12px] font-medium uppercase tracking-wide text-text-tertiary">Parts</span><span className="text-[13px] text-text-secondary">{partsNote}</span></div></>)}
-                {photos.length > 0 && (<><div className="h-px bg-border" /><div><span className="text-[12px] font-medium uppercase tracking-wide text-text-tertiary">Photos ({photos.length})</span><div className="mt-2 flex gap-2">{photos.map((p) => (<img key={p.id} src={p.url} alt="" className="h-14 w-14 rounded-lg object-cover border border-border" />))}</div></div></>)}
+                {photos.length > 0 && (<><div className="h-px bg-border" /><div><span className="text-[12px] font-medium uppercase tracking-wide text-text-tertiary">Photos ({photos.length})</span><div className="mt-2 flex gap-2">{photos.map((p) => (
+                  // Local previews use blob/data URLs and should not pass through the image optimizer.
+                  // eslint-disable-next-line @next/next/no-img-element
+                  <img key={p.id} src={p.url} alt="" className="h-14 w-14 rounded-lg object-cover border border-border" />
+                ))}</div></div></>)}
               </div>
             </Card>
 

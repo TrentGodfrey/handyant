@@ -58,7 +58,6 @@ export default function AccountPage() {
   useEffect(() => {
     if (!mounted) return;
     if (isDemo) {
-      // eslint-disable-next-line react-hooks/set-state-in-effect -- demo data is selected by the external demo-mode store
       setPastJobs(DEMO_JOBS);
       return;
     }

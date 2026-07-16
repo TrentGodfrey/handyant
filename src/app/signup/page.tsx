@@ -14,6 +14,30 @@ export default function SignupPage() {
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
   const [showGoogle, setShowGoogle] = useState(false);
+  const [inviteToken, setInviteToken] = useState("");
+  const [inviteAddress, setInviteAddress] = useState("");
+  const [inviteLoading, setInviteLoading] = useState(false);
+  const [inviteValid, setInviteValid] = useState(false);
+
+  useEffect(() => {
+    const token = new URLSearchParams(window.location.search).get("invite")?.trim() ?? "";
+    if (!token) return;
+    setInviteToken(token);
+    setInviteLoading(true);
+    fetch(`/api/home-invitations?token=${encodeURIComponent(token)}`)
+      .then(async (response) => {
+        const body = await response.json().catch(() => null);
+        if (!response.ok) throw new Error(body?.error ?? "Invitation is invalid or has expired");
+        setEmail(body.email ?? "");
+        setName(body.customerName ?? "");
+        setInviteAddress(body.address ?? "your home");
+        setInviteValid(true);
+      })
+      .catch((inviteError) => {
+        setError(inviteError instanceof Error ? inviteError.message : "Invitation is invalid or has expired");
+      })
+      .finally(() => setInviteLoading(false));
+  }, []);
 
   // If a signed-in user lands here via the back button after signup, bounce
   // them straight to /home so the empty form doesn't look like a logout state.
@@ -54,7 +78,7 @@ export default function SignupPage() {
     const res = await fetch("/api/auth/register", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ name, email, password }),
+      body: JSON.stringify({ name, email, password, inviteToken: inviteToken || undefined }),
     });
 
     if (!res.ok) {
@@ -95,6 +119,18 @@ export default function SignupPage() {
           <h1 className="text-2xl font-bold text-foreground">Create account</h1>
           <p className="text-secondary mt-1">Get started with MCQ Property Care</p>
         </div>
+
+        {inviteLoading && (
+          <div className="rounded-xl border border-primary/20 bg-primary-50 p-3 text-sm text-text-secondary">
+            Checking your secure home invitation…
+          </div>
+        )}
+        {inviteValid && (
+          <div className="rounded-xl border border-primary/20 bg-primary-50 p-3">
+            <p className="text-sm font-semibold text-text-primary">Your home is ready to connect</p>
+            <p className="mt-1 text-xs leading-relaxed text-text-secondary">Create your login to securely link {inviteAddress}.</p>
+          </div>
+        )}
 
         {showGoogle && (
           <>
@@ -145,6 +181,7 @@ export default function SignupPage() {
               value={email}
               onChange={(e) => setEmail(e.target.value)}
               required
+              readOnly={inviteValid}
               className="w-full px-4 py-3 rounded-xl border border-border bg-white text-foreground focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary"
               placeholder="you@example.com"
             />
@@ -165,7 +202,7 @@ export default function SignupPage() {
 
           <button
             type="submit"
-            disabled={loading}
+            disabled={loading || inviteLoading || (Boolean(inviteToken) && !inviteValid)}
             className="w-full py-3 rounded-xl bg-primary text-white font-semibold hover:bg-primary/90 transition disabled:opacity-50"
           >
             {loading ? "Creating account..." : "Create Account"}

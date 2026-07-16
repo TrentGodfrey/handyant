@@ -3,6 +3,7 @@ import { prisma } from "@/lib/prisma";
 import { requireUser, unauthorized, notFound, forbidden, badRequest } from "@/lib/session";
 import { BookingStatus } from "@/generated/prisma/enums";
 import { completedStatusDelta, getVisitUsage } from "@/lib/subscription-usage";
+import { decryptHomeAccess } from "@/lib/sensitive-data";
 
 export async function GET(_req: NextRequest, ctx: { params: Promise<{ id: string }> }) {
   const user = await requireUser();
@@ -21,6 +22,10 @@ export async function GET(_req: NextRequest, ctx: { params: Promise<{ id: string
       photos: true,
       reviews: true,
       invoices: true,
+      bookingNotes: {
+        include: { author: { select: { id: true, name: true, avatarUrl: true } } },
+        orderBy: { createdAt: "desc" },
+      },
     },
   });
 
@@ -30,7 +35,12 @@ export async function GET(_req: NextRequest, ctx: { params: Promise<{ id: string
   const isAssignedTech = user.role === "tech" && booking.techId === user.id;
   if (!isCustomerOwner && !isAssignedTech) return forbidden();
 
-  return Response.json(booking);
+  return Response.json({
+    ...booking,
+    techNotes: user.role === "tech" ? booking.techNotes : null,
+    bookingNotes: user.role === "tech" ? booking.bookingNotes : [],
+    home: booking.home ? decryptHomeAccess(booking.home) : null,
+  });
 }
 
 export async function PATCH(req: NextRequest, ctx: { params: Promise<{ id: string }> }) {
@@ -63,10 +73,10 @@ export async function PATCH(req: NextRequest, ctx: { params: Promise<{ id: strin
     }
   }
   if (body.techId !== undefined && isTech) data.techId = body.techId;
-  if (body.scheduledDate !== undefined) data.scheduledDate = new Date(body.scheduledDate);
-  if (body.scheduledTime !== undefined) data.scheduledTime = new Date(`1970-01-01T${body.scheduledTime}`);
-  if (body.durationMinutes !== undefined) data.durationMinutes = body.durationMinutes;
-  if (body.description !== undefined) data.description = body.description;
+  if (body.scheduledDate !== undefined && isTech) data.scheduledDate = new Date(body.scheduledDate);
+  if (body.scheduledTime !== undefined && isTech) data.scheduledTime = new Date(`1970-01-01T${body.scheduledTime}`);
+  if (body.durationMinutes !== undefined && isTech) data.durationMinutes = body.durationMinutes;
+  if (body.description !== undefined && isTech) data.description = body.description;
   if (body.customerNotes !== undefined && isCustomer) data.customerNotes = body.customerNotes;
   if (body.techNotes !== undefined && isTech) data.techNotes = body.techNotes;
   if (body.estimatedCost !== undefined && isTech) data.estimatedCost = body.estimatedCost;
@@ -107,7 +117,7 @@ export async function PATCH(req: NextRequest, ctx: { params: Promise<{ id: strin
     return updated;
   });
 
-  return Response.json(booking);
+  return Response.json({ ...booking, home: booking.home ? decryptHomeAccess(booking.home) : null });
 }
 
 export async function DELETE(_req: NextRequest, ctx: { params: Promise<{ id: string }> }) {

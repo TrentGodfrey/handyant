@@ -13,25 +13,16 @@ export async function PATCH(req: NextRequest, ctx: { params: Promise<{ id: strin
   });
   if (!task) return notFound("Task not found");
 
-  const isCustomerOwner = task.booking.customerId === user.id;
   const isAssignedTech = user.role === "tech" && task.booking.techId === user.id;
-  if (!isCustomerOwner && !isAssignedTech) return forbidden();
+  if (!isAssignedTech) return forbidden();
 
   const body = await req.json();
   const data: Record<string, unknown> = {};
 
-  if (isAssignedTech) {
-    if (body.done !== undefined) data.done = body.done;
-    if (body.label !== undefined) data.label = body.label;
-    if (body.notes !== undefined) data.notes = body.notes;
-    if (body.sortOrder !== undefined) data.sortOrder = body.sortOrder;
-  } else {
-    // Customers may only toggle `done`; label/notes/sortOrder are tech-owned.
-    if (body.done !== undefined) data.done = body.done;
-    if (body.label !== undefined || body.notes !== undefined || body.sortOrder !== undefined) {
-      return forbidden();
-    }
-  }
+  if (body.done !== undefined) data.done = body.done;
+  if (body.label !== undefined) data.label = body.label;
+  if (body.notes !== undefined) data.notes = body.notes;
+  if (body.sortOrder !== undefined) data.sortOrder = body.sortOrder;
 
   const updated = await prisma.task.update({ where: { id }, data });
   return Response.json(updated);

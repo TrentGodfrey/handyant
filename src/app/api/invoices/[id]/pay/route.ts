@@ -1,9 +1,9 @@
 import { NextRequest } from "next/server";
 import { prisma } from "@/lib/prisma";
-import { requireUser, unauthorized, notFound, forbidden } from "@/lib/session";
+import { requireTech, unauthorized, notFound } from "@/lib/session";
 
 export async function POST(_req: NextRequest, ctx: { params: Promise<{ id: string }> }) {
-  const user = await requireUser();
+  const user = await requireTech();
   if (!user) return unauthorized();
   const { id } = await ctx.params;
 
@@ -12,7 +12,6 @@ export async function POST(_req: NextRequest, ctx: { params: Promise<{ id: strin
     include: { booking: true },
   });
   if (!invoice) return notFound("Invoice not found");
-  if (invoice.customerId !== user.id) return forbidden();
 
   const updated = await prisma.invoice.update({
     where: { id },

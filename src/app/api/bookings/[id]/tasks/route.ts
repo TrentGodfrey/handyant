@@ -23,13 +23,12 @@ export async function GET(_req: NextRequest, ctx: { params: Promise<{ id: string
 export async function POST(req: NextRequest, ctx: { params: Promise<{ id: string }> }) {
   const user = await requireUser();
   if (!user) return unauthorized();
+  if (user.role !== "tech") return forbidden();
   const { id } = await ctx.params;
 
   const booking = await prisma.booking.findUnique({ where: { id } });
   if (!booking) return notFound("Booking not found");
-  if (booking.customerId !== user.id && booking.techId !== user.id && user.role !== "tech") {
-    return forbidden();
-  }
+  if (booking.techId !== user.id) return forbidden();
 
   const body = await req.json();
   if (!body.label) return badRequest("Label is required");

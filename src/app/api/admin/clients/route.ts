@@ -1,5 +1,6 @@
 import { NextRequest } from "next/server";
 import { prisma } from "@/lib/prisma";
+import { decryptHomeAccess, encryptSensitiveValue } from "@/lib/sensitive-data";
 import { requireTech, unauthorized } from "@/lib/session";
 import { SubscriptionPlan } from "@/generated/prisma/enums";
 
@@ -27,7 +28,7 @@ export async function GET(req: NextRequest) {
     email: c.email,
     phone: c.phone,
     avatarUrl: c.avatarUrl,
-    primaryHome: c.homes[0] ?? null,
+    primaryHome: c.homes[0] ? decryptHomeAccess(c.homes[0]) : null,
     subscription: c.subscriptions[0] ?? null,
     bookingCount: c.bookingsAsCustomer.length,
     lastBooking: c.bookingsAsCustomer.sort(
@@ -104,7 +105,7 @@ export async function POST(req: NextRequest) {
         state: body.state ?? "TX",
         zip: body.zip ?? null,
         notes: body.notes ?? null,
-        gateCode: body.gateCode ?? null,
+        gateCode: encryptSensitiveValue(body.gateCode ?? null),
         yearBuilt: body.yearBuilt ?? null,
       },
     });
@@ -133,5 +134,14 @@ export async function POST(req: NextRequest) {
     }
   }
 
-  return Response.json({ client, home }, { status: 201 });
+  return Response.json({
+    client: {
+      id: client.id,
+      name: client.name,
+      email: client.email,
+      phone: client.phone,
+      avatarUrl: client.avatarUrl,
+    },
+    home: home ? decryptHomeAccess(home) : null,
+  }, { status: 201 });
 }

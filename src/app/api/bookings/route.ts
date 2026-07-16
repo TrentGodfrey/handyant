@@ -2,6 +2,7 @@ import { NextRequest } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { requireUser, unauthorized } from "@/lib/session";
 import { sendEmail, emailShell, escapeHtml } from "@/lib/email";
+import { decryptHomeAccess } from "@/lib/sensitive-data";
 
 export async function GET() {
   const user = await requireUser();
@@ -19,7 +20,11 @@ export async function GET() {
     orderBy: { scheduledDate: "desc" },
   });
 
-  return Response.json(bookings);
+  return Response.json(bookings.map((booking) => ({
+    ...booking,
+    techNotes: user.role === "tech" ? booking.techNotes : null,
+    home: booking.home ? decryptHomeAccess(booking.home) : null,
+  })));
 }
 
 export async function POST(req: NextRequest) {
@@ -30,6 +35,21 @@ export async function POST(req: NextRequest) {
 
   const isTechCreating = user.role === "tech" && typeof body.customerId === "string" && body.customerId.length > 0;
   const customerId = isTechCreating ? (body.customerId as string) : user.id;
+
+  const customer = await prisma.user.findFirst({ where: { id: customerId, role: "customer" }, select: { id: true } });
+  if (!customer) return Response.json({ error: "Customer not found" }, { status: 404 });
+  if (typeof body.homeId === "string" && body.homeId) {
+    const ownedHome = await prisma.home.findFirst({ where: { id: body.homeId, customerId }, select: { id: true } });
+    if (!ownedHome) return Response.json({ error: "Home does not belong to this customer" }, { status: 403 });
+  }
+  const scheduledDate = new Date(body.scheduledDate);
+  const scheduledTime = new Date(`1970-01-01T${body.scheduledTime}`);
+  if (!body.scheduledDate || Number.isNaN(scheduledDate.getTime())) {
+    return Response.json({ error: "A valid scheduled date is required" }, { status: 400 });
+  }
+  if (!body.scheduledTime || Number.isNaN(scheduledTime.getTime())) {
+    return Response.json({ error: "A valid scheduled time is required" }, { status: 400 });
+  }
 
   // Auto-assign a tech for customer-created bookings. For now there's a single
   // default tech (Anthony); pick the earliest tech in the system. If none
@@ -59,8 +79,8 @@ export async function POST(req: NextRequest) {
       customerId,
       techId: assignedTechId,
       homeId: body.homeId ?? null,
-      scheduledDate: new Date(body.scheduledDate),
-      scheduledTime: new Date(`1970-01-01T${body.scheduledTime}`),
+      scheduledDate,
+      scheduledTime,
       description: body.description ?? null,
       customerNotes: body.customerNotes ?? null,
       durationMinutes: body.durationMinutes ?? 120,
@@ -152,5 +172,8 @@ export async function POST(req: NextRequest) {
     }
   }
 
-  return Response.json(booking, { status: 201 });
+  return Response.json({
+    ...booking,
+    home: booking.home ? decryptHomeAccess(booking.home) : null,
+  }, { status: 201 });
 }

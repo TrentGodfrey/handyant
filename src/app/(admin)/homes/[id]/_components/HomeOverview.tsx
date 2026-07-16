@@ -28,6 +28,8 @@ export default function HomeOverview({
   const [email, setEmail] = useState(home.customer.email ?? "");
   const [savingEmail, setSavingEmail] = useState(false);
   const [emailError, setEmailError] = useState("");
+  const [creatingInvite, setCreatingInvite] = useState(false);
+  const [inviteMessage, setInviteMessage] = useState("");
 
   async function saveCustomerEmail() {
     setSavingEmail(true);
@@ -48,6 +50,31 @@ export default function HomeOverview({
       setEmailError(error instanceof Error ? error.message : "Could not save email");
     } finally {
       setSavingEmail(false);
+    }
+  }
+
+  async function createInvitation() {
+    setCreatingInvite(true);
+    setEmailError("");
+    setInviteMessage("");
+    try {
+      const response = await fetch(`/api/homes/${home.id}/invitation`, { method: "POST" });
+      const body = await response.json().catch(() => null);
+      if (!response.ok) throw new Error(body?.error ?? "Could not create invitation");
+      const shareText = `Create your MCQ Property Care login and link your home: ${body.inviteUrl}`;
+      if (navigator.share) {
+        await navigator.share({ title: "MCQ Property Care invitation", text: shareText, url: body.inviteUrl });
+        setInviteMessage(body.emailSent ? "Invitation emailed and shared." : "Secure invitation shared.");
+      } else {
+        await navigator.clipboard.writeText(body.inviteUrl);
+        setInviteMessage(body.emailSent ? "Invitation emailed; link also copied." : "Secure invitation link copied.");
+      }
+      await onCustomerSaved();
+    } catch (error) {
+      if (error instanceof DOMException && error.name === "AbortError") return;
+      setEmailError(error instanceof Error ? error.message : "Could not create invitation");
+    } finally {
+      setCreatingInvite(false);
     }
   }
   const customerInitials = initialsFor(home.customer.name);
@@ -243,12 +270,23 @@ export default function HomeOverview({
                       <>
                         <p className="break-words text-[10px] leading-relaxed text-text-secondary">
                           {home.customer.email
-                            ? `Have them sign up with ${home.customer.email}; this home will link automatically.`
-                            : "Add their email first so the home can link when they sign up."}
+                            ? `Create a private link for ${home.customer.email}. It expires after 7 days and works once.`
+                            : "Add their email first, then create a secure signup invitation."}
                         </p>
+                        {home.customer.email && (
+                          <button type="button" disabled={creatingInvite} onClick={createInvitation} className="mt-2 min-h-11 w-full rounded-lg bg-primary px-3 text-[11px] font-bold text-white disabled:opacity-50">
+                            {creatingInvite ? "Creating…" : home.pendingInvitation ? "Replace & share invite" : "Create & share invite"}
+                          </button>
+                        )}
                         <button type="button" onClick={() => setEditingEmail(true)} className="mt-1.5 min-h-10 rounded-lg border border-warning/30 bg-surface px-3 text-[11px] font-bold text-text-primary">
                           {home.customer.email ? "Change signup email" : "Add signup email"}
                         </button>
+                        {home.pendingInvitation && (
+                          <p className="mt-1.5 text-[10px] text-text-tertiary">
+                            Invite pending until {new Date(home.pendingInvitation.expiresAt).toLocaleDateString()}.
+                          </p>
+                        )}
+                        {inviteMessage && <p className="mt-1.5 text-[10px] font-semibold text-success">{inviteMessage}</p>}
                       </>
                     )}
                   </div>

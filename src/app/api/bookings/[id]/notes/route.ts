@@ -5,14 +5,14 @@ import { requireUser, unauthorized, notFound, forbidden, badRequest } from "@/li
 export async function GET(_req: NextRequest, ctx: { params: Promise<{ id: string }> }) {
   const user = await requireUser();
   if (!user) return unauthorized();
+  if (user.role !== "tech") return forbidden();
   const { id } = await ctx.params;
 
   const booking = await prisma.booking.findUnique({ where: { id } });
   if (!booking) return notFound("Booking not found");
 
-  const isCustomerOwner = booking.customerId === user.id;
   const isAssignedTech = user.role === "tech" && booking.techId === user.id;
-  if (!isCustomerOwner && !isAssignedTech) return forbidden();
+  if (!isAssignedTech) return forbidden();
 
   const notes = await prisma.bookingNote.findMany({
     where: { bookingId: id },
@@ -32,6 +32,7 @@ export async function POST(req: NextRequest, ctx: { params: Promise<{ id: string
 
   const booking = await prisma.booking.findUnique({ where: { id } });
   if (!booking) return notFound("Booking not found");
+  if (booking.techId !== user.id) return forbidden();
 
   const body = await req.json();
   if (!body.text || typeof body.text !== "string" || body.text.trim().length === 0) {

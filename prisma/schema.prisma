@@ -43,6 +43,22 @@ enum SubscriptionPlan {
   @@map("subscription_plan")
 }
 
+enum PaymentCheckoutStatus {
+  pending
+  paid
+  failed
+  cancelled
+
+  @@map("payment_checkout_status")
+}
+
+enum PaymentCheckoutKind {
+  membership
+  invoice
+
+  @@map("payment_checkout_kind")
+}
+
 enum NotificationType {
   info
   success
@@ -72,38 +88,40 @@ enum UserRole {
 }
 
 model User {
-  id                       String         @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
-  email                    String?        @unique
-  passwordHash             String?        @map("password_hash")
+  id                       String            @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  email                    String?           @unique
+  passwordHash             String?           @map("password_hash")
   name                     String
   phone                    String?
-  avatarUrl                String?        @map("avatar_url")
-  role                     UserRole       @default(customer)
-  googleId                 String?        @unique @map("google_id")
-  emailVerified            Boolean?       @default(false) @map("email_verified")
-  passwordResetToken       String?        @map("password_reset_token")
-  passwordResetExpires     DateTime?      @map("password_reset_expires") @db.Timestamptz(6)
-  emailVerificationToken   String?        @map("email_verification_token")
-  emailVerificationExpires DateTime?      @map("email_verification_expires") @db.Timestamptz(6)
-  pendingEmail             String?        @map("pending_email")
-  lastSeenAt               DateTime?      @map("last_seen_at") @db.Timestamptz(6)
-  createdAt                DateTime?      @default(now()) @map("created_at") @db.Timestamptz(6)
-  updatedAt                DateTime?      @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(6)
-  bookingsAsCustomer       Booking[]      @relation("CustomerBookings")
-  bookingsAsTech           Booking[]      @relation("TechBookings")
-  convosAsCustomer         Conversation[] @relation("CustomerConversations")
-  convosAsTech             Conversation[] @relation("TechConversations")
+  avatarUrl                String?           @map("avatar_url")
+  role                     UserRole          @default(customer)
+  googleId                 String?           @unique @map("google_id")
+  emailVerified            Boolean?          @default(false) @map("email_verified")
+  passwordResetToken       String?           @map("password_reset_token")
+  passwordResetExpires     DateTime?         @map("password_reset_expires") @db.Timestamptz(6)
+  emailVerificationToken   String?           @map("email_verification_token")
+  emailVerificationExpires DateTime?         @map("email_verification_expires") @db.Timestamptz(6)
+  pendingEmail             String?           @map("pending_email")
+  lastSeenAt               DateTime?         @map("last_seen_at") @db.Timestamptz(6)
+  createdAt                DateTime?         @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt                DateTime?         @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(6)
+  bookingsAsCustomer       Booking[]         @relation("CustomerBookings")
+  bookingsAsTech           Booking[]         @relation("TechBookings")
+  convosAsCustomer         Conversation[]    @relation("CustomerConversations")
+  convosAsTech             Conversation[]    @relation("TechConversations")
   homes                    Home[]
   invoices                 Invoice[]
   sentMessages             Message[]
   notifications            Notification[]
-  reviewsGiven             Review[]       @relation("CustomerReviews")
-  reviewsReceived          Review[]       @relation("TechReviews")
+  reviewsGiven             Review[]          @relation("CustomerReviews")
+  reviewsReceived          Review[]          @relation("TechReviews")
   serviceAreas             ServiceArea[]
   subscriptions            Subscription[]
-  bookingNotes             BookingNote[]  @relation("AuthoredBookingNotes")
-  notifyPrefs              Json?          @map("notify_prefs")
-  appointmentReminders     Json?          @map("appointment_reminders")
+  bookingNotes             BookingNote[]     @relation("AuthoredBookingNotes")
+  notifyPrefs              Json?             @map("notify_prefs")
+  appointmentReminders     Json?             @map("appointment_reminders")
+  createdHomeInvitations   HomeInvitation[]  @relation("CreatedHomeInvitations")
+  paymentCheckouts         PaymentCheckout[]
 
   @@index([passwordResetToken], map: "idx_users_password_reset_token")
   @@index([emailVerificationToken], map: "idx_users_email_verification_token")
@@ -137,6 +155,8 @@ model Home {
   techNotes        HomeNote[]
   appliances       HomeAppliance[]
   subscriptions    Subscription[]
+  invitations      HomeInvitation[]
+  paymentCheckouts PaymentCheckout[]
 
   @@index([customerId], map: "idx_homes_customer")
   @@map("homes")
@@ -355,19 +375,20 @@ model Review {
 }
 
 model Invoice {
-  id         String        @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
-  bookingId  String        @map("booking_id") @db.Uuid
-  customerId String        @map("customer_id") @db.Uuid
-  number     String        @unique
-  subtotal   Decimal       @db.Decimal(10, 2)
-  tax        Decimal?      @default(0) @db.Decimal(10, 2)
-  total      Decimal       @db.Decimal(10, 2)
-  status     InvoiceStatus @default(draft)
-  sentAt     DateTime?     @map("sent_at") @db.Timestamptz(6)
-  paidAt     DateTime?     @map("paid_at") @db.Timestamptz(6)
-  createdAt  DateTime?     @default(now()) @map("created_at") @db.Timestamptz(6)
-  booking    Booking       @relation(fields: [bookingId], references: [id], onDelete: NoAction, onUpdate: NoAction)
-  customer   User          @relation(fields: [customerId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  id               String            @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  bookingId        String            @map("booking_id") @db.Uuid
+  customerId       String            @map("customer_id") @db.Uuid
+  number           String            @unique
+  subtotal         Decimal           @db.Decimal(10, 2)
+  tax              Decimal?          @default(0) @db.Decimal(10, 2)
+  total            Decimal           @db.Decimal(10, 2)
+  status           InvoiceStatus     @default(draft)
+  sentAt           DateTime?         @map("sent_at") @db.Timestamptz(6)
+  paidAt           DateTime?         @map("paid_at") @db.Timestamptz(6)
+  createdAt        DateTime?         @default(now()) @map("created_at") @db.Timestamptz(6)
+  booking          Booking           @relation(fields: [bookingId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  customer         User              @relation(fields: [customerId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  paymentCheckouts PaymentCheckout[]
 
   @@index([customerId], map: "idx_invoices_customer")
   @@index([bookingId], map: "idx_invoices_booking")
@@ -417,6 +438,60 @@ model Subscription {
   @@index([homeId, status], map: "idx_subscriptions_home_status")
   @@index([customerId, status], map: "idx_subscriptions_customer_status")
   @@map("subscriptions")
+}
+
+model HomeInvitation {
+  id          String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  homeId      String    @map("home_id") @db.Uuid
+  email       String
+  tokenHash   String    @unique @map("token_hash")
+  expiresAt   DateTime  @map("expires_at") @db.Timestamptz(6)
+  acceptedAt  DateTime? @map("accepted_at") @db.Timestamptz(6)
+  createdById String    @map("created_by_id") @db.Uuid
+  createdAt   DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
+  home        Home      @relation(fields: [homeId], references: [id], onDelete: Cascade, onUpdate: NoAction)
+  createdBy   User      @relation("CreatedHomeInvitations", fields: [createdById], references: [id], onDelete: NoAction, onUpdate: NoAction)
+
+  @@index([homeId, acceptedAt, expiresAt], map: "idx_home_invitations_home_status")
+  @@index([email, acceptedAt], map: "idx_home_invitations_email_status")
+  @@map("home_invitations")
+}
+
+model PaymentCheckout {
+  id                  String                @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  customerId          String                @map("customer_id") @db.Uuid
+  homeId              String?               @map("home_id") @db.Uuid
+  invoiceId           String?               @map("invoice_id") @db.Uuid
+  kind                PaymentCheckoutKind   @default(membership)
+  plan                SubscriptionPlan?
+  amountCents         Int                   @map("amount_cents")
+  currency            String                @default("USD")
+  status              PaymentCheckoutStatus @default(pending)
+  idempotencyKey      String                @unique @map("idempotency_key")
+  squarePaymentLinkId String?               @unique @map("square_payment_link_id")
+  squareOrderId       String?               @unique @map("square_order_id")
+  squarePaymentId     String?               @unique @map("square_payment_id")
+  paidAt              DateTime?             @map("paid_at") @db.Timestamptz(6)
+  createdAt           DateTime              @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt           DateTime              @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(6)
+  customer            User                  @relation(fields: [customerId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  home                Home?                 @relation(fields: [homeId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  invoice             Invoice?              @relation(fields: [invoiceId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+
+  @@index([customerId, createdAt], map: "idx_payment_checkouts_customer_created")
+  @@index([homeId, status], map: "idx_payment_checkouts_home_status")
+  @@index([invoiceId, status], map: "idx_payment_checkouts_invoice_status")
+  @@map("payment_checkouts")
+}
+
+model SquareWebhookEvent {
+  id          String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  eventId     String   @unique @map("event_id")
+  type        String
+  payloadHash String   @map("payload_hash")
+  processedAt DateTime @default(now()) @map("processed_at") @db.Timestamptz(6)
+
+  @@map("square_webhook_events")
 }
 
 model BusinessProfile {

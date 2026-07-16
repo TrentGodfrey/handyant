@@ -1,6 +1,7 @@
 import { NextRequest } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { requireUser, unauthorized, notFound, forbidden } from "@/lib/session";
+import { decryptHomeAccess, encryptSensitiveValue } from "@/lib/sensitive-data";
 
 /**
  * Returns true if `user` is allowed to read/edit this home:
@@ -54,6 +55,12 @@ export async function GET(_req: NextRequest, ctx: { params: Promise<{ id: string
       todos: { orderBy: [{ sortOrder: "asc" }, { createdAt: "desc" }] },
       techNotes: { orderBy: { createdAt: "desc" } },
       appliances: { orderBy: { createdAt: "asc" } },
+      invitations: {
+        where: { acceptedAt: null, expiresAt: { gt: new Date() } },
+        orderBy: { createdAt: "desc" },
+        take: 1,
+        select: { email: true, expiresAt: true, createdAt: true },
+      },
     },
   });
 
@@ -62,10 +69,14 @@ export async function GET(_req: NextRequest, ctx: { params: Promise<{ id: string
 
   const { passwordHash, googleId, ...customer } = home.customer;
   const responseHome = {
-    ...home,
+    ...decryptHomeAccess(home),
+    bookings: home.bookings.map((booking) => user.role === "tech" ? booking : { ...booking, techNotes: null }),
+    techNotes: user.role === "tech" ? home.techNotes : [],
     customer: { ...customer, hasLogin: Boolean(passwordHash || googleId) },
     activeSubscription: home.subscriptions[0] ?? null,
     subscriptions: undefined,
+    pendingInvitation: user.role === "tech" ? home.invitations[0] ?? null : null,
+    invitations: undefined,
   };
 
   // Backfill: if this is the customer's primary (only) home and they have
@@ -86,7 +97,8 @@ export async function GET(_req: NextRequest, ctx: { params: Promise<{ id: string
         },
       });
       if (orphanBookings.length) {
-        const merged = [...responseHome.bookings, ...orphanBookings].sort(
+        const sanitizedOrphans = orphanBookings.map((booking) => ({ ...booking, techNotes: null }));
+        const merged = [...responseHome.bookings, ...sanitizedOrphans].sort(
           (a, b) => new Date(b.scheduledDate).getTime() - new Date(a.scheduledDate).getTime(),
         );
         return Response.json({ ...responseHome, bookings: merged });
@@ -125,9 +137,11 @@ export async function PATCH(req: NextRequest, ctx: { params: Promise<{ id: strin
   ]) {
     if (body[key] !== undefined) data[key] = body[key];
   }
+  if (body.gateCode !== undefined) data.gateCode = encryptSensitiveValue(body.gateCode);
+  if (body.wifiPassword !== undefined) data.wifiPassword = encryptSensitiveValue(body.wifiPassword);
 
   const updated = await prisma.home.update({ where: { id }, data });
-  return Response.json(updated);
+  return Response.json(decryptHomeAccess(updated));
 }
 
 export async function DELETE(_req: NextRequest, ctx: { params: Promise<{ id: string }> }) {

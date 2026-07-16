@@ -1,6 +1,7 @@
 import { NextRequest } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { requireUser, unauthorized, badRequest, forbidden } from "@/lib/session";
+import { decryptHomeAccess } from "@/lib/sensitive-data";
 
 export async function GET() {
   const user = await requireUser();
@@ -24,7 +25,13 @@ export async function GET() {
     orderBy: { createdAt: "desc" },
   });
 
-  return Response.json(invoices);
+  return Response.json(invoices.map((invoice) => ({
+    ...invoice,
+    booking: {
+      ...invoice.booking,
+      home: invoice.booking.home ? decryptHomeAccess(invoice.booking.home) : null,
+    },
+  })));
 }
 
 export async function POST(req: NextRequest) {
