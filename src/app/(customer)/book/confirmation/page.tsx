@@ -158,7 +158,7 @@ function DemoConfirmation() {
   return (
     <div className="min-h-screen bg-background">
       {/* Animated success hero */}
-      <div className="bg-gradient-to-b from-primary-50 to-background px-5 pt-14 pb-8 flex flex-col items-center">
+      <div className="px-5 pt-14 pb-8 flex flex-col items-center">
         <div className="relative mb-6">
           <div
             className="flex h-24 w-24 items-center justify-center rounded-full bg-success shadow-[0_4px_24px_rgba(22,163,74,0.3)]"
@@ -166,8 +166,6 @@ function DemoConfirmation() {
           >
             <Check size={42} className="text-white" strokeWidth={3} />
           </div>
-          <div className="absolute inset-0 rounded-full border-4 border-success/20" style={{ animation: "ripple 1.2s ease-out 0.3s infinite" }} />
-          <div className="absolute inset-0 rounded-full border-2 border-success/10" style={{ animation: "ripple 1.2s ease-out 0.6s infinite" }} />
         </div>
 
         <h1 className="text-[28px] font-bold text-text-primary text-center">You&apos;re all set!</h1>
@@ -183,7 +181,6 @@ function DemoConfirmation() {
 
       <style>{`
         @keyframes scale-in { from { transform: scale(0); opacity: 0; } to { transform: scale(1); opacity: 1; } }
-        @keyframes ripple { 0% { transform: scale(1); opacity: 1; } 100% { transform: scale(1.6); opacity: 0; } }
       `}</style>
 
       <div className="px-5 py-5 space-y-5">
@@ -387,7 +384,7 @@ function RealConfirmation() {
 
   return (
     <div className="min-h-screen bg-background">
-      <div className="bg-gradient-to-b from-primary-50 to-background px-5 pt-14 pb-8 flex flex-col items-center">
+      <div className="px-5 pt-14 pb-8 flex flex-col items-center">
         <div className="relative mb-6">
           <div
             className="flex h-24 w-24 items-center justify-center rounded-full bg-success shadow-[0_4px_24px_rgba(22,163,74,0.3)]"
@@ -395,8 +392,6 @@ function RealConfirmation() {
           >
             <Check size={42} className="text-white" strokeWidth={3} />
           </div>
-          <div className="absolute inset-0 rounded-full border-4 border-success/20" style={{ animation: "ripple 1.2s ease-out 0.3s infinite" }} />
-          <div className="absolute inset-0 rounded-full border-2 border-success/10" style={{ animation: "ripple 1.2s ease-out 0.6s infinite" }} />
         </div>
 
         <h1 className="text-[28px] font-bold text-text-primary text-center">You&apos;re all set!</h1>
@@ -412,7 +407,6 @@ function RealConfirmation() {
 
       <style>{`
         @keyframes scale-in { from { transform: scale(0); opacity: 0; } to { transform: scale(1); opacity: 1; } }
-        @keyframes ripple { 0% { transform: scale(1); opacity: 1; } 100% { transform: scale(1.6); opacity: 0; } }
       `}</style>
 
       <div className="px-5 py-5 space-y-5">

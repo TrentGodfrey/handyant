@@ -2,7 +2,7 @@ import Link from "next/link";
 import {
   ArrowRight, CheckCircle2, Star, Shield, Clock,
   Droplet, Zap, Hammer, PaintBucket, Square, Refrigerator, Trees, Wifi,
-  CalendarPlus, MessageCircle, Sparkles, MapPin, ChevronRight,
+  CalendarPlus, MessageCircle, MapPin, ChevronRight,
 } from "lucide-react";
 import { DEMO_TECH } from "@/lib/demoData";
 import { WHY_MCQ, PLANS, VISIT_USES, ONE_OFF_PAYMENT_URL } from "@/lib/plans";
@@ -157,7 +157,7 @@ export default function LandingPage() {
                   href="/book?type=walkthrough"
                   className="inline-flex items-center gap-1.5 rounded-full border border-success/30 bg-success-light/60 px-3.5 py-1.5 text-[12px] font-semibold text-success hover:bg-success-light transition-colors"
                 >
-                  <Sparkles size={12} />
+                  <CheckCircle2 size={12} />
                   Free home walk-through
                 </Link>
               </div>
@@ -197,13 +197,13 @@ export default function LandingPage() {
                       </div>
                     </div>
 
-                    <div className="rounded-xl bg-gradient-to-r from-primary to-primary-dark p-3 mb-3">
+                    <div className="rounded-xl bg-primary p-3 mb-3">
                       <p className="text-[11px] font-bold text-white">Anthony is confirmed</p>
                       <p className="text-[9px] text-white/70 mt-0.5">Tap to track on the day of your visit</p>
                     </div>
 
                     <p className="text-[9px] font-semibold text-text-secondary uppercase tracking-wider mb-1.5">Next Visit</p>
-                    <div className="rounded-xl border border-primary-100 bg-gradient-to-br from-primary-50 to-white p-3">
+                    <div className="rounded-xl border border-border bg-white p-3">
                       <div className="flex items-start gap-2 mb-2.5">
                         <div className="h-8 w-8 rounded-full bg-primary flex items-center justify-center shrink-0">
                           <span className="text-[11px] font-bold text-white">A</span>
@@ -395,7 +395,7 @@ export default function LandingPage() {
                   key={plan.id}
                   className={`relative rounded-2xl p-7 flex flex-col ${
                     isPopular
-                      ? "border-2 border-primary bg-gradient-to-br from-primary-50 to-white shadow-[0_8px_24px_rgba(79,149,152,0.18)]"
+                      ? "border-2 border-primary bg-white shadow-[0_8px_24px_rgba(0,0,0,0.08)]"
                       : "border border-border bg-white"
                   }`}
                 >
@@ -437,7 +437,6 @@ export default function LandingPage() {
                           : "bg-primary text-white hover:bg-primary-dark"
                       }`}
                     >
-                      {isPopular && <Sparkles size={15} />}
                       Pay ${plan.annualPrice.toLocaleString()} & activate
                     </a>
                   ) : (
@@ -449,7 +448,6 @@ export default function LandingPage() {
                           : "border border-border bg-white text-text-primary hover:bg-surface-secondary"
                       }`}
                     >
-                      {isPopular && <Sparkles size={15} />}
                       Get started
                     </Link>
                   )}
