@@ -1,6 +1,7 @@
 import { NextRequest } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { requireUser, unauthorized, notFound, forbidden } from "@/lib/session";
+import { deleteLocalUploadFiles } from "@/lib/upload-storage";
 
 export async function DELETE(
   _req: NextRequest,
@@ -37,5 +38,6 @@ export async function DELETE(
   }
 
   await prisma.photo.delete({ where: { id } });
+  await deleteLocalUploadFiles([photo.url]);
   return Response.json({ ok: true });
 }

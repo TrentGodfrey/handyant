@@ -1,25 +1,30 @@
 "use client";
 
 import Card from "@/components/Card";
-import { Plus, X } from "lucide-react";
+import { ImagePlus, Plus, X } from "lucide-react";
 import type { ApiPhoto } from "./types";
+import type { ChangeEvent } from "react";
 
 interface PhotosProps {
   photos: ApiPhoto[];
   showAddPhoto: boolean;
-  setShowAddPhoto: (v: boolean | ((p: boolean) => boolean)) => void;
-  newPhotoUrl: string;
-  setNewPhotoUrl: (v: string) => void;
+  onOpenAddPhoto: () => void;
+  onCancelAddPhoto: () => void;
+  newPhotoDataUrl: string;
+  newPhotoFileName: string;
   newPhotoLabel: string;
   setNewPhotoLabel: (v: string) => void;
+  photoError: string | null;
+  preparingPhoto: boolean;
   savingPhoto: boolean;
+  selectPhoto: (event: ChangeEvent<HTMLInputElement>) => void;
   addPhoto: () => void;
 }
 
 export default function Photos({
-  photos, showAddPhoto, setShowAddPhoto,
-  newPhotoUrl, setNewPhotoUrl, newPhotoLabel, setNewPhotoLabel,
-  savingPhoto, addPhoto,
+  photos, showAddPhoto, onOpenAddPhoto, onCancelAddPhoto,
+  newPhotoDataUrl, newPhotoFileName, newPhotoLabel, setNewPhotoLabel,
+  photoError, preparingPhoto, savingPhoto, selectPhoto, addPhoto,
 }: PhotosProps) {
   return (
     <section className="mb-6">
@@ -31,7 +36,8 @@ export default function Photos({
           </span>
         </h2>
         <button
-          onClick={() => setShowAddPhoto((v) => !v)}
+          type="button"
+          onClick={showAddPhoto ? onCancelAddPhoto : onOpenAddPhoto}
           className="flex items-center gap-1 text-[12px] font-semibold text-primary active:opacity-70 transition-opacity"
         >
           {showAddPhoto ? <X size={13} /> : <Plus size={13} />}
@@ -40,28 +46,59 @@ export default function Photos({
       </div>
 
       {showAddPhoto && (
-        <div className="mb-3 rounded-xl border border-primary-200 bg-primary-50 p-3 space-y-2">
-          <input
-            type="url"
-            value={newPhotoUrl}
-            onChange={(e) => setNewPhotoUrl(e.target.value)}
-            placeholder="Photo URL (https://...)"
-            className="w-full rounded-lg border border-border bg-white px-3 py-2 text-[13px] text-text-primary placeholder:text-text-tertiary focus:outline-none focus:border-primary"
-          />
+        <div className="mb-3 space-y-3 rounded-xl border border-primary-200 bg-primary-50 p-3">
+          {newPhotoDataUrl ? (
+            <div className="flex items-center gap-3 rounded-xl border border-border bg-surface p-2">
+              {/* eslint-disable-next-line @next/next/no-img-element */}
+              <img
+                src={newPhotoDataUrl}
+                alt="Selected photo preview"
+                className="h-16 w-16 shrink-0 rounded-lg object-cover"
+              />
+              <div className="min-w-0 flex-1">
+                <p className="truncate text-[12px] font-semibold text-text-primary">{newPhotoFileName}</p>
+                <label className="mt-1 inline-flex min-h-9 cursor-pointer items-center text-[12px] font-semibold text-primary">
+                  Choose a different photo
+                  <input type="file" accept="image/*" className="sr-only" onChange={selectPhoto} />
+                </label>
+              </div>
+            </div>
+          ) : (
+            <label className="flex min-h-24 cursor-pointer flex-col items-center justify-center rounded-xl border border-dashed border-primary/35 bg-surface px-4 py-4 text-center active:bg-primary-50">
+              <ImagePlus size={24} className="text-primary" />
+              <span className="mt-2 text-[13px] font-semibold text-primary">
+                {preparingPhoto ? "Preparing photo…" : "Choose photo from phone"}
+              </span>
+              <span className="mt-1 text-[11px] text-text-tertiary">Camera or photo library</span>
+              <input
+                type="file"
+                accept="image/*"
+                className="sr-only"
+                disabled={preparingPhoto}
+                onChange={selectPhoto}
+              />
+            </label>
+          )}
           <input
             type="text"
             value={newPhotoLabel}
             onChange={(e) => setNewPhotoLabel(e.target.value)}
             placeholder="Caption (optional)"
-            className="w-full rounded-lg border border-border bg-white px-3 py-2 text-[13px] text-text-primary placeholder:text-text-tertiary focus:outline-none focus:border-primary"
+            className="min-h-11 w-full rounded-lg border border-border bg-white px-3 py-2.5 text-[13px] text-text-primary placeholder:text-text-tertiary focus:outline-none focus:border-primary"
           />
+          {photoError && (
+            <p role="alert" className="rounded-lg bg-error-light px-3 py-2 text-[12px] font-medium text-error">
+              {photoError}
+            </p>
+          )}
           <div className="flex justify-end">
             <button
+              type="button"
               onClick={addPhoto}
-              disabled={!newPhotoUrl.trim() || savingPhoto}
-              className="rounded-lg bg-primary px-4 py-1.5 text-[12px] font-semibold text-white disabled:opacity-40 active:bg-primary-dark transition-colors"
+              disabled={!newPhotoDataUrl || preparingPhoto || savingPhoto}
+              className="min-h-11 rounded-lg bg-primary px-5 py-2.5 text-[13px] font-semibold text-white disabled:opacity-40 active:bg-primary-dark transition-colors"
             >
-              {savingPhoto ? "Saving…" : "Save Photo"}
+              {savingPhoto ? "Uploading…" : "Add Photo"}
             </button>
           </div>
         </div>

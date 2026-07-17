@@ -2,6 +2,8 @@ import { NextRequest } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { requireUser, unauthorized, notFound, forbidden } from "@/lib/session";
 import { decryptHomeAccess, encryptSensitiveValue } from "@/lib/sensitive-data";
+import { isConfirmedHomeHistoryDeletion } from "@/lib/home-deletion";
+import { deleteLocalUploadFiles } from "@/lib/upload-storage";
 
 /**
  * Returns true if `user` is allowed to read/edit this home:
@@ -144,23 +146,88 @@ export async function PATCH(req: NextRequest, ctx: { params: Promise<{ id: strin
   return Response.json(decryptHomeAccess(updated));
 }
 
-export async function DELETE(_req: NextRequest, ctx: { params: Promise<{ id: string }> }) {
+export async function DELETE(req: NextRequest, ctx: { params: Promise<{ id: string }> }) {
   const user = await requireUser();
   if (!user) return unauthorized();
   const { id } = await ctx.params;
 
-  const home = await prisma.home.findUnique({ where: { id } });
+  const home = await prisma.home.findUnique({
+    where: { id },
+    include: {
+      bookings: {
+        select: {
+          id: true,
+          invoices: { select: { id: true } },
+          photos: { select: { url: true } },
+        },
+      },
+      photos: { select: { url: true } },
+      paymentCheckouts: { select: { id: true } },
+      subscriptions: { select: { id: true } },
+    },
+  });
   if (!home) return notFound("Home not found");
   if (!(await canAccessHome(user, home))) return forbidden();
 
-  const bookingCount = await prisma.booking.count({ where: { homeId: id } });
-  if (bookingCount > 0) {
+  const hasHistory =
+    home.bookings.length > 0 ||
+    home.paymentCheckouts.length > 0 ||
+    home.subscriptions.length > 0;
+  let body: unknown = null;
+  try {
+    body = await req.json();
+  } catch {
+    // An ordinary empty-home deletion does not require a request body.
+  }
+  const deleteHistory = isConfirmedHomeHistoryDeletion(body);
+
+  if (hasHistory && !deleteHistory) {
     return Response.json(
-      { error: "This home has visit history and cannot be deleted." },
+      {
+        error: "This home has visit or payment history. Staff can permanently delete it using the history confirmation.",
+        code: "HOME_HAS_HISTORY",
+        canDeleteHistory: user.role === "tech",
+      },
       { status: 409 },
     );
   }
 
-  await prisma.home.delete({ where: { id } });
-  return Response.json({ ok: true });
+  if (deleteHistory && user.role !== "tech") return forbidden();
+
+  const photoUrls = [
+    ...home.photos.map((photo) => photo.url),
+    ...home.bookings.flatMap((booking) => booking.photos.map((photo) => photo.url)),
+  ];
+  const bookingIds = home.bookings.map((booking) => booking.id);
+  const invoiceIds = home.bookings.flatMap((booking) => booking.invoices.map((invoice) => invoice.id));
+
+  if (deleteHistory) {
+    await prisma.$transaction(async (tx) => {
+      await tx.paymentCheckout.deleteMany({
+        where: {
+          OR: [
+            { homeId: id },
+            ...(invoiceIds.length ? [{ invoiceId: { in: invoiceIds } }] : []),
+          ],
+        },
+      });
+      if (invoiceIds.length) {
+        await tx.invoice.deleteMany({ where: { id: { in: invoiceIds } } });
+      }
+      if (bookingIds.length) {
+        await tx.booking.deleteMany({ where: { id: { in: bookingIds } } });
+      }
+      await tx.subscription.deleteMany({ where: { homeId: id } });
+      await tx.home.delete({ where: { id } });
+    });
+  } else {
+    await prisma.home.delete({ where: { id } });
+  }
+
+  await deleteLocalUploadFiles(photoUrls);
+  return Response.json({
+    ok: true,
+    deletedHistory: deleteHistory,
+    deletedVisits: bookingIds.length,
+  });
 }
