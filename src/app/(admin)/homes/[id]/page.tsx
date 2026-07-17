@@ -1,10 +1,11 @@
 "use client";
 
-import { useState, useEffect, use } from "react";
+import { useState, useEffect, use, type ChangeEvent } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { ChevronLeft, AlertTriangle, Trash2 } from "lucide-react";
 import { useDemoMode } from "@/lib/useDemoMode";
+import { prepareImageForUpload } from "@/lib/client-image-upload";
 import { toast } from "@/components/Toaster";
 import Spinner from "@/components/Spinner";
 
@@ -46,8 +47,11 @@ export default function HomeDetailPage({ params }: { params: Promise<{ id: strin
 
   // Add Photo inline form
   const [showAddPhoto, setShowAddPhoto] = useState(false);
-  const [newPhotoUrl, setNewPhotoUrl] = useState("");
+  const [newPhotoDataUrl, setNewPhotoDataUrl] = useState("");
+  const [newPhotoFileName, setNewPhotoFileName] = useState("");
   const [newPhotoLabel, setNewPhotoLabel] = useState("");
+  const [photoError, setPhotoError] = useState<string | null>(null);
+  const [preparingPhoto, setPreparingPhoto] = useState(false);
   const [savingPhoto, setSavingPhoto] = useState(false);
 
   // Show/hide gate code
@@ -72,6 +76,8 @@ export default function HomeDetailPage({ params }: { params: Promise<{ id: strin
   const [showDelete, setShowDelete] = useState(false);
   const [deleting, setDeleting] = useState(false);
   const [deleteError, setDeleteError] = useState<string | null>(null);
+  const [deleteConfirmation, setDeleteConfirmation] = useState("");
+  const [requiresHistoryDelete, setRequiresHistoryDelete] = useState(false);
 
   const { isDemo, mounted } = useDemoMode();
 
@@ -349,19 +355,49 @@ export default function HomeDetailPage({ params }: { params: Promise<{ id: strin
     }
   }
 
+  async function selectPhoto(event: ChangeEvent<HTMLInputElement>) {
+    const file = event.target.files?.[0];
+    event.target.value = "";
+    if (!file) return;
+    setPhotoError(null);
+    setPreparingPhoto(true);
+    try {
+      const dataUrl = await prepareImageForUpload(file);
+      setNewPhotoDataUrl(dataUrl);
+      setNewPhotoFileName(file.name || "Selected photo");
+    } catch (e) {
+      setNewPhotoDataUrl("");
+      setNewPhotoFileName("");
+      setPhotoError(e instanceof Error ? e.message : "That photo could not be prepared.");
+    } finally {
+      setPreparingPhoto(false);
+    }
+  }
+
+  function resetPhotoForm() {
+    setShowAddPhoto(false);
+    setNewPhotoDataUrl("");
+    setNewPhotoFileName("");
+    setNewPhotoLabel("");
+    setPhotoError(null);
+  }
+
   async function addPhoto() {
-    if (!newPhotoUrl.trim() || !home) return;
-    const url = newPhotoUrl.trim();
+    if (!newPhotoDataUrl || !home) return;
+    const url = newPhotoDataUrl;
     const label = newPhotoLabel.trim() || null;
     setSavingPhoto(true);
+    setPhotoError(null);
     try {
       if (!isDemo) {
-        const r = await fetch(`/api/homes/${id}/photos`, {
+        const r = await fetch("/api/photos", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ url, label, type: "home" }),
+          body: JSON.stringify({ homeId: id, dataUrl: url, label, type: "home" }),
         });
-        if (r.ok) await loadHome();
+        const data = await r.json().catch(() => ({}));
+        if (!r.ok) throw new Error(data.error || "Photo upload failed");
+        await loadHome();
       } else {
         setHome({
           ...home,
@@ -371,15 +407,17 @@ export default function HomeDetailPage({ params }: { params: Promise<{ id: strin
           ],
         });
       }
-      setNewPhotoUrl("");
-      setNewPhotoLabel("");
-      setShowAddPhoto(false);
+      resetPhotoForm();
+      toast.success("Photo added");
+    } catch (e) {
+      setPhotoError(e instanceof Error ? e.message : "Photo upload failed");
     } finally {
       setSavingPhoto(false);
     }
   }
 
   async function deleteHome() {
+    if (!home) return;
     if (isDemo) {
       setShowDelete(false);
       router.push("/homes");
@@ -388,10 +426,22 @@ export default function HomeDetailPage({ params }: { params: Promise<{ id: strin
     setDeleting(true);
     setDeleteError(null);
     try {
-      const r = await fetch(`/api/homes/${id}`, { method: "DELETE" });
+      const deleteHistory = home.bookings.length > 0 || requiresHistoryDelete;
+      const r = await fetch(`/api/homes/${id}`, {
+        method: "DELETE",
+        headers: deleteHistory ? { "Content-Type": "application/json" } : undefined,
+        body: deleteHistory
+          ? JSON.stringify({ deleteHistory: true, confirmation: deleteConfirmation })
+          : undefined,
+      });
       const data = await r.json().catch(() => ({}));
+      if (r.status === 409 && data.code === "HOME_HAS_HISTORY" && data.canDeleteHistory) {
+        setRequiresHistoryDelete(true);
+        setDeleteError(null);
+        return;
+      }
       if (!r.ok) throw new Error(data.error || "Failed to delete home");
-      toast.success("Home deleted");
+      toast.success(deleteHistory ? "Home and history deleted" : "Home deleted");
       router.push("/homes");
       router.refresh();
     } catch (e) {
@@ -466,12 +516,16 @@ export default function HomeDetailPage({ params }: { params: Promise<{ id: strin
       <Photos
         photos={home.photos}
         showAddPhoto={showAddPhoto}
-        setShowAddPhoto={setShowAddPhoto}
-        newPhotoUrl={newPhotoUrl}
-        setNewPhotoUrl={setNewPhotoUrl}
+        onOpenAddPhoto={() => setShowAddPhoto(true)}
+        onCancelAddPhoto={resetPhotoForm}
+        newPhotoDataUrl={newPhotoDataUrl}
+        newPhotoFileName={newPhotoFileName}
         newPhotoLabel={newPhotoLabel}
         setNewPhotoLabel={setNewPhotoLabel}
+        photoError={photoError}
+        preparingPhoto={preparingPhoto}
         savingPhoto={savingPhoto}
+        selectPhoto={selectPhoto}
         addPhoto={addPhoto}
       />
 
@@ -511,11 +565,16 @@ export default function HomeDetailPage({ params }: { params: Promise<{ id: strin
       <div className="mt-6 rounded-2xl border border-error/20 bg-surface p-4">
         <p className="text-[13px] font-semibold text-text-primary">Remove home</p>
         <p className="mt-1 text-[12px] leading-relaxed text-text-secondary">
-          Homes with visit history are protected and cannot be deleted.
+          Empty homes can be removed normally. Staff can also permanently delete tester homes and their history.
         </p>
         <button
           type="button"
-          onClick={() => { setDeleteError(null); setShowDelete(true); }}
+          onClick={() => {
+            setDeleteError(null);
+            setDeleteConfirmation("");
+            setRequiresHistoryDelete(false);
+            setShowDelete(true);
+          }}
           className="mt-3 inline-flex items-center gap-1.5 rounded-xl border border-error/30 px-3.5 py-2 text-[12px] font-semibold text-error active:bg-error-light"
         >
           <Trash2 size={14} />
@@ -534,14 +593,37 @@ export default function HomeDetailPage({ params }: { params: Promise<{ id: strin
 
       {showDelete && (
         <div className="fixed inset-0 z-50 flex items-end justify-center bg-black/40 p-4 sm:items-center">
-          <div className="w-full max-w-sm rounded-2xl bg-surface p-5 shadow-xl">
+          <div className="max-h-[calc(100dvh-2rem)] w-full max-w-sm overflow-y-auto rounded-2xl bg-surface p-5 pb-[calc(1.25rem+env(safe-area-inset-bottom))] shadow-xl">
             <div className="flex h-11 w-11 items-center justify-center rounded-xl bg-error-light">
               <Trash2 size={20} className="text-error" />
             </div>
             <h2 className="mt-4 text-[18px] font-bold text-text-primary">Delete this home?</h2>
             <p className="mt-2 text-[13px] leading-relaxed text-text-secondary">
-              This permanently removes {fullAddress}. This cannot be undone.
+              This permanently removes {fullAddress}. The customer login will remain available.
             </p>
+            {(home.bookings.length > 0 || requiresHistoryDelete) && (
+              <div className="mt-4 rounded-xl border border-error/25 bg-error-light p-3">
+                <p className="text-[12px] font-semibold text-error">
+                  This home has history
+                </p>
+                <p className="mt-1 text-[11px] leading-relaxed text-text-secondary">
+                  Visits, tasks, photos, notes, invoices, subscription usage, and test payment records for this home will be permanently deleted.
+                </p>
+                <label className="mt-3 block text-[11px] font-semibold text-text-primary" htmlFor="delete-home-confirmation">
+                  Type DELETE to confirm
+                </label>
+                <input
+                  id="delete-home-confirmation"
+                  type="text"
+                  value={deleteConfirmation}
+                  onChange={(event) => setDeleteConfirmation(event.target.value)}
+                  autoComplete="off"
+                  autoCapitalize="characters"
+                  placeholder="DELETE"
+                  className="mt-1.5 w-full rounded-xl border border-error/30 bg-surface px-3 py-2.5 text-[14px] font-semibold text-text-primary outline-none focus:border-error"
+                />
+              </div>
+            )}
             {deleteError && (
               <p className="mt-3 rounded-xl bg-error-light px-3 py-2 text-[12px] font-medium text-error">
                 {deleteError}
@@ -558,11 +640,18 @@ export default function HomeDetailPage({ params }: { params: Promise<{ id: strin
               </button>
               <button
                 type="button"
-                disabled={deleting}
+                disabled={
+                  deleting ||
+                  ((home.bookings.length > 0 || requiresHistoryDelete) && deleteConfirmation !== "DELETE")
+                }
                 onClick={deleteHome}
                 className="flex-1 rounded-xl bg-error px-4 py-2.5 text-[13px] font-semibold text-white disabled:opacity-50"
               >
-                {deleting ? "Deleting…" : "Delete Home"}
+                {deleting
+                  ? "Deleting…"
+                  : home.bookings.length > 0 || requiresHistoryDelete
+                    ? "Delete Everything"
+                    : "Delete Home"}
               </button>
             </div>
           </div>

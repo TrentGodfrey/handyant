@@ -10,6 +10,11 @@ import {
 import { isValidSquareWebhookSignature } from "./square";
 import { takeRateLimit } from "./rate-limit";
 import { hashSecurityToken } from "./security-tokens";
+import {
+  HOME_HISTORY_DELETE_CONFIRMATION,
+  isConfirmedHomeHistoryDeletion,
+} from "./home-deletion";
+import { getLocalUploadFilename } from "./upload-storage";
 
 test("home invitation tokens are random, normalized, and stored only as hashes", () => {
   const first = createHomeInviteToken();
@@ -62,4 +67,25 @@ test("rate limiting closes after the configured request budget", () => {
   assert.equal(blocked.allowed, false);
   assert.equal(blocked.retryAfterSeconds, 60);
   assert.equal(takeRateLimit(key, 2, 60_000, 61_001).allowed, true);
+});
+
+test("home history deletion requires the exact destructive confirmation", () => {
+  assert.equal(
+    isConfirmedHomeHistoryDeletion({
+      deleteHistory: true,
+      confirmation: HOME_HISTORY_DELETE_CONFIRMATION,
+    }),
+    true,
+  );
+  assert.equal(isConfirmedHomeHistoryDeletion({ deleteHistory: true, confirmation: "delete" }), false);
+  assert.equal(isConfirmedHomeHistoryDeletion({ confirmation: HOME_HISTORY_DELETE_CONFIRMATION }), false);
+  assert.equal(isConfirmedHomeHistoryDeletion(null), false);
+});
+
+test("upload cleanup accepts only generated local image paths", () => {
+  assert.equal(getLocalUploadFilename("/api/uploads/photo-id.jpg"), "photo-id.jpg");
+  assert.equal(getLocalUploadFilename("/uploads/legacy.png"), "legacy.png");
+  assert.equal(getLocalUploadFilename("https://example.com/photo.jpg"), null);
+  assert.equal(getLocalUploadFilename("/api/uploads/../../secret.jpg"), null);
+  assert.equal(getLocalUploadFilename("/api/uploads/photo.svg"), null);
 });
