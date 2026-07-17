@@ -6,6 +6,7 @@ export interface SendEmailParams {
   html: string;
   text?: string;
   from?: string;
+  replyTo?: string | string[];
 }
 
 export interface SendEmailResult {
@@ -40,11 +41,13 @@ export async function sendEmail(params: SendEmailParams): Promise<SendEmailResul
   }
 
   const from = params.from ?? process.env.EMAIL_FROM ?? DEFAULT_FROM;
+  const replyTo = params.replyTo ?? process.env.EMAIL_REPLY_TO;
 
   try {
     const result = await client.emails.send({
       from,
       to: params.to,
+      replyTo,
       subject: params.subject,
       html: params.html,
       text: params.text,

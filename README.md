@@ -1,3 +1,5 @@
+# MCQ Property Care
+
 MCQ Property Care customer and staff portal, built with Next.js, PostgreSQL, Prisma, NextAuth, Resend, and Square.
 
 ## Production configuration
@@ -10,37 +12,51 @@ The application activates memberships and marks invoices paid only after a signe
 
 Home gate codes and Wi-Fi passwords are encrypted with `DATA_ENCRYPTION_KEY`. After setting that key for an existing database, run `npm run db:encrypt-home-access` once to encrypt legacy plaintext values.
 
-## Getting Started
+## Local development
 
-First, run the development server:
+Install dependencies, configure `.env`, then run:
 
 ```bash
+npm install
 npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+Open [http://localhost:3000](http://localhost:3000). Before publishing a change, run:
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+```bash
+npm test
+npm run lint
+npm run build
+```
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+## VPS deployment
 
-## Learn More
+Production is hosted on the MCQ VPS, not Vercel. The application lives at `/var/www/handyant`, runs under PM2 as `handyant`, and is served through Nginx at `https://mcqpropertycare.com`.
 
-To learn more about Next.js, take a look at the following resources:
+Deployments should create a database backup and rollback copy before installing, migrating, building, and restarting the PM2 process. Verify both the PM2 process and public HTTPS site after restart.
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+## Production email
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
+Customer-facing messages are sent through Resend and replies are routed to Anthony:
 
-## Deploy on Vercel
+```env
+RESEND_API_KEY=re_...
+EMAIL_FROM=Anthony at MCQ <anthony@mcqpropertycare.com>
+EMAIL_REPLY_TO=anthony@mcqpropertycare.com
+```
 
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
+Keep Porkbun's free `anthony@mcqpropertycare.com` forward delivering incoming mail to `mcqpropertycare@gmail.com`. Verify `mcqpropertycare.com` in Resend without replacing Porkbun's root-domain MX records, then create two sending-only, domain-restricted API keys: one for the VPS and one for Gmail SMTP.
 
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+In Gmail, add `anthony@mcqpropertycare.com` under **Accounts and Import → Send mail as** with these outgoing settings:
+
+```text
+SMTP server: smtp.resend.com
+Port: 465
+Username: resend
+Password: the dedicated Gmail SMTP Resend API key
+Security: SSL
+```
+
+The Gmail verification message will arrive through the Porkbun forward. After confirming it, make `anthony@mcqpropertycare.com` the default From address and set the same address as the default reply-to. This provides professional sending and replies without purchasing a separate hosted mailbox.
+
+Staff-created customer onboarding is the standard flow: create the customer and home, choose the plan, add known tasks, then create a single-use invitation from the home page. The customer chooses their own password from the emailed or texted link; staff should not create or retain customer passwords.
