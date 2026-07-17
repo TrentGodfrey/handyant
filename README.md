@@ -45,7 +45,7 @@ EMAIL_FROM=Anthony at MCQ <anthony@mcqpropertycare.com>
 EMAIL_REPLY_TO=anthony@mcqpropertycare.com
 ```
 
-Keep Porkbun's free `anthony@mcqpropertycare.com` forward delivering incoming mail to `mcqpropertycare@gmail.com`. Verify `mcqpropertycare.com` in Resend without replacing Porkbun's root-domain MX records, then create two sending-only, domain-restricted API keys: one for the VPS and one for Gmail SMTP.
+Cloudflare Email Routing owns inbound mail. Its catch-all rule forwards every `@mcqpropertycare.com` address to `mcqpropertycare@gmail.com`. Resend owns outbound mail for both the website and Gmail. Create two sending-only, domain-restricted Resend API keys: one for the VPS and one used only as Gmail's SMTP password.
 
 In Gmail, add `anthony@mcqpropertycare.com` under **Accounts and Import → Send mail as** with these outgoing settings:
 
@@ -57,6 +57,8 @@ Password: the dedicated Gmail SMTP Resend API key
 Security: SSL
 ```
 
-The Gmail verification message will arrive through the Porkbun forward. After confirming it, make `anthony@mcqpropertycare.com` the default From address and set the same address as the default reply-to. This provides professional sending and replies without purchasing a separate hosted mailbox.
+The Gmail verification message arrives through Cloudflare's catch-all. After confirming it, make `anthony@mcqpropertycare.com` the default From address, set the same address as the default reply-to, and choose Gmail's option to reply from the same address that received the message.
+
+The complete provider migration, DNS safety checks, testing sequence, and Anthony handoff are in [`docs/email-setup.md`](docs/email-setup.md).
 
 Staff-created customer onboarding is the standard flow: create the customer and home, choose the plan, add known tasks, then create a single-use invitation from the home page. The customer chooses their own password from the emailed or texted link; staff should not create or retain customer passwords.
