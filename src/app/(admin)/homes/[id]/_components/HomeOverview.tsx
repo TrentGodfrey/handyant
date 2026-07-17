@@ -4,6 +4,7 @@ import { useState } from "react";
 import Card from "@/components/Card";
 import {
   MapPin, Edit, Phone, MessageCircle, Navigation, Wifi, Users, CircleCheck, Clock3,
+  Copy, Mail, Share2,
 } from "lucide-react";
 import type { ApiHome } from "./types";
 import { initialsFor } from "./types";
@@ -30,6 +31,12 @@ export default function HomeOverview({
   const [emailError, setEmailError] = useState("");
   const [creatingInvite, setCreatingInvite] = useState(false);
   const [inviteMessage, setInviteMessage] = useState("");
+  const [activeInvitation, setActiveInvitation] = useState<{
+    url: string;
+    email: string;
+    emailSent: boolean;
+    expiresAt: string;
+  } | null>(null);
 
   async function saveCustomerEmail() {
     setSavingEmail(true);
@@ -45,6 +52,8 @@ export default function HomeOverview({
         throw new Error(body?.error ?? "Could not save email");
       }
       await onCustomerSaved();
+      setActiveInvitation(null);
+      setInviteMessage("");
       setEditingEmail(false);
     } catch (error) {
       setEmailError(error instanceof Error ? error.message : "Could not save email");
@@ -61,14 +70,17 @@ export default function HomeOverview({
       const response = await fetch(`/api/homes/${home.id}/invitation`, { method: "POST" });
       const body = await response.json().catch(() => null);
       if (!response.ok) throw new Error(body?.error ?? "Could not create invitation");
-      const shareText = `Create your MCQ Property Care login and link your home: ${body.inviteUrl}`;
-      if (navigator.share) {
-        await navigator.share({ title: "MCQ Property Care invitation", text: shareText, url: body.inviteUrl });
-        setInviteMessage(body.emailSent ? "Invitation emailed and shared." : "Secure invitation shared.");
-      } else {
-        await navigator.clipboard.writeText(body.inviteUrl);
-        setInviteMessage(body.emailSent ? "Invitation emailed; link also copied." : "Secure invitation link copied.");
-      }
+      setActiveInvitation({
+        url: body.inviteUrl,
+        email: body.email,
+        emailSent: body.emailSent,
+        expiresAt: body.expiresAt,
+      });
+      setInviteMessage(
+        body.emailSent
+          ? `Secure invitation emailed to ${body.email}. You can also text or copy it below.`
+          : "Secure invitation created. Email delivery is not configured yet, so text or copy it below.",
+      );
       await onCustomerSaved();
     } catch (error) {
       if (error instanceof DOMException && error.name === "AbortError") return;
@@ -77,10 +89,51 @@ export default function HomeOverview({
       setCreatingInvite(false);
     }
   }
+
+  async function copyInvitation() {
+    if (!activeInvitation) return;
+    setEmailError("");
+    try {
+      await navigator.clipboard.writeText(activeInvitation.url);
+      setInviteMessage("Secure invitation link copied.");
+    } catch {
+      setEmailError("Could not copy the link. Use Share instead.");
+    }
+  }
+
+  async function shareInvitation() {
+    if (!activeInvitation) return;
+    setEmailError("");
+    if (!navigator.share) {
+      await copyInvitation();
+      return;
+    }
+    try {
+      await navigator.share({
+        title: "MCQ Property Care invitation",
+        text: "Anthony has set up your MCQ Property Care home. Create your private login with this secure link:",
+        url: activeInvitation.url,
+      });
+      setInviteMessage("Secure invitation shared.");
+    } catch (error) {
+      if (!(error instanceof DOMException && error.name === "AbortError")) {
+        setEmailError("Could not open sharing. Copy the link instead.");
+      }
+    }
+  }
   const customerInitials = initialsFor(home.customer.name);
   const phoneHref = home.customer.phone ? `tel:${home.customer.phone}` : undefined;
   const smsHref = home.customer.phone ? `sms:${home.customer.phone}` : undefined;
   const navHref = `https://maps.google.com/?q=${encodeURIComponent(fullAddress)}`;
+  const invitationText = activeInvitation
+    ? `Hi ${home.customer.name.split(" ")[0]}, Anthony has set up your home in MCQ Property Care. Create your private login here: ${activeInvitation.url} This secure link expires in 7 days and works once.`
+    : "";
+  const inviteSmsHref = activeInvitation && home.customer.phone
+    ? `sms:${home.customer.phone}?&body=${encodeURIComponent(invitationText)}`
+    : undefined;
+  const inviteEmailHref = activeInvitation
+    ? `mailto:${encodeURIComponent(activeInvitation.email)}?subject=${encodeURIComponent("Your MCQ Property Care home is ready")}&body=${encodeURIComponent(invitationText)}`
+    : undefined;
 
   return (
     <>
@@ -270,12 +323,12 @@ export default function HomeOverview({
                       <>
                         <p className="break-words text-[10px] leading-relaxed text-text-secondary">
                           {home.customer.email
-                            ? `Create a private link for ${home.customer.email}. It expires after 7 days and works once.`
+                            ? `Anthony sets up the home, plan, and tasks first. ${home.customer.name.split(" ")[0]} then uses a private link to choose their own password. It expires after 7 days and works once.`
                             : "Add their email first, then create a secure signup invitation."}
                         </p>
                         {home.customer.email && (
                           <button type="button" disabled={creatingInvite} onClick={createInvitation} className="mt-2 min-h-11 w-full rounded-lg bg-primary px-3 text-[11px] font-bold text-white disabled:opacity-50">
-                            {creatingInvite ? "Creating…" : home.pendingInvitation ? "Replace & share invite" : "Create & share invite"}
+                            {creatingInvite ? "Creating…" : home.pendingInvitation ? "Replace secure invite" : "Create secure invite"}
                           </button>
                         )}
                         <button type="button" onClick={() => setEditingEmail(true)} className="mt-1.5 min-h-10 rounded-lg border border-warning/30 bg-surface px-3 text-[11px] font-bold text-text-primary">
@@ -287,6 +340,39 @@ export default function HomeOverview({
                           </p>
                         )}
                         {inviteMessage && <p className="mt-1.5 text-[10px] font-semibold text-success">{inviteMessage}</p>}
+                        {activeInvitation && (
+                          <div className="mt-2 rounded-lg border border-primary/20 bg-primary-50 p-2.5">
+                            <p className="text-[10px] font-bold text-text-primary">
+                              {activeInvitation.emailSent ? "Email delivered" : "Choose how to send it"}
+                            </p>
+                            <p className="mt-0.5 text-[10px] leading-relaxed text-text-secondary">
+                              For assisted setup, text the link to the customer, open it on their phone, and help them choose a password. Anthony never needs to know it.
+                            </p>
+                            <p className="mt-1 text-[9px] font-medium text-text-tertiary">
+                              Expires {new Date(activeInvitation.expiresAt).toLocaleString()} and works once.
+                            </p>
+                            <div className="mt-2 grid grid-cols-2 gap-2">
+                              {inviteSmsHref ? (
+                                <a href={inviteSmsHref} className="flex min-h-11 items-center justify-center gap-1.5 rounded-lg bg-primary px-2 text-[10px] font-bold text-white">
+                                  <MessageCircle size={13} /> Text invite
+                                </a>
+                              ) : (
+                                <button type="button" disabled className="flex min-h-11 items-center justify-center gap-1.5 rounded-lg bg-primary px-2 text-[10px] font-bold text-white opacity-40">
+                                  <MessageCircle size={13} /> No phone
+                                </button>
+                              )}
+                              <button type="button" onClick={shareInvitation} className="flex min-h-11 items-center justify-center gap-1.5 rounded-lg border border-border bg-surface px-2 text-[10px] font-bold text-text-primary">
+                                <Share2 size={13} /> Share
+                              </button>
+                              <button type="button" onClick={copyInvitation} className="flex min-h-11 items-center justify-center gap-1.5 rounded-lg border border-border bg-surface px-2 text-[10px] font-bold text-text-primary">
+                                <Copy size={13} /> Copy link
+                              </button>
+                              <a href={inviteEmailHref} className="flex min-h-11 items-center justify-center gap-1.5 rounded-lg border border-border bg-surface px-2 text-[10px] font-bold text-text-primary">
+                                <Mail size={13} /> Email app
+                              </a>
+                            </div>
+                          </div>
+                        )}
                       </>
                     )}
                   </div>
