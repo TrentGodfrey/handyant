@@ -959,6 +959,9 @@ function BookingPageInner() {
                   );
                 })}
               </div>
+              <Link href="/services" className="mt-2.5 inline-block text-[12px] font-semibold text-primary">
+                Browse the full service list
+              </Link>
             </div>
 
             <div className="mb-6">

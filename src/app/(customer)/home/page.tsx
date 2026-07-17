@@ -12,7 +12,7 @@ import { PLANS, type PlanId } from "@/lib/plans";
 import {
   MapPin, Clock, Star, ArrowRight, Camera,
   MessageCircle, Phone, CheckCircle2,
-  CalendarDays, BadgeCheck, Users, CalendarPlus, Sparkles,
+  CalendarDays, BadgeCheck, Users, CalendarPlus,
   X, XCircle,
 } from "lucide-react";
 
@@ -213,7 +213,7 @@ export default function CustomerHome() {
         {nextBooking && nextBooking.tech && (
           <div className="mb-5">
             <Link href="/track">
-              <div className="relative overflow-hidden rounded-2xl bg-gradient-to-r from-primary to-[#3E7B7E] p-4 active:scale-[0.99] transition-transform">
+              <div className="rounded-2xl bg-primary p-4 active:scale-[0.99] transition-transform">
                 <div className="flex items-center justify-between">
                   <div className="flex-1 min-w-0">
                     <p className="text-[15px] font-bold text-white">
@@ -221,9 +221,8 @@ export default function CustomerHome() {
                     </p>
                     <p className="text-[12px] text-white/70 mt-0.5">Tap to track on the day of your visit</p>
                   </div>
-                  <div className="relative ml-3 flex h-10 w-10 items-center justify-center rounded-full bg-white/20 shrink-0">
+                  <div className="ml-3 flex h-10 w-10 items-center justify-center rounded-full bg-white/20 shrink-0">
                     <MapPin size={20} className="text-white" />
-                    <span className="absolute inset-0 rounded-full bg-white/20 animate-ping" />
                   </div>
                 </div>
               </div>
@@ -247,7 +246,7 @@ export default function CustomerHome() {
               </div>
             </Card>
           ) : nextBooking ? (
-            <Card className="border border-primary-100 bg-gradient-to-br from-primary-50 to-white">
+            <Card className="border border-border">
               <div className="flex items-start gap-3 mb-4">
                 <div className="h-11 w-11 rounded-full bg-primary flex items-center justify-center shrink-0">
                   <span className="text-[15px] font-bold text-white">
@@ -276,7 +275,7 @@ export default function CustomerHome() {
               </div>
 
               {nextBooking.tasks && nextBooking.tasks.length > 0 && (
-                <div className="bg-white/70 rounded-lg px-3.5 py-3 mb-4 border border-border-light space-y-2">
+                <div className="bg-background rounded-lg px-3.5 py-3 mb-4 border border-border-light space-y-2">
                   <p className="text-[11px] font-semibold text-text-secondary uppercase tracking-wider mb-1.5">Tasks</p>
                   {nextBooking.tasks.map((task) => (
                     <div key={task.label} className="flex items-center gap-2.5">
@@ -312,13 +311,8 @@ export default function CustomerHome() {
           ) : (
             <Card className="border border-dashed border-border">
               <div className="flex flex-col items-center py-6 text-center">
-                <div className="relative mb-4">
-                  <div className="flex h-16 w-16 items-center justify-center rounded-2xl bg-primary-50">
-                    <CalendarDays size={28} className="text-primary" />
-                  </div>
-                  <div className="absolute -right-1 -top-1 flex h-6 w-6 items-center justify-center rounded-full bg-primary shadow-sm">
-                    <Sparkles size={12} className="text-white" />
-                  </div>
+                <div className="mb-4 flex h-16 w-16 items-center justify-center rounded-2xl bg-primary-50">
+                  <CalendarDays size={28} className="text-primary" />
                 </div>
 
                 <h3 className="text-[16px] font-bold text-text-primary">Book your first visit</h3>
@@ -411,12 +405,8 @@ export default function CustomerHome() {
 
         {/* ── Book Now CTA ────────────────────────────────────────────── */}
         <Link href="/book">
-          <div className="relative overflow-hidden rounded-2xl bg-gradient-to-br from-primary via-primary to-primary-dark p-6 active:scale-[0.99] transition-transform">
-            <div className="absolute -top-6 -right-6 h-32 w-32 rounded-full bg-white/8" />
-            <div className="absolute -bottom-8 right-12 h-24 w-24 rounded-full bg-white/5" />
-            <div className="absolute top-4 right-24 h-8 w-8 rounded-full bg-white/10" />
-
-            <div className="relative z-10">
+          <div className="rounded-2xl bg-primary p-6 active:scale-[0.99] transition-transform">
+            <div>
               <p className="text-[11px] font-semibold uppercase tracking-wider text-white/60 mb-1">
                 Professional Handyman
               </p>
@@ -441,7 +431,7 @@ export default function CustomerHome() {
             // No active membership - invite them to subscribe.
             return (
               <Link href="/account/plans" className="block mt-5 mb-2">
-                <div className="rounded-2xl bg-gradient-to-r from-primary-50 to-white border border-primary-100 px-4 py-3.5 hover:border-primary/40 transition-colors">
+                <div className="rounded-2xl bg-surface border border-border px-4 py-3.5 hover:border-primary/40 transition-colors">
                   <div className="flex items-center justify-between gap-3">
                     <div className="min-w-0">
                       <p className="text-[13px] font-semibold text-text-primary">No active membership</p>
@@ -449,8 +439,8 @@ export default function CustomerHome() {
                         See plans starting at $1,950/yr →
                       </p>
                     </div>
-                    <div className="flex h-9 w-9 items-center justify-center rounded-full bg-primary-100 shrink-0">
-                      <Sparkles size={16} className="text-primary" />
+                    <div className="flex h-9 w-9 items-center justify-center rounded-full bg-primary-50 shrink-0">
+                      <BadgeCheck size={16} className="text-primary" />
                     </div>
                   </div>
                 </div>
@@ -461,7 +451,7 @@ export default function CustomerHome() {
           const usagePct = Math.min(100, Math.round((completedCount / plan.visits) * 100));
           return (
             <Link href="/account/plans" className="block mt-5 mb-2">
-              <div className="rounded-2xl bg-gradient-to-br from-primary-50 to-white border border-primary-100 px-4 py-4 hover:border-primary/40 transition-colors">
+              <div className="rounded-2xl bg-surface border border-border px-4 py-4 hover:border-primary/40 transition-colors">
                 <div className="flex items-start justify-between gap-3">
                   <div className="min-w-0 flex-1">
                     <div className="flex items-center gap-2">
@@ -489,8 +479,8 @@ export default function CustomerHome() {
                       <p className="text-[11px] font-semibold text-success">{Math.max(0, plan.visits - completedCount)} remaining</p>
                     </div>
                   </div>
-                  <div className="flex h-9 w-9 items-center justify-center rounded-full bg-primary-100 shrink-0">
-                    <Sparkles size={16} className="text-primary" />
+                  <div className="flex h-9 w-9 items-center justify-center rounded-full bg-primary-50 shrink-0">
+                    <BadgeCheck size={16} className="text-primary" />
                   </div>
                 </div>
               </div>

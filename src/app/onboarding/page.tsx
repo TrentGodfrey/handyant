@@ -867,7 +867,7 @@ export default function OnboardingPage() {
                   onClick={() => setSelectedPlan(plan.id)}
                   className={`relative w-full overflow-hidden rounded-2xl border-2 p-5 text-left transition-all duration-200 ${
                     isSelected
-                      ? "border-primary bg-gradient-to-br from-primary-50 to-white shadow-[0_4px_20px_rgba(79,149,152,0.18)]"
+                      ? "border-primary bg-primary-50"
                       : "border-border bg-surface"
                   }`}
                 >

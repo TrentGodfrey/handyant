@@ -120,7 +120,7 @@ export default function AccountPlansPage() {
               key={plan.id}
               className={`relative ${
                 plan.popular
-                  ? "border-primary bg-gradient-to-br from-primary-50 to-white shadow-[0_4px_20px_rgba(79,149,152,0.12)]"
+                  ? "border-primary"
                   : "border-border"
               }`}
             >

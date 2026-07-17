@@ -111,11 +111,11 @@ function bookingToJob(b: ApiBooking): Job {
 
 // ── Stage config ─────────────────────────────────────────────────────────────
 
-const STAGES: { key: PipelineStage; label: string; color: string; dotClass: string; borderClass: string; bgClass: string }[] = [
-  { key: "pending", label: "Pending", color: "#F59E0B", dotClass: "bg-accent-amber", borderClass: "border-l-amber-400", bgClass: "bg-amber-50" },
-  { key: "confirmed", label: "Confirmed", color: "#4F9598", dotClass: "bg-primary", borderClass: "border-l-primary", bgClass: "bg-primary-50" },
-  { key: "in-progress", label: "In Progress", color: "#8B5CF6", dotClass: "bg-[#8B5CF6]", borderClass: "border-l-[#8B5CF6]", bgClass: "bg-[#F5F3FF]" },
-  { key: "completed", label: "Complete", color: "#16A34A", dotClass: "bg-success", borderClass: "border-l-success", bgClass: "bg-success-light" },
+const STAGES: { key: PipelineStage; label: string; color: string; dotClass: string }[] = [
+  { key: "pending", label: "Pending", color: "#F59E0B", dotClass: "bg-accent-amber" },
+  { key: "confirmed", label: "Confirmed", color: "#4F9598", dotClass: "bg-primary" },
+  { key: "in-progress", label: "In Progress", color: "#8B5CF6", dotClass: "bg-[#8B5CF6]" },
+  { key: "completed", label: "Complete", color: "#16A34A", dotClass: "bg-success" },
 ];
 
 /** Map any job status to its pipeline stage */
@@ -448,11 +448,10 @@ function JobCardList({
   onMove: (jobId: string, stage: PipelineStage) => void;
 }) {
   const stage = toPipelineStage(job.status);
-  const stageConfig = STAGES.find((s) => s.key === stage)!;
 
   return (
     <Link href={`/jobs/${job.id}`} className="block">
-      <Card padding="md" className={`border-l-[3px] ${stageConfig.borderClass}`}>
+      <Card padding="md">
         <div className="flex items-start justify-between gap-2">
           <div className="flex-1 min-w-0">
             <div className="flex items-center gap-2 flex-wrap">

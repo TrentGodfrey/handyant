@@ -183,7 +183,7 @@ export default function AccountPage() {
       <div className="px-5 py-5 space-y-6 lg:px-0 lg:py-6 lg:space-y-7">
         {/* Chat CTA */}
         <Link href="/messages" className="block">
-          <Card className="flex items-center gap-4 border border-primary-100 bg-gradient-to-r from-primary-50 to-surface">
+          <Card className="flex items-center gap-4 border border-border">
             <div className="relative shrink-0">
               <div className="flex h-12 w-12 items-center justify-center rounded-full bg-primary shadow-[0_2px_10px_rgba(79,149,152,0.25)]">
                 <MessageCircle size={22} className="text-white" />

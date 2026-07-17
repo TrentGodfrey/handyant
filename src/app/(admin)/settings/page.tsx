@@ -1074,7 +1074,7 @@ export default function SettingsPage() {
                       title={on ? `${label}: ${format12h(day?.start ?? "08:00")} – ${format12h(day?.end ?? "17:00")}` : `${label}: off`}
                       className={`group relative flex flex-1 flex-col items-center justify-center gap-0.5 rounded-xl py-3 text-center transition-all duration-200 border ${
                         on
-                          ? "border-primary bg-gradient-to-b from-primary to-primary-dark text-white shadow-[0_4px_12px_rgba(79,149,152,0.32)] scale-[1.04]"
+                          ? "border-primary bg-primary text-white"
                           : "border-border bg-surface text-text-tertiary opacity-70 hover:opacity-100 hover:border-primary/40 hover:bg-primary-50 hover:text-primary"
                       }`}
                     >

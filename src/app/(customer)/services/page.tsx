@@ -506,7 +506,7 @@ export default function ServicesPage() {
 
         {/* ── Request a Quote CTA ───────────────────────────────────── */}
         <div className="mb-4">
-          <Card className="bg-gradient-to-r from-primary-50 to-white border border-primary-100">
+          <Card className="border border-border">
             <p className="text-[16px] font-bold text-text-primary mb-1">Not sure what you need?</p>
             <p className="text-[13px] text-text-secondary mb-4 leading-relaxed">
               Describe the problem and we&apos;ll give you a free estimate within a few hours.
