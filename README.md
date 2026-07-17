@@ -33,7 +33,7 @@ npm run build
 
 Production is hosted on the MCQ VPS, not Vercel. The application lives at `/var/www/handyant`, runs under PM2 as `handyant`, and is served through Nginx at `https://mcqpropertycare.com`.
 
-Deployments should create a database backup and rollback copy before installing, migrating, building, and restarting the PM2 process. Verify both the PM2 process and public HTTPS site after restart.
+Deployments should create a database backup and rollback copy before installing, migrating, building, and restarting the PM2 process. `npm ci` automatically generates the Prisma client required by the production build. Verify both the PM2 process and public HTTPS site after restart.
 
 ## Production email
 
