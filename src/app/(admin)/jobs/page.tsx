@@ -300,15 +300,15 @@ function JobsEmptyState({ hasSearch, searchQuery }: { hasSearch: boolean; search
   );
 }
 
-// ── Move-to dropdown ─────────────────────────────────────────────────────────
+// ── Status dropdown ──────────────────────────────────────────────────────────
 
-function MoveToDropdown({
+function StatusDropdown({
   currentStage,
-  onMove,
+  onStatusChange,
   align = "right",
 }: {
   currentStage: PipelineStage;
-  onMove: (stage: PipelineStage) => void;
+  onStatusChange: (stage: PipelineStage) => void;
   align?: "right" | "left";
 }) {
   const [open, setOpen] = useState(false);
@@ -343,7 +343,7 @@ function MoveToDropdown({
         }}
         className="flex items-center gap-1 rounded-lg border border-border bg-surface px-2.5 py-1 text-[11px] font-semibold text-text-secondary hover:bg-surface-secondary hover:border-gray-300 transition-colors"
       >
-        Move
+        Status
         <ChevronDown size={12} />
       </button>
       {open && (
@@ -357,7 +357,7 @@ function MoveToDropdown({
               onClick={(e) => {
                 e.preventDefault();
                 e.stopPropagation();
-                onMove(stage.key);
+                onStatusChange(stage.key);
                 setOpen(false);
               }}
               className="flex w-full items-center gap-2 px-3 py-2 text-[12px] text-text-primary hover:bg-surface-secondary transition-colors"
@@ -443,10 +443,10 @@ function PipelineSummary({
 
 function JobCardList({
   job,
-  onMove,
+  onStatusChange,
 }: {
   job: Job;
-  onMove: (jobId: string, stage: PipelineStage) => void;
+  onStatusChange: (jobId: string, stage: PipelineStage) => void;
 }) {
   const stage = toPipelineStage(job.status);
   if (!stage) return null;
@@ -483,7 +483,7 @@ function JobCardList({
           ))}
         </div>
 
-        {/* Meta row + Move to */}
+        {/* Meta row + status control */}
         <div className="mt-3 flex items-center justify-between border-t border-border pt-3">
           <div className="flex items-center gap-4">
             {job.photos > 0 && (
@@ -499,7 +499,7 @@ function JobCardList({
               </span>
             )}
           </div>
-          <MoveToDropdown currentStage={stage} onMove={(newStage) => onMove(job.id, newStage)} />
+          <StatusDropdown currentStage={stage} onStatusChange={(newStage) => onStatusChange(job.id, newStage)} />
         </div>
       </Card>
     </Link>
@@ -510,10 +510,10 @@ function JobCardList({
 
 function JobCardCompact({
   job,
-  onMove,
+  onStatusChange,
 }: {
   job: Job;
-  onMove: (jobId: string, stage: PipelineStage) => void;
+  onStatusChange: (jobId: string, stage: PipelineStage) => void;
 }) {
   const router = useRouter();
   const stage = toPipelineStage(job.status);
@@ -572,7 +572,7 @@ function JobCardCompact({
         </div>
       )}
 
-      {/* Footer: status chip + amount + move */}
+      {/* Footer: status chip + status control */}
       <div className="mt-3 flex items-center justify-between border-t border-border-light pt-2.5">
         <div className="flex items-center gap-2 min-w-0">
           <span
@@ -584,7 +584,7 @@ function JobCardCompact({
           </span>
           <span className="text-[13px] font-bold text-text-primary">{job.estimate}</span>
         </div>
-        <MoveToDropdown currentStage={stage} onMove={(newStage) => onMove(job.id, newStage)} />
+        <StatusDropdown currentStage={stage} onStatusChange={(newStage) => onStatusChange(job.id, newStage)} />
       </div>
     </div>
   );
@@ -596,12 +596,12 @@ function KanbanColumn({
   stage,
   jobs: columnJobs,
   revenue,
-  onMove,
+  onStatusChange,
 }: {
   stage: (typeof STAGES)[number];
   jobs: Job[];
   revenue: number;
-  onMove: (jobId: string, stage: PipelineStage) => void;
+  onStatusChange: (jobId: string, stage: PipelineStage) => void;
 }) {
   return (
     <div className="flex flex-col rounded-xl border border-border bg-surface-secondary/40">
@@ -636,7 +636,7 @@ function KanbanColumn({
           </div>
         ) : (
           columnJobs.map((job) => (
-            <JobCardCompact key={job.id} job={job} onMove={onMove} />
+            <JobCardCompact key={job.id} job={job} onStatusChange={onStatusChange} />
           ))
         )}
       </div>
@@ -724,8 +724,8 @@ export default function JobsPage() {
       .finally(() => setLoading(false));
   }, [isDemo, activeStage, mounted, reloadKey]);
 
-  // Move handler - optimistic update + PATCH (with revert on failure)
-  const handleMove = (jobId: string, newStage: PipelineStage) => {
+  // Status handler - optimistic update + PATCH (with revert on failure)
+  const handleStatusChange = (jobId: string, newStage: PipelineStage) => {
     let prevSnapshot: Job[] = [];
     setJobData((prev) => {
       prevSnapshot = prev;
@@ -745,7 +745,7 @@ export default function JobsPage() {
         if (!r.ok) throw new Error(`HTTP ${r.status}`);
       })
       .catch((e) => {
-        toast.error("Couldn't move job: " + (e instanceof Error ? e.message : String(e)));
+        toast.error("Couldn't update job status: " + (e instanceof Error ? e.message : String(e)));
         setJobData(prevSnapshot);
       });
   };
@@ -1037,7 +1037,7 @@ export default function JobsPage() {
           {showEmpty ? (
             <JobsEmptyState hasSearch={search.trim() !== "" || activeStage !== "all"} searchQuery={search} />
           ) : (
-            filtered.map((job) => <JobCardList key={job.id} job={job} onMove={handleMove} />)
+            filtered.map((job) => <JobCardList key={job.id} job={job} onStatusChange={handleStatusChange} />)
           )}
         </div>
       )}
@@ -1055,7 +1055,7 @@ export default function JobsPage() {
                   stage={stage}
                   jobs={groupedByStage[stage.key]}
                   revenue={stageRevenue[stage.key]}
-                  onMove={handleMove}
+                  onStatusChange={handleStatusChange}
                 />
               ))}
             </div>
