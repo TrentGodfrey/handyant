@@ -1,6 +1,6 @@
 import { NextRequest } from "next/server";
 import { prisma } from "@/lib/prisma";
-import { requireUser, unauthorized, notFound } from "@/lib/session";
+import { requireUser, unauthorized, notFound, badRequest } from "@/lib/session";
 
 export async function GET(req: NextRequest) {
   const user = await requireUser();
@@ -64,6 +64,10 @@ export async function POST(req: NextRequest) {
 
   const userId = user.id;
   const body = await req.json();
+  const text = typeof body.text === "string" ? body.text.trim() : "";
+  if (!body.conversationId || !text) {
+    return badRequest("conversationId and message text are required");
+  }
 
   // Verify user is part of this conversation
   const convo = await prisma.conversation.findFirst({
@@ -80,7 +84,7 @@ export async function POST(req: NextRequest) {
     data: {
       conversationId: body.conversationId,
       senderId: userId,
-      text: body.text,
+      text,
       type: body.type ?? "text",
     },
     include: { sender: { select: { id: true, name: true, avatarUrl: true } } },
