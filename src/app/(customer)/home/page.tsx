@@ -196,7 +196,7 @@ export default function CustomerHome() {
         </div>
 
         {!activePlanId && (
-          <Link href="/account/plans">
+          <Link href="/messages?topic=membership">
             <div className="flex min-h-12 items-center gap-3 rounded-xl border border-border bg-surface-secondary px-4 py-3 active:scale-[0.99] transition-transform">
               <BadgeCheck size={18} className="text-primary shrink-0" />
               <span className="text-[14px] font-semibold text-text-primary">Choose your membership</span>
@@ -376,7 +376,7 @@ export default function CustomerHome() {
                 <span className="text-[11px] font-semibold text-text-secondary">Photos</span>
               </div>
             </Link>
-            <Link href="/account/receipts" className="block">
+            <Link href="/account" className="block">
               <div className="flex flex-col items-center gap-1.5 rounded-xl border border-border bg-surface py-3 active:bg-surface-secondary transition-colors">
                 <Clock size={18} className="text-primary" />
                 <span className="text-[11px] font-semibold text-text-secondary">History</span>
@@ -430,13 +430,13 @@ export default function CustomerHome() {
           if (!plan) {
             // No active membership - invite them to subscribe.
             return (
-              <Link href="/account/plans" className="block mt-5 mb-2">
+              <Link href="/messages?topic=membership" className="block mt-5 mb-2">
                 <div className="rounded-2xl bg-surface border border-border px-4 py-3.5 hover:border-primary/40 transition-colors">
                   <div className="flex items-center justify-between gap-3">
                     <div className="min-w-0">
                       <p className="text-[13px] font-semibold text-text-primary">No active membership</p>
                       <p className="text-[12px] font-medium text-primary mt-0.5">
-                        See plans starting at $1,950/yr →
+                        Ask Anthony about a visit plan →
                       </p>
                     </div>
                     <div className="flex h-9 w-9 items-center justify-center rounded-full bg-primary-50 shrink-0">
@@ -450,7 +450,7 @@ export default function CustomerHome() {
           // Active membership - show plan, price, visit usage, manage link.
           const usagePct = Math.min(100, Math.round((completedCount / plan.visits) * 100));
           return (
-            <Link href="/account/plans" className="block mt-5 mb-2">
+            <Link href="/account" className="block mt-5 mb-2">
               <div className="rounded-2xl bg-surface border border-border px-4 py-4 hover:border-primary/40 transition-colors">
                 <div className="flex items-start justify-between gap-3">
                   <div className="min-w-0 flex-1">

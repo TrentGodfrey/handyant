@@ -2,6 +2,7 @@
 
 import Card from "@/components/Card";
 import StatusBadge from "@/components/StatusBadge";
+import Link from "next/link";
 import {
   Plus, Camera, ShoppingCart, AlertTriangle, CheckCircle2, X, Trash2,
 } from "lucide-react";
@@ -121,7 +122,8 @@ export default function TodoList({
 
                 <div className="flex-1 min-w-0">
                   <div className="flex items-start justify-between gap-2">
-                    <p
+                    <Link
+                      href={`/task/${item.id}`}
                       className={`text-[13px] font-semibold leading-snug ${
                         item.status === "completed"
                           ? "line-through text-text-tertiary"
@@ -129,7 +131,7 @@ export default function TodoList({
                       }`}
                     >
                       {item.task}
-                    </p>
+                    </Link>
                     <div className="shrink-0">
                       <StatusBadge status={item.status} />
                     </div>

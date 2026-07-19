@@ -12,6 +12,7 @@ import {
   Upload, X, Check, Repeat, Info, Sun, Sunset, ListChecks,
 } from "lucide-react";
 import { useDemoMode } from "@/lib/useDemoMode";
+import { prepareImageForUpload } from "@/lib/client-image-upload";
 
 // ─── Calendar generation ────────────────────────────────────────────────────
 
@@ -174,15 +175,6 @@ const DEMO_BOOKING_TODOS: BookingTodo[] = [
   { id: "demo-todo-4", task: "Replace garage door weatherstrip", priority: "low" },
 ];
 
-function readFileAsDataUrl(file: File): Promise<string> {
-  return new Promise((resolve, reject) => {
-    const reader = new FileReader();
-    reader.onload = () => resolve(String(reader.result ?? ""));
-    reader.onerror = () => reject(new Error("Failed to read file"));
-    reader.readAsDataURL(file);
-  });
-}
-
 function BookingPageInner() {
   const router = useRouter();
   const searchParams = useSearchParams();
@@ -203,6 +195,7 @@ function BookingPageInner() {
   const [categories, setCategories] = useState<string[]>(fallbackCategories);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [submitError, setSubmitError] = useState<string | null>(null);
+  const [photoError, setPhotoError] = useState<string | null>(null);
 
   // Real-mode availability state - fetched per selected date.
   const [slots, setSlots] = useState<DisplaySlot[]>([]);
@@ -400,12 +393,13 @@ function BookingPageInner() {
     input.onchange = async () => {
       const file = input.files?.[0];
       if (!file) return;
+      setPhotoError(null);
       try {
-        const dataUrl = await readFileAsDataUrl(file);
+        const dataUrl = await prepareImageForUpload(file);
         const id = Math.random().toString(36).slice(2);
         setPhotos((prev) => [...prev, { id, url: dataUrl, dataUrl, name: file.name || `Photo ${prev.length + 1}` }]);
-      } catch {
-        // ignore failed read
+      } catch (error) {
+        setPhotoError(error instanceof Error ? error.message : "Could not prepare that photo");
       }
     };
     input.click();
@@ -531,7 +525,7 @@ function BookingPageInner() {
         await Promise.all(taskPosts);
       }
 
-      // Upload any collected photos against the new booking - best effort
+      // Upload any collected photos against the new booking before confirming.
       if (bookingId && photos.length) {
         const uploads = photos
           .filter((p) => p.dataUrl)
@@ -545,9 +539,14 @@ function BookingPageInner() {
                 label: p.name,
                 type: "before",
               }),
-            }).catch(() => null)
+            })
           );
-        await Promise.all(uploads);
+        const uploadResponses = await Promise.all(uploads);
+        const failedUpload = uploadResponses.find((upload) => !upload.ok);
+        if (failedUpload) {
+          const body = await failedUpload.json().catch(() => ({}));
+          throw new Error(body?.error ?? "Your visit was created, but a photo could not be uploaded. Please try again from the visit page.");
+        }
       }
 
       router.push(bookingId ? `/book/confirmation?id=${bookingId}` : "/book/confirmation");
@@ -641,7 +640,7 @@ function BookingPageInner() {
 
             {/* Membership upsell - subtle pointer to /account/plans */}
             <Link
-              href="/account/plans"
+              href="/messages?topic=membership"
               className="mb-6 flex items-center justify-between gap-3 rounded-xl border border-primary/20 bg-primary-50 px-4 py-3 hover:border-primary/40 transition-colors"
             >
               <div className="flex items-center gap-3 min-w-0">
@@ -650,7 +649,7 @@ function BookingPageInner() {
                 </div>
                 <div className="min-w-0">
                   <p className="text-[13px] font-semibold text-primary">Looking for a membership?</p>
-                  <p className="text-[11px] text-text-tertiary mt-0.5">Save with Essential, Pro, or Elite plans</p>
+                  <p className="text-[11px] text-text-tertiary mt-0.5">Message Anthony about the right visit plan</p>
                 </div>
               </div>
               <ChevronRight size={16} className="text-primary shrink-0" />
@@ -989,6 +988,11 @@ function BookingPageInner() {
                   </div>
                 ))}
               </div>
+              {photoError && (
+                <p className="mt-2 rounded-lg bg-error-light px-3 py-2 text-[12px] font-medium text-error" role="alert">
+                  {photoError}
+                </p>
+              )}
             </div>
 
             <div className="mb-8">

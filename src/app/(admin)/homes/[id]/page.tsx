@@ -20,8 +20,8 @@ import HomeSubscriptionCard from "./_components/HomeSubscriptionCard";
 import Photos from "./_components/Photos";
 import TodoList from "./_components/TodoList";
 import {
-  Appliances, HandymanNotes, Receipts, VisitHistory,
-  type ReceiptRow, type VisitRow,
+  Appliances, HandymanNotes, VisitHistory,
+  type VisitRow,
 } from "./_components/HistoryAndNotes";
 
 // ─── Page ──────────────────────────────────────────────────────────────────────
@@ -149,11 +149,6 @@ export default function HomeDetailPage({ params }: { params: Promise<{ id: strin
 
   const openTasks = todoItems.filter((t) => t.status !== "completed").length;
   const totalVisits = home?.bookings.filter((b) => b.status === "completed").length ?? 0;
-  const totalSpent = (home?.bookings ?? []).reduce(
-    (sum, b) => sum + (b.finalCost ? Number(b.finalCost) : 0),
-    0
-  );
-
   const visitHistory: VisitRow[] = (home?.bookings ?? [])
     .filter((b) => b.status === "completed")
     .map((b) => {
@@ -166,18 +161,6 @@ export default function HomeDetailPage({ params }: { params: Promise<{ id: strin
         tasks: b.tasks.length,
         hours: hrLabel,
         notes: b.techNotes || b.description || "Service visit completed",
-      };
-    });
-
-  const receipts: ReceiptRow[] = (home?.bookings ?? [])
-    .filter((b) => b.status === "completed" && (b.finalCost || b.estimatedCost))
-    .map((b) => {
-      const amount = b.finalCost ? Number(b.finalCost) : Number(b.estimatedCost ?? 0);
-      return {
-        id: b.id,
-        date: formatLongDate(b.scheduledDate),
-        desc: b.description || "Service visit",
-        amount: `$${amount.toFixed(2)}`,
       };
     });
 
@@ -499,7 +482,6 @@ export default function HomeDetailPage({ params }: { params: Promise<{ id: strin
         home={home}
         openTasks={openTasks}
         totalVisits={totalVisits}
-        totalSpent={totalSpent}
         fullAddress={fullAddress}
         gateCodeVisible={gateCodeVisible}
         setGateCodeVisible={setGateCodeVisible}
@@ -548,8 +530,6 @@ export default function HomeDetailPage({ params }: { params: Promise<{ id: strin
       <Appliances appliances={home.appliances ?? []} />
 
       <VisitHistory visits={visitHistory} />
-
-      <Receipts receipts={receipts} totalSpent={totalSpent} />
 
       <HandymanNotes
         notes={home.techNotes}

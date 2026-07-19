@@ -36,7 +36,15 @@ export async function POST(req: NextRequest) {
   const isTechCreating = user.role === "tech" && typeof body.customerId === "string" && body.customerId.length > 0;
   const customerId = isTechCreating ? (body.customerId as string) : user.id;
 
-  const customer = await prisma.user.findFirst({ where: { id: customerId, role: "customer" }, select: { id: true } });
+  // A technician can intentionally open the customer-side UI to run a real
+  // end-to-end booking for a home attached to their own account. In that one
+  // preview case the user still has the "tech" database role, so requiring a
+  // customer role produced the misleading "Customer not found" error.
+  const isTechCustomerPreview = user.role === "tech" && !isTechCreating && customerId === user.id;
+  const customer = await prisma.user.findFirst({
+    where: { id: customerId, ...(isTechCustomerPreview ? {} : { role: "customer" }) },
+    select: { id: true },
+  });
   if (!customer) return Response.json({ error: "Customer not found" }, { status: 404 });
   if (typeof body.homeId === "string" && body.homeId) {
     const ownedHome = await prisma.home.findFirst({ where: { id: body.homeId, customerId }, select: { id: true } });

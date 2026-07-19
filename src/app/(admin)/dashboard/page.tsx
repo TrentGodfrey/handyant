@@ -13,7 +13,6 @@ import {
   Clock,
   MapPin,
   Wrench,
-  DollarSign,
   ArrowRight,
   Bell,
   ShoppingCart,
@@ -176,7 +175,6 @@ const demoPendingOffers = [
 const demoMonthlyMetrics: MonthlyMetric[] = [
   { label: "Tasks / Visit", value: "3.2", trend: "+0.4", positive: true, icon: Wrench, sparkline: [2.8, 3.0, 2.9, 3.1, 3.2] },
   { label: "Avg Rating", value: "4.9", trend: "+0.1", positive: true, icon: Star, sparkline: [4.8, 4.8, 4.9, 4.9, 4.9] },
-  { label: "Revenue", value: "$8.2k", trend: "+12%", positive: true, icon: TrendingUp, sparkline: [6800, 7200, 7500, 7800, 8200] },
   { label: "Total Visits", value: "18", trend: "+3", positive: true, icon: Calendar, sparkline: [14, 15, 16, 17, 18] },
 ];
 
@@ -539,14 +537,6 @@ export default function AdminDashboard() {
           sparkline: [4.8, 4.8, 4.9, 4.9, stats?.month.avgRating ?? 0],
         },
         {
-          label: "Revenue",
-          value: formatRevenue(stats?.month.revenue ?? 0),
-          trend: "-",
-          positive: true,
-          icon: TrendingUp,
-          sparkline: [6800, 7200, 7500, 7800, stats?.month.revenue ?? 0],
-        },
-        {
           label: "Total Visits",
           value: String(stats?.month.completed ?? 0),
           trend: `${stats?.month.jobs ?? 0} booked`,
@@ -791,12 +781,11 @@ export default function AdminDashboard() {
       </div>
 
       {/* ── KPI Cards ── */}
-      <div className="mb-6 grid grid-cols-4 gap-2.5">
+      <div className="mb-6 grid grid-cols-3 gap-2.5">
         {[
           { label: "Today's Jobs", value: kpis.jobs, sub: "jobs", icon: Calendar, iconBg: "bg-primary-50", iconColor: "text-primary" },
           { label: "Hours", value: kpis.hours, sub: "booked", icon: Clock, iconBg: "bg-[#EFF9FF]", iconColor: "text-info" },
           { label: "Parts", value: kpis.partsToBuy, sub: "to buy", icon: ShoppingCart, iconBg: "bg-warning-light", iconColor: "text-warning" },
-          { label: "This Week", value: kpis.weekRevenue, sub: "earned", icon: DollarSign, iconBg: "bg-success-light", iconColor: "text-success" },
         ].map((stat) => (
           <Card key={stat.label} padding="sm" className="flex flex-col items-center text-center gap-1.5">
             <div className={`flex h-8 w-8 items-center justify-center rounded-full ${stat.iconBg}`}>
@@ -809,7 +798,7 @@ export default function AdminDashboard() {
       </div>
 
       {/* ── Revenue Trend ── */}
-      <RevenueTrendChart weeklyRevenue={weeklyRevenueData} monthlyTotal={monthlyTotal} />
+      {false && <RevenueTrendChart weeklyRevenue={weeklyRevenueData} monthlyTotal={monthlyTotal} />}
 
       {/* ── Parts Alert Banner ── */}
       {demoPartsAlert && (
@@ -975,16 +964,6 @@ export default function AdminDashboard() {
             ))}
           </div>
 
-          {/* Divider + CTA */}
-          <div className="mt-5 border-t border-border-light pt-4">
-            <Link
-              href="/reports"
-              className="flex items-center justify-between text-[13px] font-semibold text-primary active:opacity-70 transition-opacity"
-            >
-              View full report
-              <ChevronRight size={15} />
-            </Link>
-          </div>
         </Card>
       </div>
     </div>

@@ -466,7 +466,7 @@ export default function OnboardingPage() {
         </div>
 
         <p className="mt-8 text-[11px] text-text-tertiary">
-          By continuing you agree to our Terms & Privacy Policy.
+          By continuing you agree to our <Link href="/terms" className="font-semibold text-primary">Terms</Link> &amp; <Link href="/privacy" className="font-semibold text-primary">Privacy Policy</Link>.
         </p>
       </div>
     );

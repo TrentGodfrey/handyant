@@ -12,6 +12,7 @@ import {
   Plus, AlertTriangle, Check, Package, Star, Trash2,
 } from "lucide-react";
 import { useDemoMode } from "@/lib/useDemoMode";
+import { prepareImageForUpload } from "@/lib/client-image-upload";
 import { toast } from "@/components/Toaster";
 import { demoCustomerBy } from "@/lib/demoData";
 import Spinner from "@/components/Spinner";
@@ -530,13 +531,8 @@ export default function JobDetailPage({ params }: { params: Promise<{ id: string
     if (!file) return;
     setUploadError(null);
 
-    const dataUrl = await new Promise<string>((resolve, reject) => {
-      const reader = new FileReader();
-      reader.onload = () => resolve(String(reader.result));
-      reader.onerror = () => reject(new Error("Failed to read file"));
-      reader.readAsDataURL(file);
-    }).catch((err) => {
-      setUploadError(err.message);
+    const dataUrl = await prepareImageForUpload(file).catch((err: unknown) => {
+      setUploadError(err instanceof Error ? err.message : "Failed to prepare photo");
       return null;
     });
     if (!dataUrl) return;

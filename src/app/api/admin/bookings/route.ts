@@ -11,8 +11,7 @@ export async function GET(req: NextRequest) {
   const from = req.nextUrl.searchParams.get("from");
   const to = req.nextUrl.searchParams.get("to");
 
-  const where: Record<string, unknown> = {};
-  if (status) where.status = status;
+  const where: Record<string, unknown> = status ? { status } : { status: { not: "cancelled" } };
   if (from || to) {
     const dateRange: Record<string, Date> = {};
     if (from) dateRange.gte = new Date(from);

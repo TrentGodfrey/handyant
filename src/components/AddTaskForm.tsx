@@ -6,6 +6,7 @@ import Button from "@/components/Button";
 import {
   Camera, Loader2, X, ShoppingCart, AlignLeft, Flag,
 } from "lucide-react";
+import { prepareImageForUpload } from "@/lib/client-image-upload";
 
 export type Priority = "high" | "medium" | "low";
 export type PartsBuyer = "customer" | "tech";
@@ -64,6 +65,7 @@ export default function AddTaskForm({
   const [photos, setPhotos] = useState<{ id: string; url: string }[]>([]);
   const [uploadingPhoto, setUploadingPhoto] = useState(false);
   const [photoError, setPhotoError] = useState<string | null>(null);
+  const [submitError, setSubmitError] = useState<string | null>(null);
   const fileInputRef = useRef<HTMLInputElement | null>(null);
 
   if (!open) return null;
@@ -76,6 +78,7 @@ export default function AddTaskForm({
     setPartsBuyer("customer");
     setPhotos([]);
     setPhotoError(null);
+    setSubmitError(null);
   }
 
   async function handlePhotoChange(e: React.ChangeEvent<HTMLInputElement>) {
@@ -97,12 +100,7 @@ export default function AddTaskForm({
 
     setUploadingPhoto(true);
     try {
-      const dataUrl = await new Promise<string>((resolve, reject) => {
-        const reader = new FileReader();
-        reader.onload = () => resolve(reader.result as string);
-        reader.onerror = () => reject(new Error("Failed to read file"));
-        reader.readAsDataURL(file);
-      });
+      const dataUrl = await prepareImageForUpload(file);
       const res = await fetch("/api/photos", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -121,8 +119,11 @@ export default function AddTaskForm({
     }
   }
 
-  function removePhoto(id: string) {
+  async function removePhoto(id: string) {
     setPhotos((p) => p.filter((x) => x.id !== id));
+    if (!demoMode && !id.startsWith("demo-")) {
+      await fetch(`/api/photos/${id}`, { method: "DELETE" }).catch(() => null);
+    }
   }
 
   async function handleSubmit() {
@@ -142,8 +143,13 @@ export default function AddTaskForm({
       partStatus: trimmedParts ? partsBuyerLabel : null,
     };
 
-    await onSubmit(payload);
-    reset();
+    setSubmitError(null);
+    try {
+      await onSubmit(payload);
+      reset();
+    } catch (error) {
+      setSubmitError(error instanceof Error ? error.message : "Task could not be saved.");
+    }
   }
 
   return (
@@ -306,6 +312,10 @@ export default function AddTaskForm({
           <p className="mt-1.5 text-[11px] text-error">{photoError}</p>
         )}
       </div>
+
+      {submitError && (
+        <p className="mb-3 rounded-lg bg-error-light px-3 py-2 text-[11px] font-medium text-error">{submitError}</p>
+      )}
 
       {/* Actions */}
       <div className="flex gap-2">

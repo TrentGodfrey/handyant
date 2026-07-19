@@ -73,11 +73,11 @@ const DEMO_NOTIFICATIONS: Notification[] = [
   {
     id: "5",
     type: "invoice",
-    title: "Invoice Ready",
-    description: "Your invoice for $0 (covered by Pro plan) is ready. Parts: $42.00 billed separately.",
+    title: "Visit Summary Ready",
+    description: "Your completed visit summary is ready to review.",
     time: "14d ago",
     read: true,
-    link: "/account/receipts",
+    link: "/account",
   },
   {
     id: "6",

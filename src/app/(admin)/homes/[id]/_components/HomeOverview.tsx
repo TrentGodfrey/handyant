@@ -13,7 +13,6 @@ interface HomeOverviewProps {
   home: ApiHome;
   openTasks: number;
   totalVisits: number;
-  totalSpent: number;
   fullAddress: string;
   gateCodeVisible: boolean;
   setGateCodeVisible: (v: boolean | ((p: boolean) => boolean)) => void;
@@ -22,7 +21,7 @@ interface HomeOverviewProps {
 }
 
 export default function HomeOverview({
-  home, openTasks, totalVisits, totalSpent, fullAddress,
+  home, openTasks, totalVisits, fullAddress,
   gateCodeVisible, setGateCodeVisible, onOpenEdit, onCustomerSaved,
 }: HomeOverviewProps) {
   const [editingEmail, setEditingEmail] = useState(false);
@@ -162,7 +161,7 @@ export default function HomeOverview({
         </div>
 
         {/* Stats strip */}
-        <div className="mt-3 grid grid-cols-3 gap-1.5 sm:gap-3">
+        <div className="mt-3 grid grid-cols-2 gap-1.5 sm:gap-3">
           <div className="flex min-w-0 flex-col items-center rounded-xl bg-surface border border-border px-1 py-2.5 shadow-[0_1px_3px_rgba(0,0,0,0.06)]">
             <span className="text-[17px] font-bold text-text-primary">{openTasks}</span>
             <span className="text-[10px] text-text-tertiary">Open Tasks</span>
@@ -170,10 +169,6 @@ export default function HomeOverview({
           <div className="flex min-w-0 flex-col items-center rounded-xl bg-surface border border-border px-1 py-2.5 shadow-[0_1px_3px_rgba(0,0,0,0.06)]">
             <span className="text-[17px] font-bold text-text-primary">{totalVisits}</span>
             <span className="text-[10px] text-text-tertiary">Total Visits</span>
-          </div>
-          <div className="flex min-w-0 flex-col items-center rounded-xl bg-surface border border-border px-1 py-2.5 shadow-[0_1px_3px_rgba(0,0,0,0.06)]">
-            <span className="text-[17px] font-bold text-text-primary">${Math.round(totalSpent)}</span>
-            <span className="text-[10px] text-text-tertiary">Total Spent</span>
           </div>
         </div>
       </div>

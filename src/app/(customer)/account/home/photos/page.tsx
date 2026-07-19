@@ -9,6 +9,7 @@ import {
   Upload, ZoomIn, Loader2, Trash2,
 } from "lucide-react";
 import { useDemoMode } from "@/lib/useDemoMode";
+import { prepareImageForUpload } from "@/lib/client-image-upload";
 
 // =====================================================================
 // Demo data (preserved)
@@ -346,12 +347,7 @@ function RealPhotoGallery() {
     setUploading(true);
     setUploadError(null);
     try {
-      const dataUrl = await new Promise<string>((resolve, reject) => {
-        const reader = new FileReader();
-        reader.onload = () => resolve(String(reader.result ?? ""));
-        reader.onerror = () => reject(new Error("Failed to read file"));
-        reader.readAsDataURL(file);
-      });
+      const dataUrl = await prepareImageForUpload(file);
       const res = await fetch("/api/photos", {
         method: "POST",
         headers: { "Content-Type": "application/json" },

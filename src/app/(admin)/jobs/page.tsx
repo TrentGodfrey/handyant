@@ -28,7 +28,7 @@ import Spinner from "@/components/Spinner";
 // ── Types ────────────────────────────────────────────────────────────────────
 
 type PipelineStage = "pending" | "confirmed" | "in-progress" | "completed";
-type JobStatus = PipelineStage | "needs-parts" | "scheduled";
+type JobStatus = PipelineStage | "needs-parts" | "scheduled" | "cancelled";
 
 interface Job {
   id: string;
@@ -119,7 +119,8 @@ const STAGES: { key: PipelineStage; label: string; color: string; dotClass: stri
 ];
 
 /** Map any job status to its pipeline stage */
-function toPipelineStage(status: JobStatus): PipelineStage {
+function toPipelineStage(status: JobStatus): PipelineStage | null {
+  if (status === "cancelled") return null;
   if (status === "needs-parts" || status === "scheduled") return "pending";
   return status;
 }
@@ -448,6 +449,7 @@ function JobCardList({
   onMove: (jobId: string, stage: PipelineStage) => void;
 }) {
   const stage = toPipelineStage(job.status);
+  if (!stage) return null;
 
   return (
     <Link href={`/jobs/${job.id}`} className="block">
@@ -515,6 +517,7 @@ function JobCardCompact({
 }) {
   const router = useRouter();
   const stage = toPipelineStage(job.status);
+  if (!stage) return null;
   const stageConfig = STAGES.find((s) => s.key === stage)!;
   const taskSummary = job.tasks[0] ?? "No tasks";
   const extraTasks = job.tasks.length > 1 ? job.tasks.length - 1 : 0;
@@ -644,7 +647,7 @@ function KanbanColumn({
 // ── Page ─────────────────────────────────────────────────────────────────────
 
 // Multi-select filter set
-type FilterStatus = "pending" | "confirmed" | "in-progress" | "completed" | "cancelled" | "needs-parts" | "scheduled";
+type FilterStatus = "pending" | "confirmed" | "in-progress" | "completed" | "needs-parts" | "scheduled";
 
 const FILTER_STATUSES: { key: FilterStatus; label: string }[] = [
   { key: "pending", label: "Pending" },
@@ -653,7 +656,6 @@ const FILTER_STATUSES: { key: FilterStatus; label: string }[] = [
   { key: "needs-parts", label: "Needs Parts" },
   { key: "scheduled", label: "Scheduled" },
   { key: "completed", label: "Completed" },
-  { key: "cancelled", label: "Cancelled" },
 ];
 
 const DATE_BUCKETS: { key: "today" | "this-week" | "future" | "past"; label: string }[] = [
@@ -755,6 +757,7 @@ export default function JobsPage() {
     let total = 0;
     for (const j of jobData) {
       const s = toPipelineStage(j.status);
+      if (!s) continue;
       counts[s]++;
       const amt = parseDollars(j.estimate);
       revenue[s] += amt;
@@ -832,7 +835,8 @@ export default function JobsPage() {
   const groupedByStage = useMemo(() => {
     const groups: Record<PipelineStage, Job[]> = { pending: [], confirmed: [], "in-progress": [], completed: [] };
     for (const j of filtered) {
-      groups[toPipelineStage(j.status)].push(j);
+      const stage = toPipelineStage(j.status);
+      if (stage) groups[stage].push(j);
     }
     return groups;
   }, [filtered]);
