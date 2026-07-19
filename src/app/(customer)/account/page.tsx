@@ -12,6 +12,7 @@ import {
 import { useDemoMode } from "@/lib/useDemoMode";
 import { demoCustomerBy } from "@/lib/demoData";
 import { PLANS } from "@/lib/plans";
+import { bookingDateToLocalDate } from "@/lib/booking-time";
 
 interface PastJob {
   date: string;
@@ -69,7 +70,7 @@ export default function AccountPage() {
       if (Array.isArray(bookings)) {
         completedBookings = bookings.filter((b: Record<string, unknown>) => b.status === "completed");
         const completed = completedBookings.map((b: Record<string, unknown>) => ({
-          date: new Date(b.scheduledDate as string).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" }),
+          date: bookingDateToLocalDate(b.scheduledDate as string).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" }),
           tasks: (b.description as string) || "Service visit",
           status: "completed" as const,
           rating: 0,

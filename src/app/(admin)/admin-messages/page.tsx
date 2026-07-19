@@ -6,6 +6,7 @@ import { Send, Camera, Paperclip, ArrowLeft, MoreVertical, Search, Plus, X } fro
 import { useDemoMode } from "@/lib/useDemoMode";
 import { demoCustomerBy } from "@/lib/demoData";
 import Spinner from "@/components/Spinner";
+import { bookingDateToLocalDate, formatBookingTime } from "@/lib/booking-time";
 
 interface Message {
   id: string;
@@ -192,14 +193,11 @@ type ApiClient = {
 };
 
 function formatVisit(dateStr: string, timeStr: string): string {
-  const d = new Date(dateStr);
+  const d = bookingDateToLocalDate(dateStr);
   if (Number.isNaN(d.getTime())) return "";
   const dayLabel = d.toLocaleDateString("en-US", { weekday: "short", month: "short", day: "numeric" });
   // scheduledTime arrives as ISO; format the time-of-day portion only.
-  const t = new Date(timeStr);
-  const timeLabel = Number.isNaN(t.getTime())
-    ? ""
-    : t.toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit" });
+  const timeLabel = formatBookingTime(timeStr);
   return timeLabel ? `${dayLabel} · ${timeLabel}` : dayLabel;
 }
 

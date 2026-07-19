@@ -16,6 +16,7 @@ import { prepareImageForUpload } from "@/lib/client-image-upload";
 import { toast } from "@/components/Toaster";
 import { demoCustomerBy } from "@/lib/demoData";
 import Spinner from "@/components/Spinner";
+import { bookingDateToLocalDate, formatBookingTime } from "@/lib/booking-time";
 
 // ── Types ────────────────────────────────────────────────────────────────────
 
@@ -131,14 +132,13 @@ interface ApiBooking {
 function bookingToDetail(b: ApiBooking): JobDetail {
   const cost = b.finalCost ?? b.estimatedCost;
   const numCost = cost == null ? 0 : Number(cost);
-  const dateObj = new Date(b.scheduledDate);
-  const timeObj = new Date(b.scheduledTime);
+  const dateObj = bookingDateToLocalDate(b.scheduledDate);
   const today = new Date();
   const isToday = dateObj.toDateString() === today.toDateString();
   const dateLabel = isToday
     ? "Today"
     : dateObj.toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" });
-  const timeLabel = timeObj.toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit" });
+  const timeLabel = formatBookingTime(b.scheduledTime);
 
   const homeStr = b.home
     ? `${b.home.address}${b.home.city ? `, ${b.home.city}` : ""}${b.home.state ? ` ${b.home.state}` : ""}${b.home.zip ? ` ${b.home.zip}` : ""}`

@@ -12,22 +12,14 @@ import {
 } from "lucide-react";
 import { useDemoMode } from "@/lib/useDemoMode";
 import { toast } from "@/components/Toaster";
+import { bookingDateToLocalDate, bookingTimeParts, formatBookingTime } from "@/lib/booking-time";
 
 function combineDateTime(scheduledDate: string, scheduledTime: string): Date | null {
   // Date may be "YYYY-MM-DD" or full ISO; time may be "HH:mm[:ss]" or full ISO
   const dateStr = scheduledDate.split("T")[0];
-  let h = 0;
-  let m = 0;
-  if (scheduledTime.includes("T")) {
-    const d = new Date(scheduledTime);
-    if (isNaN(d.getTime())) return null;
-    h = d.getHours();
-    m = d.getMinutes();
-  } else {
-    const [hh, mm] = scheduledTime.split(":");
-    h = parseInt(hh ?? "0", 10);
-    m = parseInt(mm ?? "0", 10);
-  }
+  const parts = bookingTimeParts(scheduledTime);
+  if (!parts) return null;
+  const { hours: h, minutes: m } = parts;
   const [yStr, moStr, dStr] = dateStr.split("-");
   const y = parseInt(yStr, 10);
   const mo = parseInt(moStr, 10) - 1;
@@ -125,26 +117,11 @@ function statusToPhase(status: string): Phase {
 }
 
 function formatTime(scheduledTime: string): string {
-  // scheduledTime can be ISO datetime, "HH:mm", or "HH:mm:ss"
-  let h = 0;
-  let m = 0;
-  const tIdx = scheduledTime.indexOf("T");
-  if (tIdx >= 0) {
-    const d = new Date(scheduledTime);
-    h = d.getHours();
-    m = d.getMinutes();
-  } else {
-    const [hh, mm] = scheduledTime.split(":");
-    h = parseInt(hh ?? "0", 10);
-    m = parseInt(mm ?? "0", 10);
-  }
-  const ampm = h >= 12 ? "PM" : "AM";
-  const h12 = h % 12 === 0 ? 12 : h % 12;
-  return `${h12}:${String(m).padStart(2, "0")} ${ampm}`;
+  return formatBookingTime(scheduledTime);
 }
 
 function formatDate(dateStr: string): string {
-  const d = new Date(dateStr);
+  const d = bookingDateToLocalDate(dateStr);
   return d.toLocaleDateString("en-US", {
     weekday: "long", month: "long", day: "numeric",
   });
@@ -487,14 +464,8 @@ export default function TrackPage() {
   const durationLabel = booking.durationMinutes
     ? `${timeLabel} – ${(() => {
         // Compute end time by adding minutes
-        const [h, m] = (() => {
-          if (booking.scheduledTime.includes("T")) {
-            const d = new Date(booking.scheduledTime);
-            return [d.getHours(), d.getMinutes()];
-          }
-          const [hh, mm] = booking.scheduledTime.split(":");
-          return [parseInt(hh, 10), parseInt(mm, 10)];
-        })();
+        const parts = bookingTimeParts(booking.scheduledTime);
+        const [h, m] = [parts?.hours ?? 0, parts?.minutes ?? 0];
         const total = h * 60 + m + (booking.durationMinutes ?? 0);
         const eh = Math.floor(total / 60) % 24;
         const em = total % 60;

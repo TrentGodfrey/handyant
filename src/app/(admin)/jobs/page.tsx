@@ -24,6 +24,7 @@ import { useDemoMode } from "@/lib/useDemoMode";
 import { toast } from "@/components/Toaster";
 import { demoCustomerBy } from "@/lib/demoData";
 import Spinner from "@/components/Spinner";
+import { bookingDateToLocalDate, formatBookingTime } from "@/lib/booking-time";
 
 // ── Types ────────────────────────────────────────────────────────────────────
 
@@ -83,11 +84,10 @@ function bucketDate(date: Date): "today" | "this-week" | "future" | "past" {
 }
 
 function formatJobDate(dateIso: string, timeIso: string): string {
-  const d = new Date(dateIso);
-  const t = new Date(timeIso);
+  const d = bookingDateToLocalDate(dateIso);
   const now = new Date();
   const isToday = d.toDateString() === now.toDateString();
-  const timeStr = t.toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit" });
+  const timeStr = formatBookingTime(timeIso);
   if (isToday) return `Today, ${timeStr}`;
   return `${d.toLocaleDateString("en-US", { month: "short", day: "numeric" })}, ${timeStr}`;
 }
@@ -100,7 +100,7 @@ function bookingToJob(b: ApiBooking): Job {
     client: b.customer?.name ?? "Customer",
     address: b.home ? `${b.home.address}${b.home.city ? `, ${b.home.city}` : ""}` : "-",
     date: formatJobDate(b.scheduledDate, b.scheduledTime),
-    dateGroup: bucketDate(new Date(b.scheduledDate)),
+    dateGroup: bucketDate(bookingDateToLocalDate(b.scheduledDate)),
     tasks: b.tasks.map((t) => t.label),
     status: apiStatusToUi(b.status),
     partsNeeded: (b.parts ?? []).some((p) => p.status === "needed" || p.status === "ordered"),

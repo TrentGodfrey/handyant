@@ -9,6 +9,7 @@ import Spinner from "@/components/Spinner";
 import { useDemoMode } from "@/lib/useDemoMode";
 import { toast } from "@/components/Toaster";
 import { PLANS, type PlanId } from "@/lib/plans";
+import { bookingDateToLocalDate, bookingTimeInputValue, formatBookingTime } from "@/lib/booking-time";
 import {
   MapPin, Clock, Star, ArrowRight, Camera,
   MessageCircle, Phone, CheckCircle2,
@@ -165,7 +166,7 @@ export default function CustomerHome() {
     : FALLBACK_TEL;
 
   const formatDate = (dateStr: string) => {
-    const d = new Date(dateStr);
+    const d = bookingDateToLocalDate(dateStr);
     return d.toLocaleDateString("en-US", { weekday: "long", month: "long", day: "numeric" });
   };
 
@@ -263,7 +264,7 @@ export default function CustomerHome() {
                   </div>
                   <div className="flex items-center gap-1.5 mt-0.5 text-text-secondary">
                     <Clock size={13} />
-                    <span className="text-[13px]">{nextBooking.scheduledTime}</span>
+                    <span className="text-[13px]">{formatBookingTime(nextBooking.scheduledTime)}</span>
                   </div>
                 </div>
                 {nextBooking.status === "confirmed" && (
@@ -589,13 +590,7 @@ function formatSlotLabel(time: string): string {
 }
 
 function parseCurrentTime(scheduledTime: string): string {
-  // scheduledTime can be ISO or "HH:MM". Normalize to "HH:MM".
-  if (scheduledTime.includes("T")) {
-    const d = new Date(scheduledTime);
-    return `${String(d.getHours()).padStart(2, "0")}:${String(d.getMinutes()).padStart(2, "0")}`;
-  }
-  const [hh, mm] = scheduledTime.split(":");
-  return `${hh}:${mm}`;
+  return bookingTimeInputValue(scheduledTime);
 }
 
 function RescheduleModal({ booking, onClose, onRescheduled }: RescheduleModalProps) {

@@ -5,6 +5,7 @@ import { useSession } from "next-auth/react";
 import { Send, Camera, Paperclip, ArrowLeft, Phone, MoreVertical, MessageSquare } from "lucide-react";
 import { useDemoMode } from "@/lib/useDemoMode";
 import { toast as appToast } from "@/components/Toaster";
+import { bookingDateToLocalDate } from "@/lib/booking-time";
 
 interface Message {
   id: string;
@@ -225,7 +226,7 @@ export default function MessagesPage() {
           unread: 0,
           online: isOnline(other?.lastSeenAt),
           nextVisit: visit
-            ? `${new Date(visit.scheduledDate).toLocaleDateString([], { weekday: "short", month: "short", day: "numeric" })}`
+            ? bookingDateToLocalDate(visit.scheduledDate).toLocaleDateString([], { weekday: "short", month: "short", day: "numeric" })
             : "",
           address: visit?.home?.address ?? "",
           phone: visit?.tech?.phone ?? "",
@@ -251,7 +252,7 @@ export default function MessagesPage() {
             unread: 0,
             online: false,
             nextVisit: bookingWithTech?.scheduledDate
-              ? new Date(bookingWithTech.scheduledDate).toLocaleDateString([], { weekday: "short", month: "short", day: "numeric" })
+              ? bookingDateToLocalDate(bookingWithTech.scheduledDate).toLocaleDateString([], { weekday: "short", month: "short", day: "numeric" })
               : "",
             address: bookingWithTech?.home?.address ?? "",
             phone: fallback.phone ?? "",

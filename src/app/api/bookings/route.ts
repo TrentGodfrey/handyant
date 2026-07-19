@@ -3,6 +3,7 @@ import { prisma } from "@/lib/prisma";
 import { requireUser, unauthorized } from "@/lib/session";
 import { sendEmail, emailShell, escapeHtml } from "@/lib/email";
 import { decryptHomeAccess } from "@/lib/sensitive-data";
+import { bookingTimeToDatabaseDate } from "@/lib/booking-time";
 
 export async function GET() {
   const user = await requireUser();
@@ -51,11 +52,11 @@ export async function POST(req: NextRequest) {
     if (!ownedHome) return Response.json({ error: "Home does not belong to this customer" }, { status: 403 });
   }
   const scheduledDate = new Date(body.scheduledDate);
-  const scheduledTime = new Date(`1970-01-01T${body.scheduledTime}`);
+  const scheduledTime = typeof body.scheduledTime === "string" ? bookingTimeToDatabaseDate(body.scheduledTime) : null;
   if (!body.scheduledDate || Number.isNaN(scheduledDate.getTime())) {
     return Response.json({ error: "A valid scheduled date is required" }, { status: 400 });
   }
-  if (!body.scheduledTime || Number.isNaN(scheduledTime.getTime())) {
+  if (!scheduledTime) {
     return Response.json({ error: "A valid scheduled time is required" }, { status: 400 });
   }
 

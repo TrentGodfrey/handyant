@@ -11,6 +11,7 @@ import Button from "@/components/Button";
 import Card from "@/components/Card";
 import Spinner from "@/components/Spinner";
 import { useDemoMode } from "@/lib/useDemoMode";
+import { bookingDateToLocalDate, bookingTimeParts } from "@/lib/booking-time";
 
 const steps = [
   {
@@ -58,7 +59,7 @@ function refNumber(id: string): string {
 }
 
 function formatDateLong(dateStr: string): string {
-  const d = new Date(dateStr);
+  const d = bookingDateToLocalDate(dateStr);
   if (isNaN(d.getTime())) return dateStr;
   return d.toLocaleDateString("en-US", {
     weekday: "long", year: "numeric", month: "long", day: "numeric",
@@ -66,13 +67,8 @@ function formatDateLong(dateStr: string): string {
 }
 
 function parseTimeParts(scheduledTime: string): { h: number; m: number } {
-  const tIdx = scheduledTime.indexOf("T");
-  if (tIdx >= 0) {
-    const d = new Date(scheduledTime);
-    return { h: d.getHours(), m: d.getMinutes() };
-  }
-  const [hh, mm] = scheduledTime.split(":");
-  return { h: parseInt(hh ?? "0", 10), m: parseInt(mm ?? "0", 10) };
+  const parts = bookingTimeParts(scheduledTime);
+  return { h: parts?.hours ?? 0, m: parts?.minutes ?? 0 };
 }
 
 function formatTime(scheduledTime: string): string {
@@ -96,7 +92,7 @@ function formatTimeRange(scheduledTime: string, durationMinutes: number | null):
 
 // Build an ICS string for the booking
 function buildIcs(booking: ApiBooking): string {
-  const date = new Date(booking.scheduledDate);
+  const date = bookingDateToLocalDate(booking.scheduledDate);
   const { h, m } = parseTimeParts(booking.scheduledTime);
   const start = new Date(date.getFullYear(), date.getMonth(), date.getDate(), h, m);
   const end = new Date(start.getTime() + (booking.durationMinutes ?? 120) * 60 * 1000);

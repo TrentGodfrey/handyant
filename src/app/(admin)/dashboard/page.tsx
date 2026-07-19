@@ -26,6 +26,7 @@ import {
 } from "lucide-react";
 import { useDemoMode } from "@/lib/useDemoMode";
 import { demoCustomerBy } from "@/lib/demoData";
+import { bookingDateToLocalDate, formatBookingTime } from "@/lib/booking-time";
 
 type ScheduleItem = {
   id: string | number;
@@ -432,7 +433,7 @@ function formatRevenue(n: number) {
 }
 
 function formatTime(iso: string) {
-  return new Date(iso).toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit" });
+  return formatBookingTime(iso);
 }
 
 function formatDuration(mins: number | null) {
@@ -448,7 +449,7 @@ function isValidStatus(s: string): s is ScheduleItem["status"] {
 
 function formatOfferDate(iso: string) {
   try {
-    return new Date(iso).toLocaleDateString("en-US", { month: "short", day: "numeric" });
+    return bookingDateToLocalDate(iso).toLocaleDateString("en-US", { month: "short", day: "numeric" });
   } catch {
     return iso;
   }
@@ -729,16 +730,7 @@ export default function AdminDashboard() {
                 ? `$${Math.round(Number(offer.estimatedCost))}`
                 : null;
               const dateLabel = formatOfferDate(offer.scheduledDate);
-              const timeLabel = (() => {
-                try {
-                  return new Date(offer.scheduledTime).toLocaleTimeString("en-US", {
-                    hour: "numeric",
-                    minute: "2-digit",
-                  });
-                } catch {
-                  return offer.scheduledTime;
-                }
-              })();
+              const timeLabel = formatBookingTime(offer.scheduledTime);
               return (
                 <Card key={offer.id} padding="sm">
                   <div className="flex items-center gap-3">

@@ -4,6 +4,7 @@ import { requireUser, unauthorized, notFound, forbidden, badRequest } from "@/li
 import { BookingStatus } from "@/generated/prisma/enums";
 import { completedStatusDelta, getVisitUsage } from "@/lib/subscription-usage";
 import { decryptHomeAccess } from "@/lib/sensitive-data";
+import { bookingTimeToDatabaseDate } from "@/lib/booking-time";
 
 export async function GET(_req: NextRequest, ctx: { params: Promise<{ id: string }> }) {
   const user = await requireUser();
@@ -74,7 +75,11 @@ export async function PATCH(req: NextRequest, ctx: { params: Promise<{ id: strin
   }
   if (body.techId !== undefined && isTech) data.techId = body.techId;
   if (body.scheduledDate !== undefined && isTech) data.scheduledDate = new Date(body.scheduledDate);
-  if (body.scheduledTime !== undefined && isTech) data.scheduledTime = new Date(`1970-01-01T${body.scheduledTime}`);
+  if (body.scheduledTime !== undefined && isTech) {
+    const scheduledTime = typeof body.scheduledTime === "string" ? bookingTimeToDatabaseDate(body.scheduledTime) : null;
+    if (!scheduledTime) return badRequest("Invalid scheduled time");
+    data.scheduledTime = scheduledTime;
+  }
   if (body.durationMinutes !== undefined && isTech) data.durationMinutes = body.durationMinutes;
   if (body.description !== undefined && isTech) data.description = body.description;
   if (body.customerNotes !== undefined && isCustomer) data.customerNotes = body.customerNotes;
