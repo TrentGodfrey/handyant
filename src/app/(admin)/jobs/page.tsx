@@ -41,7 +41,6 @@ interface Job {
   status: JobStatus;
   partsNeeded: boolean;
   photos: number;
-  estimate: string;
 }
 
 // API booking shape (subset used here)
@@ -50,8 +49,6 @@ interface ApiBooking {
   status: string;
   scheduledDate: string;
   scheduledTime: string;
-  estimatedCost: string | number | null;
-  finalCost: string | number | null;
   customer: { id: string; name: string } | null;
   home: { address: string; city: string | null } | null;
   tasks: { id: string; label: string; done: boolean | null }[];
@@ -93,8 +90,6 @@ function formatJobDate(dateIso: string, timeIso: string): string {
 }
 
 function bookingToJob(b: ApiBooking): Job {
-  const cost = b.finalCost ?? b.estimatedCost;
-  const numCost = cost == null ? 0 : Number(cost);
   return {
     id: b.id,
     client: b.customer?.name ?? "Customer",
@@ -105,7 +100,6 @@ function bookingToJob(b: ApiBooking): Job {
     status: apiStatusToUi(b.status),
     partsNeeded: (b.parts ?? []).some((p) => p.status === "needed" || p.status === "ordered"),
     photos: (b.photos ?? []).length,
-    estimate: numCost > 0 ? `$${numCost.toFixed(0)}` : "$0",
   };
 }
 
@@ -125,11 +119,6 @@ function toPipelineStage(status: JobStatus): PipelineStage | null {
   return status;
 }
 
-/** Parse dollar string to number */
-function parseDollars(s: string): number {
-  return Number(s.replace(/[^0-9.]/g, "")) || 0;
-}
-
 // ── Demo data (used only when demo_mode cookie is set) ──────────────────────
 
 const DEMO_JOBS: Job[] = [
@@ -143,7 +132,6 @@ const DEMO_JOBS: Job[] = [
     status: "confirmed",
     partsNeeded: true,
     photos: 3,
-    estimate: "$340",
   },
   {
     id: "2",
@@ -155,7 +143,6 @@ const DEMO_JOBS: Job[] = [
     status: "confirmed",
     partsNeeded: false,
     photos: 0,
-    estimate: "$280",
   },
   {
     id: "3",
@@ -167,7 +154,6 @@ const DEMO_JOBS: Job[] = [
     status: "pending",
     partsNeeded: false,
     photos: 2,
-    estimate: "$190",
   },
   {
     id: "4",
@@ -179,7 +165,6 @@ const DEMO_JOBS: Job[] = [
     status: "pending",
     partsNeeded: true,
     photos: 5,
-    estimate: "$620",
   },
   {
     id: "5",
@@ -191,7 +176,6 @@ const DEMO_JOBS: Job[] = [
     status: "needs-parts",
     partsNeeded: true,
     photos: 1,
-    estimate: "$175",
   },
   {
     id: "6",
@@ -203,7 +187,6 @@ const DEMO_JOBS: Job[] = [
     status: "scheduled",
     partsNeeded: false,
     photos: 0,
-    estimate: "$230",
   },
   // In-progress job
   {
@@ -216,7 +199,6 @@ const DEMO_JOBS: Job[] = [
     status: "in-progress",
     partsNeeded: false,
     photos: 4,
-    estimate: "$480",
   },
   // Completed jobs
   {
@@ -229,7 +211,6 @@ const DEMO_JOBS: Job[] = [
     status: "completed",
     partsNeeded: false,
     photos: 2,
-    estimate: "$215",
   },
   {
     id: "9",
@@ -241,7 +222,6 @@ const DEMO_JOBS: Job[] = [
     status: "completed",
     partsNeeded: false,
     photos: 3,
-    estimate: "$310",
   },
 ];
 
@@ -378,14 +358,10 @@ function PipelineSummary({
   stageCounts,
   activeStage,
   onStageClick,
-  totalRevenue,
-  showTotal,
 }: {
   stageCounts: Record<PipelineStage, number>;
   activeStage: PipelineStage | "all";
   onStageClick: (stage: PipelineStage | "all") => void;
-  totalRevenue: number;
-  showTotal: boolean;
 }) {
   const totalJobs = Object.values(stageCounts).reduce((a, b) => a + b, 0);
 
@@ -429,12 +405,6 @@ function PipelineSummary({
         ))}
       </div>
 
-      {showTotal && totalRevenue > 0 && (
-        <div className="hidden shrink-0 rounded-full border border-border bg-surface px-3.5 py-1.5 text-[12px] font-semibold text-text-secondary lg:block">
-          <span className="text-text-tertiary">Pipeline:</span>{" "}
-          <span className="text-text-primary">${totalRevenue.toLocaleString()}</span>
-        </div>
-      )}
     </div>
   );
 }
@@ -468,9 +438,6 @@ function JobCardList({
               <Clock size={12} className="shrink-0 text-text-tertiary" />
               <span className="text-[12px] text-text-secondary">{job.date}</span>
             </div>
-          </div>
-          <div className="flex flex-col items-end gap-1 shrink-0">
-            <span className="text-[16px] font-bold text-text-primary">{job.estimate}</span>
           </div>
         </div>
 
@@ -582,7 +549,6 @@ function JobCardCompact({
             <span className="h-1.5 w-1.5 rounded-full" style={{ backgroundColor: stageConfig.color }} />
             {stageConfig.label}
           </span>
-          <span className="text-[13px] font-bold text-text-primary">{job.estimate}</span>
         </div>
         <StatusDropdown currentStage={stage} onStatusChange={(newStage) => onStatusChange(job.id, newStage)} />
       </div>
@@ -595,12 +561,10 @@ function JobCardCompact({
 function KanbanColumn({
   stage,
   jobs: columnJobs,
-  revenue,
   onStatusChange,
 }: {
   stage: (typeof STAGES)[number];
   jobs: Job[];
-  revenue: number;
   onStatusChange: (jobId: string, stage: PipelineStage) => void;
 }) {
   return (
@@ -620,11 +584,6 @@ function KanbanColumn({
               {columnJobs.length}
             </span>
           </div>
-          {revenue > 0 && (
-            <span className="text-[11px] font-semibold text-text-tertiary shrink-0">
-              ${revenue.toLocaleString()}
-            </span>
-          )}
         </div>
       </div>
 
@@ -750,20 +709,15 @@ export default function JobsPage() {
       });
   };
 
-  // Compute stage counts & revenue from full data (before search filter)
-  const { stageCounts, stageRevenue, totalRevenue } = useMemo(() => {
+  // Compute stage counts from full data (before search filter)
+  const stageCounts = useMemo(() => {
     const counts: Record<PipelineStage, number> = { pending: 0, confirmed: 0, "in-progress": 0, completed: 0 };
-    const revenue: Record<PipelineStage, number> = { pending: 0, confirmed: 0, "in-progress": 0, completed: 0 };
-    let total = 0;
     for (const j of jobData) {
       const s = toPipelineStage(j.status);
       if (!s) continue;
       counts[s]++;
-      const amt = parseDollars(j.estimate);
-      revenue[s] += amt;
-      total += amt;
     }
-    return { stageCounts: counts, stageRevenue: revenue, totalRevenue: total };
+    return counts;
   }, [jobData]);
 
   // Filtered jobs
@@ -1013,8 +967,6 @@ export default function JobsPage() {
         stageCounts={stageCounts}
         activeStage={activeStage}
         onStageClick={setActiveStage}
-        totalRevenue={totalRevenue}
-        showTotal={view === "board"}
       />
 
       {/* Results count */}
@@ -1054,7 +1006,6 @@ export default function JobsPage() {
                   key={stage.key}
                   stage={stage}
                   jobs={groupedByStage[stage.key]}
-                  revenue={stageRevenue[stage.key]}
                   onStatusChange={handleStatusChange}
                 />
               ))}

@@ -40,7 +40,6 @@ interface JobDetail {
   date: string;
   time: string;
   status: UiStatus;
-  estimate: string;
   tasks: { id: string; label: string; done: boolean; notes?: string }[];
   parts: { item: string; qty: number; status: "purchased" | "needed" | "ordered" }[];
   photos: { id: string; label: string; url?: string }[];
@@ -61,7 +60,6 @@ const DEMO_JOBS: Record<string, JobDetail> = {
   "1": {
     id: "1", client: demoCustomerBy("1")!.name, address: "4821 Oak Hollow Dr, Plano TX 75024",
     phone: "(972) 555-0142", date: "Today", time: "9:00 AM", status: "confirmed",
-    estimate: "$340",
     tasks: [
       { id: "t1", label: "Replace kitchen faucet (Moen brushed nickel)", done: false },
       { id: "t2", label: "Fix garage door sensor alignment", done: false, notes: "Laser level needed" },
@@ -82,7 +80,6 @@ const DEMO_JOBS: Record<string, JobDetail> = {
   "2": {
     id: "2", client: demoCustomerBy("2")!.name, address: "1205 Elm Creek Ct, Frisco TX 75034",
     phone: "(469) 555-0298", date: "Today", time: "11:30 AM", status: "confirmed",
-    estimate: "$280",
     tasks: [
       { id: "t1", label: "Install Nest Learning Thermostat (3rd gen)", done: false },
       { id: "t2", label: "Replace 3 duplex outlets - master BR + office + garage", done: false },
@@ -95,7 +92,6 @@ const DEMO_JOBS: Record<string, JobDetail> = {
   "3": {
     id: "3", client: demoCustomerBy("3")!.name, address: "890 Sunset Ridge, Roanoke TX 76262",
     phone: "(817) 555-0377", date: "Today", time: "2:00 PM", status: "pending",
-    estimate: "$190",
     tasks: [
       { id: "t1", label: "Drywall patch - 2 holes from TV mount removal", done: false },
       { id: "t2", label: "Touch-up paint - living room & hallway", done: false, notes: "Paint color: SW Alabaster" },
@@ -117,8 +113,6 @@ interface ApiBooking {
   status: string;
   scheduledDate: string;
   scheduledTime: string;
-  estimatedCost: string | number | null;
-  finalCost: string | number | null;
   description: string | null;
   customerNotes: string | null;
   techNotes: string | null;
@@ -130,8 +124,6 @@ interface ApiBooking {
 }
 
 function bookingToDetail(b: ApiBooking): JobDetail {
-  const cost = b.finalCost ?? b.estimatedCost;
-  const numCost = cost == null ? 0 : Number(cost);
   const dateObj = bookingDateToLocalDate(b.scheduledDate);
   const today = new Date();
   const isToday = dateObj.toDateString() === today.toDateString();
@@ -153,7 +145,6 @@ function bookingToDetail(b: ApiBooking): JobDetail {
     date: dateLabel,
     time: timeLabel,
     status: apiStatusToUi(b.status),
-    estimate: numCost > 0 ? `$${numCost.toFixed(0)}` : "$0",
     tasks: b.tasks.map((t) => ({
       id: t.id,
       label: t.label,
@@ -613,7 +604,6 @@ export default function JobDetailPage({ params }: { params: Promise<{ id: string
           </div>
           <div className="flex flex-col items-end gap-2 shrink-0">
             <StatusBadge status={job.status} />
-            <span className="text-[18px] font-bold text-text-primary">{job.estimate}</span>
           </div>
         </div>
 
@@ -955,19 +945,6 @@ export default function JobDetailPage({ params }: { params: Promise<{ id: string
               )}
             </Card>
           )}
-        </div>
-
-        {/* Invoice estimate */}
-        <div>
-          <p className="mb-2 text-sm font-semibold uppercase tracking-wider text-text-secondary">Estimate</p>
-          <Card>
-            <div className="space-y-2">
-              <div className="flex justify-between">
-                <span className="text-[14px] font-semibold text-text-primary">Total</span>
-                <span className="text-[16px] font-bold text-primary">{job.estimate}</span>
-              </div>
-            </div>
-          </Card>
         </div>
 
         {/* Complete Visit CTA + Cancel */}
