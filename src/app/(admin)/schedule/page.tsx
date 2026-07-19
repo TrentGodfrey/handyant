@@ -148,7 +148,7 @@ function formatTime(scheduledTime: string): string {
 }
 
 function formatDuration(mins: number | null): string {
-  const m = mins ?? 120;
+  const m = mins ?? 105;
   if (m < 60) return `${m} min`;
   const h = m / 60;
   return Number.isInteger(h) ? `${h}h` : `${h}h`;
@@ -235,7 +235,7 @@ export default function SchedulePage() {
       const iso = isoDate(d);
       const dayBookings = bookings.filter((b) => b.scheduledDate.slice(0, 10) === iso);
       const hours =
-        dayBookings.reduce((sum, b) => sum + (b.durationMinutes ?? 120), 0) / 60;
+        dayBookings.reduce((sum, b) => sum + (b.durationMinutes ?? 105), 0) / 60;
       return {
         day: d.toLocaleDateString("en-US", { weekday: "short" }),
         date: d.getDate(),

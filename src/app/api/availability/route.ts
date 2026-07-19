@@ -1,6 +1,12 @@
 import { NextRequest } from "next/server";
 import { prisma } from "@/lib/prisma";
-import { BOOKING_SLOT_STARTS, VISIT_DURATION_MINUTES } from "@/lib/booking-slots";
+import {
+  BOOKING_SLOT_STARTS,
+  VISIT_DURATION_MINUTES,
+  canStartVisitBlocks,
+  isVisitBlockCount,
+  visitDurationMinutes,
+} from "@/lib/booking-slots";
 
 // Public endpoint - unauthenticated visitors can pick a time before signing up.
 // Returns the four fixed daily booking windows for the default tech (Anthony).
@@ -51,12 +57,16 @@ function fmtHHMM(totalMinutes: number): string {
 export async function GET(req: NextRequest) {
   const { searchParams } = new URL(req.url);
   const dateStr = searchParams.get("date");
+  const visitCount = Number(searchParams.get("visits") ?? "1");
 
   if (!dateStr || !/^\d{4}-\d{2}-\d{2}$/.test(dateStr)) {
     return Response.json(
       { error: "Missing or invalid date (YYYY-MM-DD required)" },
       { status: 400 }
     );
+  }
+  if (!isVisitBlockCount(visitCount)) {
+    return Response.json({ error: "visits must be between 1 and 4" }, { status: 400 });
   }
 
   // Parse the date in UTC to avoid timezone surprises when computing day-of-week.
@@ -138,9 +148,24 @@ export async function GET(req: NextRequest) {
   }
 
   // Build the slot list. Skip slots outside working hours and mark overlaps booked.
+  const requestedDuration = visitDurationMinutes(visitCount);
   const slots: { time: string; available: boolean }[] = SLOT_STARTS
     .filter((m) => m >= startMin && m + VISIT_DURATION_MINUTES <= endMin)
-    .map((m) => ({ time: fmtHHMM(m), available: !blockedStarts.has(m) }));
+    .map((m) => {
+      const time = fmtHHMM(m);
+      const fitsDay = canStartVisitBlocks(time, visitCount) && m + requestedDuration <= endMin;
+      if (!fitsDay) return { time, available: false };
+      const requestedEnd = m + requestedDuration;
+      const overlapsBooking = bookings.some((booking) => {
+        if (!booking.scheduledTime) return false;
+        const value = new Date(booking.scheduledTime);
+        if (Number.isNaN(value.getTime())) return false;
+        const start = value.getUTCHours() * 60 + value.getUTCMinutes();
+        const end = start + (booking.durationMinutes ?? VISIT_DURATION_MINUTES);
+        return m < end && start < requestedEnd;
+      });
+      return { time, available: !overlapsBooking && !blockedStarts.has(m) };
+    });
 
   return Response.json({ slots });
 }

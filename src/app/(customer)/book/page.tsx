@@ -13,7 +13,7 @@ import {
 } from "lucide-react";
 import { useDemoMode } from "@/lib/useDemoMode";
 import { prepareImageForUpload } from "@/lib/client-image-upload";
-import { VISIT_DURATION_MINUTES } from "@/lib/booking-slots";
+import { VISIT_BLOCK_OPTIONS, visitDurationMinutes } from "@/lib/booking-slots";
 
 // ─── Calendar generation ────────────────────────────────────────────────────
 
@@ -95,7 +95,7 @@ const demoAfternoonSlots = [
 ];
 
 // Render a slot start time as a range, e.g. "8:00 AM" -> "8:00 - 9:45 AM".
-function slotRangeLabel(displayTime: string): string {
+function slotRangeLabel(displayTime: string, visitCount = 1): string {
   const [timePart, period] = displayTime.split(" ");
   if (!timePart || !period) return displayTime;
   const [hStr, mStr] = timePart.split(":");
@@ -105,7 +105,7 @@ function slotRangeLabel(displayTime: string): string {
   const isPm = period === "PM";
   const startH24 = (isPm ? (h12 % 12) + 12 : h12 % 12);
   const startMins = startH24 * 60 + m;
-  const endMins = startMins + VISIT_DURATION_MINUTES;
+  const endMins = startMins + visitDurationMinutes(visitCount);
   const endH24 = Math.floor(endMins / 60) % 24;
   const endMin = endMins % 60;
   const endPeriod = endH24 >= 12 ? "PM" : "AM";
@@ -163,8 +163,8 @@ interface Photo { id: string; url: string; name: string; dataUrl?: string; }
 interface ServiceCategory { id: string; name: string; }
 interface BookingTodo { id: string; task: string; priority?: string | null; }
 
-// Max number of to-dos a customer can attach to a single booking visit.
-const MAX_TODOS_PER_BOOKING = 3;
+// Keep each visit block focused while allowing longer bookings to carry more work.
+const TODOS_PER_VISIT_BLOCK = 3;
 
 const DEMO_BOOKING_TODOS: BookingTodo[] = [
   { id: "demo-todo-1", task: "Fix bathroom exhaust fan", priority: "high" },
@@ -185,6 +185,7 @@ function BookingPageInner() {
   const [selectedMonth, setSelectedMonth] = useState<string | null>(null);
   const [selectedYear, setSelectedYear] = useState<number | null>(null);
   const [selectedTime, setSelectedTime] = useState<string | null>(null);
+  const [visitCount, setVisitCount] = useState(1);
   const [description, setDescription] = useState("");
   const [photos, setPhotos] = useState<Photo[]>([]);
   const [calendarPage, setCalendarPage] = useState(0);
@@ -291,7 +292,7 @@ function BookingPageInner() {
   function toggleTodo(id: string) {
     setSelectedTodoIds((prev) => {
       if (prev.includes(id)) return prev.filter((t) => t !== id);
-      if (prev.length >= MAX_TODOS_PER_BOOKING) return prev;
+      if (prev.length >= visitCount * TODOS_PER_VISIT_BLOCK) return prev;
       return [...prev, id];
     });
   }
@@ -319,7 +320,7 @@ function BookingPageInner() {
     let cancelled = false;
     setSlotsLoading(true);
     setSlotsError(null);
-    fetch(`/api/availability?date=${isoDate}`)
+    fetch(`/api/availability?date=${isoDate}&visits=${visitCount}`)
       .then((res) => {
         if (!res.ok) throw new Error(`Request failed (${res.status})`);
         return res.json();
@@ -349,7 +350,7 @@ function BookingPageInner() {
     return () => {
       cancelled = true;
     };
-  }, [selectedDay, selectedMonth, selectedYear, isDemo]);
+  }, [selectedDay, selectedMonth, selectedYear, visitCount, isDemo]);
 
   const calendarWeeks = allCalendarWeeks.slice(calendarPage * WEEKS_PER_PAGE, (calendarPage + 1) * WEEKS_PER_PAGE);
   const totalPages = Math.ceil(allCalendarWeeks.length / WEEKS_PER_PAGE);
@@ -417,8 +418,14 @@ function BookingPageInner() {
 
   // Build morning/afternoon arrays from either the API (real) or the demo set.
   const { morningSlots, afternoonSlots } = useMemo(() => {
+    const demoSlots = [...demoMorningSlots, ...demoAfternoonSlots];
     const source: DisplaySlot[] = isDemo
-      ? [...demoMorningSlots, ...demoAfternoonSlots]
+      ? demoSlots.map((slot, index) => ({
+          ...slot,
+          available:
+            index + visitCount <= demoSlots.length &&
+            demoSlots.slice(index, index + visitCount).every((candidate) => candidate.available),
+        }))
       : slots;
     const morning: DisplaySlot[] = [];
     const afternoon: DisplaySlot[] = [];
@@ -435,7 +442,7 @@ function BookingPageInner() {
       }
     }
     return { morningSlots: morning, afternoonSlots: afternoon };
-  }, [isDemo, slots]);
+  }, [isDemo, slots, visitCount]);
 
   const noSlotsForDay =
     !isDemo && !slotsLoading && !slotsError && slots.length > 0 && slots.every((s) => !s.available);
@@ -475,15 +482,10 @@ function BookingPageInner() {
         }
       }
 
-      // Resolve picked to-do labels (most flows that don't yet support a
-      // tasks[] on the booking POST still surface them in the description).
       const selectedTodos = availableTodos.filter((t) => selectedTodoIds.includes(t.id));
-      const todoLines = selectedTodos.map((t) => `• ${t.task}`).join("\n");
 
-      // Combine description, picked to-dos, and partsNote since the schema
-      // has no separate parts field on booking.
+      // Keep free-form details separate from the linked home tasks.
       const descParts: string[] = [];
-      if (todoLines) descParts.push(`Tasks from to-do list:\n${todoLines}`);
       if (description) descParts.push(description);
       if (partsNote) descParts.push(`Parts to bring: ${partsNote}`);
       const combinedDescription = descParts.join("\n\n");
@@ -497,8 +499,10 @@ function BookingPageInner() {
           description: combinedDescription,
           customerNotes: partsNote || null,
           serviceType: BOOKING_SERVICE_TYPE,
-          durationMinutes: VISIT_DURATION_MINUTES,
+          visitCount,
+          durationMinutes: visitDurationMinutes(visitCount),
           homeId: homeIdToUse,
+          homeTodoIds: selectedTodos.map((todo) => todo.id),
         }),
       });
 
@@ -509,19 +513,6 @@ function BookingPageInner() {
 
       const booking = await res.json();
       const bookingId: string | undefined = booking?.id;
-
-      // Create booking tasks from picked to-dos - best effort. The booking POST
-      // doesn't accept a tasks[] array, so we POST them individually after.
-      if (bookingId && selectedTodos.length) {
-        const taskPosts = selectedTodos.map((t, i) =>
-          fetch(`/api/bookings/${bookingId}/tasks`, {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ label: t.task, sortOrder: i }),
-          }).catch(() => null)
-        );
-        await Promise.all(taskPosts);
-      }
 
       // Upload any collected photos against the new booking before confirming.
       if (bookingId && photos.length) {
@@ -653,6 +644,31 @@ function BookingPageInner() {
               <ChevronRight size={16} className="text-primary shrink-0" />
             </Link>
 
+            <div className="mb-6">
+              <p className="mb-3 text-sm font-semibold uppercase tracking-wider text-text-secondary">Visit length</p>
+              <div className="grid grid-cols-2 gap-2">
+                {VISIT_BLOCK_OPTIONS.map((option) => (
+                  <button
+                    key={option.count}
+                    type="button"
+                    onClick={() => {
+                      setVisitCount(option.count);
+                      setSelectedTime(null);
+                      setSelectedTodoIds((current) => current.slice(0, option.count * TODOS_PER_VISIT_BLOCK));
+                    }}
+                    className={`rounded-xl border-2 px-3 py-3 text-left transition-colors ${
+                      visitCount === option.count
+                        ? "border-primary bg-primary-50"
+                        : "border-border bg-surface"
+                    }`}
+                  >
+                    <span className="block text-[13px] font-bold text-text-primary">{option.label}</span>
+                    <span className="mt-0.5 block text-[11px] text-text-tertiary">{option.durationLabel}</span>
+                  </button>
+                ))}
+              </div>
+            </div>
+
             {/* Calendar Grid */}
             <div className="mb-6">
               <p className="mb-3 text-sm font-semibold uppercase tracking-wider text-text-secondary">Pick a Date</p>
@@ -783,7 +799,7 @@ function BookingPageInner() {
                                     : "bg-surface-secondary text-text-tertiary/40 cursor-not-allowed line-through"
                                 }`}
                               >
-                                {slotRangeLabel(time)}
+                                {slotRangeLabel(time, visitCount)}
                                 {!available && <span className="ml-2 text-[11px] font-medium no-underline">booked</span>}
                               </button>
                             );
@@ -815,7 +831,7 @@ function BookingPageInner() {
                                     : "bg-surface-secondary text-text-tertiary/40 cursor-not-allowed line-through"
                                 }`}
                               >
-                                {slotRangeLabel(time)}
+                                {slotRangeLabel(time, visitCount)}
                                 {!available && <span className="ml-2 text-[11px] font-medium no-underline">booked</span>}
                               </button>
                             );
@@ -833,7 +849,7 @@ function BookingPageInner() {
               <Card variant="flat" padding="sm" className="mb-5 flex items-center gap-3 border border-success/20 bg-success-light animate-scale-in">
                 <Check size={18} className="text-success shrink-0" />
                 <p className="text-[13px] font-semibold text-text-primary">
-                  {selectedLabel} · {selectedTime ? slotRangeLabel(selectedTime) : ""}
+                  {selectedLabel} · {selectedTime ? slotRangeLabel(selectedTime, visitCount) : ""}
                 </p>
               </Card>
             )}
@@ -852,8 +868,8 @@ function BookingPageInner() {
                 <Calendar size={16} className="text-primary" />
               </div>
               <div>
-                <p className="text-[13px] font-semibold text-text-primary">{selectedLabel} · {selectedTime ? slotRangeLabel(selectedTime) : ""}</p>
-                <p className="text-[11px] text-text-tertiary">1 hr 45 min visit</p>
+                <p className="text-[13px] font-semibold text-text-primary">{selectedLabel} · {selectedTime ? slotRangeLabel(selectedTime, visitCount) : ""}</p>
+                <p className="text-[11px] text-text-tertiary">{VISIT_BLOCK_OPTIONS[visitCount - 1].label} · {VISIT_BLOCK_OPTIONS[visitCount - 1].durationLabel}</p>
               </div>
             </Card>
 
@@ -866,14 +882,14 @@ function BookingPageInner() {
                     Pick from your to-do list
                   </p>
                   <span className="text-[11px] font-semibold text-text-tertiary tabular-nums">
-                    {selectedTodoIds.length}/{MAX_TODOS_PER_BOOKING} selected
+                    {selectedTodoIds.length}/{visitCount * TODOS_PER_VISIT_BLOCK} selected
                   </span>
                 </div>
                 <Card padding="sm" className="border border-border">
                   <div className="space-y-1.5">
                     {availableTodos.map((t) => {
                       const checked = selectedTodoIds.includes(t.id);
-                      const atLimit = !checked && selectedTodoIds.length >= MAX_TODOS_PER_BOOKING;
+                      const atLimit = !checked && selectedTodoIds.length >= visitCount * TODOS_PER_VISIT_BLOCK;
                       return (
                         <button
                           key={t.id}
@@ -915,7 +931,7 @@ function BookingPageInner() {
                   </div>
                 </Card>
                 <p className="mt-1.5 text-[11px] text-text-tertiary">
-                  Tap up to {MAX_TODOS_PER_BOOKING} tasks to handle during this visit.
+                  Tap up to {visitCount * TODOS_PER_VISIT_BLOCK} tasks to handle during this booking.
                 </p>
               </div>
             )}
@@ -1018,12 +1034,12 @@ function BookingPageInner() {
               <div className="space-y-4">
                 <div className="flex items-center justify-between">
                   <div className="flex items-center gap-2.5 text-text-tertiary"><Calendar size={15} /><span className="text-[12px] font-medium uppercase tracking-wide">Date & Time</span></div>
-                  <span className="text-[14px] font-semibold text-text-primary">{selectedLabel} · {selectedTime ? slotRangeLabel(selectedTime) : ""}</span>
+                  <span className="text-[14px] font-semibold text-text-primary">{selectedLabel} · {selectedTime ? slotRangeLabel(selectedTime, visitCount) : ""}</span>
                 </div>
                 <div className="h-px bg-border" />
                 <div className="flex items-center justify-between">
                   <div className="flex items-center gap-2.5 text-text-tertiary"><Clock size={15} /><span className="text-[12px] font-medium uppercase tracking-wide">Duration</span></div>
-                  <span className="text-[14px] font-semibold text-text-primary">1 hr 45 min</span>
+                  <span className="text-[14px] font-semibold text-text-primary">{VISIT_BLOCK_OPTIONS[visitCount - 1].durationLabel}</span>
                 </div>
                 {selectedTodoIds.length > 0 && (<><div className="h-px bg-border" /><div><span className="text-[12px] font-medium uppercase tracking-wide text-text-tertiary">Tasks from to-do list</span><ul className="mt-2 space-y-1.5">{availableTodos.filter((t) => selectedTodoIds.includes(t.id)).map((t) => (<li key={t.id} className="flex items-center gap-2 text-[13px] text-text-primary"><Check size={13} className="text-primary shrink-0" />{t.task}</li>))}</ul></div></>)}
                 {selectedCategories.length > 0 && (<><div className="h-px bg-border" /><div><span className="text-[12px] font-medium uppercase tracking-wide text-text-tertiary">Categories</span><div className="mt-2 flex flex-wrap gap-1.5">{selectedCategories.map((c) => (<span key={c} className="rounded-full bg-primary-50 px-3 py-1 text-[11px] font-medium text-primary">{c}</span>))}</div></div></>)}

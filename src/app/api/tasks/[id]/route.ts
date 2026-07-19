@@ -25,7 +25,16 @@ export async function PATCH(req: NextRequest, ctx: { params: Promise<{ id: strin
   if (body.notes !== undefined) data.notes = body.notes;
   if (body.sortOrder !== undefined) data.sortOrder = body.sortOrder;
 
-  const updated = await prisma.task.update({ where: { id }, data });
+  const updated = await prisma.$transaction(async (tx) => {
+    const result = await tx.task.update({ where: { id }, data });
+    if (task.homeTodoId && body.done !== undefined) {
+      await tx.homeTodo.update({
+        where: { id: task.homeTodoId },
+        data: { status: body.done ? "completed" : "pending" },
+      });
+    }
+    return result;
+  });
   await sendActivityEmail({
     to: task.booking.customer.email,
     recipientName: task.booking.customer.name,

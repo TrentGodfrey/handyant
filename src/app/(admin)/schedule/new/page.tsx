@@ -18,9 +18,10 @@ import {
   StickyNote,
   Clock,
   CalendarDays,
+  ListChecks,
 } from "lucide-react";
 import { useDemoMode } from "@/lib/useDemoMode";
-import { BOOKING_SLOT_STARTS, VISIT_DURATION_MINUTES } from "@/lib/booking-slots";
+import { BOOKING_SLOT_STARTS, VISIT_BLOCK_OPTIONS, visitDurationMinutes } from "@/lib/booking-slots";
 import { DEMO_CUSTOMERS } from "@/lib/demoData";
 
 type Mode = "job" | "block";
@@ -48,7 +49,6 @@ const DEMO_CLIENTS: ClientView[] = DEMO_CUSTOMERS.map((c) => ({
   initials: c.initials,
 }));
 
-const DURATIONS = ["1h", "1.5h", "1h 45m", "2h", "2.5h", "3h", "4h+"];
 const BLOCK_REASONS = ["Personal", "Supplies Run", "Admin", "Lunch", "Travel", "Other"];
 // Fixed four-window day matching customer booking + /api/availability output.
 const JOB_TIME_SLOTS = BOOKING_SLOT_STARTS.map((slot) => {
@@ -128,15 +128,6 @@ function initialsOf(name: string): string {
     .slice(0, 2);
 }
 
-function durationToMinutes(d: string): number {
-  if (d === "1h 45m") return VISIT_DURATION_MINUTES;
-  if (d === "4h+") return 240;
-  if (d.endsWith("h")) {
-    return Math.round(parseFloat(d.slice(0, -1)) * 60);
-  }
-  return 120;
-}
-
 function timeToHHMM(slot: string): string {
   // "9:00 AM" -> "09:00"
   const [time, ampm] = slot.split(" ");
@@ -189,7 +180,11 @@ function ScheduleNewPageInner() {
   const [selectedDate, setSelectedDate] = useState<Date | null>(null);
   const [timeSlot, setTimeSlot] = useState("8:00 AM");
   const [showTimeDropdown, setShowTimeDropdown] = useState(false);
-  const [duration, setDuration] = useState("1h 45m");
+  const [visitCount, setVisitCount] = useState(1);
+  const [availableTimes, setAvailableTimes] = useState<Set<string>>(new Set(JOB_TIME_SLOTS));
+  const [availabilityLoading, setAvailabilityLoading] = useState(false);
+  const [availableTodos, setAvailableTodos] = useState<{ id: string; task: string; priority?: string | null }[]>([]);
+  const [selectedTodoIds, setSelectedTodoIds] = useState<string[]>([]);
   const [description, setDescription] = useState("");
   const [hasParts, setHasParts] = useState(false);
   const [partsList, setPartsList] = useState("");
@@ -237,6 +232,67 @@ function ScheduleNewPageInner() {
         // leave empty list
       });
   }, [isDemo, mounted]);
+
+  useEffect(() => {
+    setSelectedTodoIds([]);
+    if (!selectedClient?.primaryHome?.id || isDemo) {
+      setAvailableTodos([]);
+      return;
+    }
+    let cancelled = false;
+    fetch(`/api/homes/${selectedClient.primaryHome.id}/todos`)
+      .then((response) => (response.ok ? response.json() : []))
+      .then((todos) => {
+        if (cancelled) return;
+        setAvailableTodos(
+          (Array.isArray(todos) ? todos : [])
+            .filter((todo: { status?: string }) => todo.status !== "completed")
+            .map((todo: { id: string; task: string; priority?: string | null }) => ({
+              id: todo.id,
+              task: todo.task,
+              priority: todo.priority ?? null,
+            })),
+        );
+      })
+      .catch(() => !cancelled && setAvailableTodos([]));
+    return () => { cancelled = true; };
+  }, [selectedClient, isDemo]);
+
+  useEffect(() => {
+    if (!selectedDate || isDemo) {
+      setAvailableTimes(new Set(JOB_TIME_SLOTS));
+      return;
+    }
+    let cancelled = false;
+    setAvailabilityLoading(true);
+    fetch(`/api/availability?date=${dateToISODate(selectedDate)}&visits=${visitCount}`)
+      .then(async (response) => {
+        if (!response.ok) {
+          const body = await response.json().catch(() => ({}));
+          throw new Error(body?.error ?? "Availability could not be loaded");
+        }
+        return response.json();
+      })
+      .then((body: { slots?: { time: string; available: boolean }[] }) => {
+        if (cancelled) return;
+        const available = new Set(
+          (body.slots ?? []).filter((slot) => slot.available).map((slot) => {
+            const hour = Number(slot.time.slice(0, 2));
+            return `${hour > 12 ? hour - 12 : hour}:00 ${hour >= 12 ? "PM" : "AM"}`;
+          }),
+        );
+        setAvailableTimes(available);
+        setTimeSlot((current) => available.has(current) ? current : [...available][0] ?? "");
+      })
+      .catch((error) => {
+        if (!cancelled) {
+          setAvailableTimes(new Set());
+          setSubmitError(error instanceof Error ? error.message : "Availability could not be loaded");
+        }
+      })
+      .finally(() => { if (!cancelled) setAvailabilityLoading(false); });
+    return () => { cancelled = true; };
+  }, [selectedDate, visitCount, isDemo]);
 
   const filteredClients = clientSearch.trim()
     ? clients.filter(
@@ -296,8 +352,8 @@ function ScheduleNewPageInner() {
   }
 
   async function handleSubmitJob() {
-    if (!selectedClient || !selectedDate) {
-      setSubmitError("Please pick a client and a date.");
+    if (!selectedClient || !selectedDate || !timeSlot) {
+      setSubmitError("Please pick a client, date, and available time.");
       return;
     }
     if (isDemo) {
@@ -325,7 +381,9 @@ function ScheduleNewPageInner() {
           scheduledDate: dateToISODate(selectedDate),
           scheduledTime: timeToHHMM(timeSlot),
           description: description || null,
-          durationMinutes: durationToMinutes(duration),
+          visitCount,
+          durationMinutes: visitDurationMinutes(visitCount),
+          homeTodoIds: selectedTodoIds,
           categoryIds: [],
           customerNotes: jobNotes || null,
           parts: partItems,
@@ -561,9 +619,10 @@ function ScheduleNewPageInner() {
               <div className="relative">
                 <button
                   onClick={() => setShowTimeDropdown((v) => !v)}
+                  disabled={!selectedDate || availabilityLoading}
                   className="w-full flex items-center justify-between rounded-xl border border-border bg-surface px-4 py-3 text-[15px] font-semibold text-text-primary focus:outline-none"
                 >
-                  <span>{timeSlot}</span>
+                  <span>{availabilityLoading ? "Checking availability…" : timeSlot || "No available time"}</span>
                   <ChevronDown size={16} className="text-text-tertiary" />
                 </button>
                 {showTimeDropdown && (
@@ -572,15 +631,19 @@ function ScheduleNewPageInner() {
                       {JOB_TIME_SLOTS.map((t) => (
                         <button
                           key={t}
+                          disabled={!availableTimes.has(t)}
                           className={`flex w-full items-center justify-between px-4 py-2.5 text-[14px] transition-colors border-b border-border last:border-0 ${
                             timeSlot === t
                               ? "bg-primary-50 text-primary font-semibold"
-                              : "text-text-primary hover:bg-surface-secondary"
+                              : availableTimes.has(t)
+                              ? "text-text-primary hover:bg-surface-secondary"
+                              : "bg-surface-secondary text-text-tertiary/50 line-through cursor-not-allowed"
                           }`}
                           onClick={() => { setTimeSlot(t); setShowTimeDropdown(false); }}
                         >
                           {t}
                           {timeSlot === t && <Check size={14} className="text-primary" />}
+                          {!availableTimes.has(t) && <span className="text-[10px] no-underline">unavailable</span>}
                         </button>
                       ))}
                     </div>
@@ -589,25 +652,69 @@ function ScheduleNewPageInner() {
               </div>
             </div>
 
-            {/* Duration */}
+            {/* Visit blocks */}
             <div>
-              <label className={labelCls}>Estimated Duration</label>
-              <div className="flex flex-wrap gap-2">
-                {DURATIONS.map((d) => (
+              <label className={labelCls}>Visit Length</label>
+              <div className="grid grid-cols-2 gap-2">
+                {VISIT_BLOCK_OPTIONS.map((option) => (
                   <button
-                    key={d}
-                    onClick={() => setDuration(d)}
-                    className={`rounded-xl border-2 px-4 py-2 text-[13px] font-semibold transition-all duration-150 ${
-                      duration === d
-                        ? "border-primary bg-primary text-white shadow-[0_2px_8px_rgba(79,149,152,0.20)]"
-                        : "border-border bg-surface text-text-secondary hover:border-primary/30"
+                    key={option.count}
+                    type="button"
+                    onClick={() => {
+                      setVisitCount(option.count);
+                      setSelectedTodoIds((current) => current.slice(0, option.count * 3));
+                    }}
+                    className={`rounded-xl border-2 px-3 py-3 text-left transition-all duration-150 ${
+                      visitCount === option.count
+                        ? "border-primary bg-primary-50"
+                        : "border-border bg-surface hover:border-primary/30"
                     }`}
                   >
-                    {d}
+                    <span className="block text-[13px] font-bold text-text-primary">{option.label}</span>
+                    <span className="mt-0.5 block text-[11px] font-medium text-text-tertiary">{option.durationLabel}</span>
                   </button>
                 ))}
               </div>
             </div>
+
+            {availableTodos.length > 0 && (
+              <div>
+                <div className="mb-2 flex items-center justify-between">
+                  <label className={`${labelCls} mb-0 inline-flex items-center gap-1.5`}>
+                    <ListChecks size={12} /> Open Home Tasks
+                  </label>
+                  <span className="text-[11px] font-semibold text-text-tertiary">
+                    {selectedTodoIds.length}/{visitCount * 3} selected
+                  </span>
+                </div>
+                <Card padding="sm" className="space-y-1.5">
+                  {availableTodos.map((todo) => {
+                    const selected = selectedTodoIds.includes(todo.id);
+                    const atLimit = !selected && selectedTodoIds.length >= visitCount * 3;
+                    return (
+                      <button
+                        key={todo.id}
+                        type="button"
+                        disabled={atLimit}
+                        onClick={() => setSelectedTodoIds((current) =>
+                          selected ? current.filter((id) => id !== todo.id) : [...current, todo.id]
+                        )}
+                        className={`flex w-full items-center gap-3 rounded-lg border px-3 py-2.5 text-left ${
+                          selected ? "border-primary/30 bg-primary-50" : "border-transparent bg-surface-secondary"
+                        } ${atLimit ? "opacity-50" : ""}`}
+                      >
+                        <span className={`flex h-5 w-5 shrink-0 items-center justify-center rounded-md border-2 ${
+                          selected ? "border-primary bg-primary text-white" : "border-border bg-white"
+                        }`}>
+                          {selected && <Check size={12} />}
+                        </span>
+                        <span className="text-[13px] font-medium text-text-primary">{todo.task}</span>
+                      </button>
+                    );
+                  })}
+                </Card>
+              </div>
+            )}
 
             {/* Task description */}
             <div>

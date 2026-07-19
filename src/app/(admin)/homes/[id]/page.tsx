@@ -152,7 +152,7 @@ export default function HomeDetailPage({ params }: { params: Promise<{ id: strin
   const visitHistory: VisitRow[] = (home?.bookings ?? [])
     .filter((b) => b.status === "completed")
     .map((b) => {
-      const mins = b.durationMinutes ?? 120;
+      const mins = b.durationMinutes ?? 105;
       const hrs = mins / 60;
       const hrLabel = Number.isInteger(hrs) ? `${hrs}h` : `${hrs.toFixed(1)}h`;
       return {

@@ -5,7 +5,12 @@ import { BookingStatus } from "@/generated/prisma/enums";
 import { completedStatusDelta, getVisitUsage } from "@/lib/subscription-usage";
 import { decryptHomeAccess } from "@/lib/sensitive-data";
 import { bookingTimeToDatabaseDate } from "@/lib/booking-time";
-import { isBookingSlotStart } from "@/lib/booking-slots";
+import {
+  VISIT_DURATION_MINUTES,
+  canStartVisitBlocks,
+  isVisitBlockCount,
+  visitDurationMinutes,
+} from "@/lib/booking-slots";
 import { sendActivityEmail } from "@/lib/activity-email";
 
 function bookingUpdateSummary(body: Record<string, unknown>) {
@@ -86,23 +91,62 @@ export async function PATCH(req: NextRequest, ctx: { params: Promise<{ id: strin
     }
   }
   if (body.techId !== undefined && isTech) data.techId = body.techId;
-  if (body.scheduledDate !== undefined && isTech) data.scheduledDate = new Date(body.scheduledDate);
-  if (body.scheduledTime !== undefined && isTech) {
+  if (body.scheduledDate !== undefined && (isTech || isCustomer)) data.scheduledDate = new Date(body.scheduledDate);
+  if (body.scheduledTime !== undefined && (isTech || isCustomer)) {
     const scheduledTimeInput = typeof body.scheduledTime === "string" ? body.scheduledTime : "";
     const scheduledTime = bookingTimeToDatabaseDate(scheduledTimeInput);
     if (!scheduledTime) return badRequest("Invalid scheduled time");
-    if (!isBookingSlotStart(scheduledTimeInput)) return badRequest("Choose one of the four available daily time slots");
     data.scheduledTime = scheduledTime;
   }
-  if (body.durationMinutes !== undefined && isTech) data.durationMinutes = body.durationMinutes;
+  if (body.durationMinutes !== undefined && isTech) {
+    const visitCount = Number(body.durationMinutes) / VISIT_DURATION_MINUTES;
+    if (!isVisitBlockCount(visitCount)) return badRequest("Visit length must use 1 hour 45 minute blocks");
+    data.durationMinutes = visitDurationMinutes(visitCount);
+  }
   if (body.description !== undefined && isTech) data.description = body.description;
   if (body.customerNotes !== undefined && isCustomer) data.customerNotes = body.customerNotes;
   if (body.techNotes !== undefined && isTech) data.techNotes = body.techNotes;
   if (body.estimatedCost !== undefined && isTech) data.estimatedCost = body.estimatedCost;
   if (body.finalCost !== undefined && isTech) data.finalCost = body.finalCost;
 
+  if ((isTech || isCustomer) && (body.scheduledDate !== undefined || body.scheduledTime !== undefined || body.durationMinutes !== undefined)) {
+    const targetTime = data.scheduledTime instanceof Date ? data.scheduledTime : existing.scheduledTime;
+    const targetDate = data.scheduledDate instanceof Date ? data.scheduledDate : existing.scheduledDate;
+    const targetDuration = typeof data.durationMinutes === "number"
+      ? data.durationMinutes
+      : existing.durationMinutes ?? VISIT_DURATION_MINUTES;
+    const visitCount = targetDuration / VISIT_DURATION_MINUTES;
+    const targetTimeValue = `${String(targetTime.getUTCHours()).padStart(2, "0")}:${String(targetTime.getUTCMinutes()).padStart(2, "0")}`;
+    if (!isVisitBlockCount(visitCount) || !canStartVisitBlocks(targetTimeValue, visitCount)) {
+      return badRequest("Choose a valid start time and visit length");
+    }
+    const otherBookings = await prisma.booking.findMany({
+      where: {
+        id: { not: id },
+        techId: existing.techId,
+        scheduledDate: targetDate,
+        status: { in: ["pending", "confirmed", "in_progress"] },
+      },
+      select: { scheduledTime: true, durationMinutes: true },
+    });
+    const start = targetTime.getUTCHours() * 60 + targetTime.getUTCMinutes();
+    const end = start + targetDuration;
+    const overlaps = otherBookings.some((booking) => {
+      const otherStart = booking.scheduledTime.getUTCHours() * 60 + booking.scheduledTime.getUTCMinutes();
+      const otherEnd = otherStart + (booking.durationMinutes ?? VISIT_DURATION_MINUTES);
+      return start < otherEnd && otherStart < end;
+    });
+    if (overlaps) {
+      return Response.json({ error: "That time overlaps another booking. Please choose an available time." }, { status: 409 });
+    }
+  }
+
   const nextStatus = typeof data.status === "string" ? data.status : existing.status;
-  const usageDelta = completedStatusDelta(existing.status, nextStatus);
+  const usageDuration = typeof data.durationMinutes === "number"
+    ? data.durationMinutes
+    : existing.durationMinutes ?? VISIT_DURATION_MINUTES;
+  const visitUnits = Math.max(1, Math.round(usageDuration / VISIT_DURATION_MINUTES));
+  const usageDelta = completedStatusDelta(existing.status, nextStatus, visitUnits);
 
   const booking = await prisma.$transaction(async (tx) => {
     const updated = await tx.booking.update({
@@ -126,9 +170,9 @@ export async function PATCH(req: NextRequest, ctx: { params: Promise<{ id: strin
         await tx.subscription.updateMany({
           where: {
             id: subscription.id,
-            visitsUsed: usageDelta > 0 ? { lt: allowance } : { gt: 0 },
+            visitsUsed: usageDelta > 0 ? { lte: allowance - usageDelta } : { gte: Math.abs(usageDelta) },
           },
-          data: { visitsUsed: usageDelta > 0 ? { increment: 1 } : { decrement: 1 } },
+          data: { visitsUsed: usageDelta > 0 ? { increment: usageDelta } : { decrement: Math.abs(usageDelta) } },
         });
       }
     }
@@ -170,14 +214,15 @@ export async function DELETE(_req: NextRequest, ctx: { params: Promise<{ id: str
   await prisma.$transaction(async (tx) => {
     await tx.booking.update({ where: { id }, data: { status: "cancelled" } });
     if (existing.status === "completed" && existing.homeId) {
+      const visitUnits = Math.max(1, Math.round((existing.durationMinutes ?? VISIT_DURATION_MINUTES) / VISIT_DURATION_MINUTES));
       const subscription = await tx.subscription.findFirst({
         where: { homeId: existing.homeId, status: "active" },
         orderBy: { startedAt: "desc" },
       });
       if (subscription) {
         await tx.subscription.updateMany({
-          where: { id: subscription.id, visitsUsed: { gt: 0 } },
-          data: { visitsUsed: { decrement: 1 } },
+          where: { id: subscription.id, visitsUsed: { gte: visitUnits } },
+          data: { visitsUsed: { decrement: visitUnits } },
         });
       }
     }

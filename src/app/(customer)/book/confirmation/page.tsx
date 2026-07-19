@@ -95,7 +95,7 @@ function buildIcs(booking: ApiBooking): string {
   const date = bookingDateToLocalDate(booking.scheduledDate);
   const { h, m } = parseTimeParts(booking.scheduledTime);
   const start = new Date(date.getFullYear(), date.getMonth(), date.getDate(), h, m);
-  const end = new Date(start.getTime() + (booking.durationMinutes ?? 120) * 60 * 1000);
+  const end = new Date(start.getTime() + (booking.durationMinutes ?? 105) * 60 * 1000);
   const fmt = (d: Date) =>
     d.getUTCFullYear().toString().padStart(4, "0") +
     String(d.getUTCMonth() + 1).padStart(2, "0") +

@@ -157,7 +157,7 @@ interface InvoiceView {
 }
 
 function buildView(b: ApiBooking, invoice?: ApiInvoice): InvoiceView {
-  const durationMins = b.durationMinutes ?? 120;
+  const durationMins = b.durationMinutes ?? 105;
   const hours = durationMins / 60;
   const laborRate = 80;
   const labor = Math.round(hours * laborRate);

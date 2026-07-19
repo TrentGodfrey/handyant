@@ -65,3 +65,5 @@ The Gmail verification message arrives through Cloudflare's catch-all. After con
 The complete provider migration, DNS safety checks, testing sequence, and Anthony handoff are in [`docs/email-setup.md`](docs/email-setup.md).
 
 Staff-created customer onboarding is the standard flow: create the customer and home, choose the plan, add known tasks, then create a single-use invitation from the home page. The customer chooses their own password from the emailed or texted link; staff should not create or retain customer passwords.
+
+Bookings use one to four consecutive visit blocks. Each block is always 1 hour 45 minutes, and both staff and customer scheduling use the same availability and server-side overlap protection. Open home to-dos can be attached during booking; completing a linked booking task also completes its home to-do. Revenue reporting is intentionally omitted because financial reporting is managed in Square.

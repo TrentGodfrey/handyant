@@ -10,7 +10,7 @@ import { useDemoMode } from "@/lib/useDemoMode";
 import { toast } from "@/components/Toaster";
 import { PLANS, type PlanId } from "@/lib/plans";
 import { bookingDateToLocalDate, bookingTimeInputValue, formatBookingTime } from "@/lib/booking-time";
-import { VISIT_DURATION_MINUTES } from "@/lib/booking-slots";
+import { VISIT_DURATION_MINUTES, visitDurationMinutes } from "@/lib/booking-slots";
 import {
   MapPin, Clock, Star, ArrowRight, Camera,
   MessageCircle, Phone, CheckCircle2,
@@ -34,6 +34,7 @@ interface BookingData {
   id: string;
   scheduledDate: string;
   scheduledTime: string;
+  durationMinutes: number | null;
   status: string;
   description: string | null;
   tasks: { label: string; done: boolean }[];
@@ -63,6 +64,7 @@ const DEMO_BOOKING: BookingData = {
   id: "demo",
   scheduledDate: "2026-04-08",
   scheduledTime: "09:00",
+  durationMinutes: VISIT_DURATION_MINUTES,
   status: "confirmed",
   description: null,
   tasks: [
@@ -595,14 +597,14 @@ function toISODate(d: Date): string {
   return `${y}-${m}-${day}`;
 }
 
-function formatSlotLabel(time: string): string {
+function formatSlotLabel(time: string, visitCount: number): string {
   const [hh, mm] = time.split(":");
   const h = parseInt(hh, 10);
   const m = parseInt(mm, 10);
   const ampm = h >= 12 ? "PM" : "AM";
   const h12 = h % 12 === 0 ? 12 : h % 12;
   const start = `${h12}:${String(m).padStart(2, "0")} ${ampm}`;
-  const endTotal = h * 60 + m + VISIT_DURATION_MINUTES;
+  const endTotal = h * 60 + m + visitDurationMinutes(visitCount);
   const endHour = Math.floor(endTotal / 60) % 24;
   const endMinute = endTotal % 60;
   const endAmpm = endHour >= 12 ? "PM" : "AM";
@@ -615,6 +617,7 @@ function parseCurrentTime(scheduledTime: string): string {
 }
 
 function RescheduleModal({ booking, onClose, onRescheduled }: RescheduleModalProps) {
+  const visitCount = Math.min(4, Math.max(1, Math.round((booking.durationMinutes ?? VISIT_DURATION_MINUTES) / VISIT_DURATION_MINUTES)));
   // Build a 30-day window starting today.
   const today = new Date();
   today.setHours(0, 0, 0, 0);
@@ -642,7 +645,7 @@ function RescheduleModal({ booking, onClose, onRescheduled }: RescheduleModalPro
     let cancelled = false;
     setLoadingSlots(true);
     setError(null);
-    fetch(`/api/availability?date=${selectedDate}`)
+    fetch(`/api/availability?date=${selectedDate}&visits=${visitCount}`)
       .then((r) => (r.ok ? r.json() : { slots: [] }))
       .then((data: { slots?: { time: string; available: boolean }[] }) => {
         if (cancelled) return;
@@ -718,7 +721,7 @@ function RescheduleModal({ booking, onClose, onRescheduled }: RescheduleModalPro
           <div>
             <h2 className="text-[16px] font-bold text-text-primary">Reschedule visit</h2>
             <p className="text-[12px] text-text-secondary mt-0.5">
-              Currently {currentDateLabel} at {formatSlotLabel(currentTime)}
+              Currently {currentDateLabel} at {formatSlotLabel(currentTime, visitCount)}
             </p>
           </div>
           <button
@@ -793,7 +796,7 @@ function RescheduleModal({ booking, onClose, onRescheduled }: RescheduleModalPro
                           : "border-border bg-surface-secondary text-text-tertiary cursor-not-allowed line-through"
                     }`}
                   >
-                    {formatSlotLabel(slot.time)}
+                    {formatSlotLabel(slot.time, visitCount)}
                   </button>
                 );
               })}

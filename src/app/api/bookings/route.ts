@@ -1,11 +1,16 @@
 import { NextRequest } from "next/server";
 import { prisma } from "@/lib/prisma";
-import { requireUser, unauthorized } from "@/lib/session";
+import { requireUser, unauthorized, badRequest } from "@/lib/session";
 import { sendActivityEmail } from "@/lib/activity-email";
 import { decryptHomeAccess } from "@/lib/sensitive-data";
 import { bookingTimeToDatabaseDate } from "@/lib/booking-time";
 import { bookingListWhere } from "@/lib/booking-view";
-import { isBookingSlotStart } from "@/lib/booking-slots";
+import {
+  VISIT_DURATION_MINUTES,
+  canStartVisitBlocks,
+  isVisitBlockCount,
+  visitDurationMinutes,
+} from "@/lib/booking-slots";
 
 export async function GET(req: NextRequest) {
   const user = await requireUser();
@@ -62,9 +67,14 @@ export async function POST(req: NextRequest) {
   if (!scheduledTime) {
     return Response.json({ error: "A valid scheduled time is required" }, { status: 400 });
   }
-  if (!isBookingSlotStart(scheduledTimeInput)) {
-    return Response.json({ error: "Choose one of the four available daily time slots" }, { status: 400 });
+  const inferredVisitCount = Number(body.durationMinutes) > 0
+    ? Math.max(1, Math.round(Number(body.durationMinutes) / VISIT_DURATION_MINUTES))
+    : 1;
+  const visitCount = Number(body.visitCount ?? inferredVisitCount);
+  if (!isVisitBlockCount(visitCount) || !canStartVisitBlocks(scheduledTimeInput, visitCount)) {
+    return badRequest("Choose a valid start time and visit length");
   }
+  const durationMinutes = visitDurationMinutes(visitCount);
 
   // Auto-assign a tech for customer-created bookings. For now there's a single
   // default tech (Anthony); pick the earliest tech in the system. If none
@@ -89,37 +99,89 @@ export async function POST(req: NextRequest) {
         .filter((p) => p.length > 0)
     : [];
 
-  const booking = await prisma.booking.create({
-    data: {
-      customerId,
-      techId: assignedTechId,
-      homeId: body.homeId ?? null,
-      scheduledDate,
-      scheduledTime,
-      description: body.description ?? null,
-      customerNotes: body.customerNotes ?? null,
-      durationMinutes: body.durationMinutes ?? 105,
-      serviceType: body.serviceType ?? "one_time",
-      status: isTechCreating ? "confirmed" : "pending",
-      categories: body.categoryIds?.length
-        ? {
-            create: body.categoryIds.map((categoryId: string) => ({
-              categoryId,
-            })),
-          }
-        : undefined,
-      parts: partItems.length
-        ? {
-            create: partItems.map((item) => ({ item })),
-          }
-        : undefined,
-    },
-    include: {
-      home: true,
-      categories: { include: { category: true } },
-      parts: true,
-    },
-  });
+  const requestedTodoIds: string[] = Array.isArray(body.homeTodoIds)
+    ? [...new Set<string>((body.homeTodoIds as unknown[]).filter((value): value is string => typeof value === "string"))].slice(0, 12)
+    : [];
+  const homeTodos = requestedTodoIds.length && typeof body.homeId === "string"
+    ? await prisma.homeTodo.findMany({
+        where: { id: { in: requestedTodoIds }, homeId: body.homeId, status: { not: "completed" } },
+        select: { id: true, task: true, description: true, notes: true },
+      })
+    : [];
+  if (homeTodos.length !== requestedTodoIds.length) {
+    return badRequest("One or more selected tasks are no longer available for this home");
+  }
+  const todoById = new Map(homeTodos.map((todo) => [todo.id, todo]));
+  const selectedTodos = requestedTodoIds.map((id) => todoById.get(id)!);
+
+  let booking;
+  try {
+    booking = await prisma.$transaction(async (tx) => {
+      if (assignedTechId) {
+        const existingBookings = await tx.booking.findMany({
+          where: {
+            techId: assignedTechId,
+            scheduledDate,
+            status: { in: ["pending", "confirmed", "in_progress"] },
+          },
+          select: { scheduledTime: true, durationMinutes: true },
+        });
+        const requestedStart = scheduledTime.getUTCHours() * 60 + scheduledTime.getUTCMinutes();
+        const requestedEnd = requestedStart + durationMinutes;
+        const overlaps = existingBookings.some((existing) => {
+          const start = existing.scheduledTime.getUTCHours() * 60 + existing.scheduledTime.getUTCMinutes();
+          const end = start + (existing.durationMinutes ?? VISIT_DURATION_MINUTES);
+          return requestedStart < end && start < requestedEnd;
+        });
+        if (overlaps) throw new Error("BOOKING_CONFLICT");
+      }
+
+      return tx.booking.create({
+        data: {
+          customerId,
+          techId: assignedTechId,
+          homeId: body.homeId ?? null,
+          scheduledDate,
+          scheduledTime,
+          description: body.description ?? null,
+          customerNotes: body.customerNotes ?? null,
+          durationMinutes,
+          serviceType: body.serviceType ?? "one_time",
+          status: isTechCreating ? "confirmed" : "pending",
+          categories: body.categoryIds?.length
+            ? { create: body.categoryIds.map((categoryId: string) => ({ categoryId })) }
+            : undefined,
+          parts: partItems.length
+            ? { create: partItems.map((item) => ({ item })) }
+            : undefined,
+          tasks: selectedTodos.length
+            ? {
+                create: selectedTodos.map((todo, sortOrder) => ({
+                  homeTodoId: todo.id,
+                  label: todo.task,
+                  notes: todo.notes ?? todo.description,
+                  sortOrder,
+                })),
+              }
+            : undefined,
+        },
+        include: {
+          home: true,
+          categories: { include: { category: true } },
+          parts: true,
+          tasks: { orderBy: { sortOrder: "asc" } },
+        },
+      });
+    }, { isolationLevel: "Serializable" });
+  } catch (error) {
+    if (error instanceof Error && error.message === "BOOKING_CONFLICT") {
+      return Response.json({ error: "That time overlaps another booking. Please choose an available time." }, { status: 409 });
+    }
+    if (typeof error === "object" && error && "code" in error && error.code === "P2034") {
+      return Response.json({ error: "That time was just booked. Please choose another time." }, { status: 409 });
+    }
+    throw error;
+  }
 
   try {
     const [customer, tech] = await Promise.all([

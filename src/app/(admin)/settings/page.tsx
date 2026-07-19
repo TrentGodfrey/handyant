@@ -1202,7 +1202,7 @@ export default function SettingsPage() {
               {
                 key: "email" as const,
                 label: "Email Summaries",
-                sub: "Daily recap of jobs and revenue",
+                sub: "Daily recap of jobs and schedule changes",
               },
               {
                 key: "leadAlerts" as const,

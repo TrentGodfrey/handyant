@@ -211,6 +211,7 @@ model HomeTodo {
   sortOrder        Int?         @default(0) @map("sort_order")
   createdAt        DateTime?    @default(now()) @map("created_at") @db.Timestamptz(6)
   home             Home         @relation(fields: [homeId], references: [id], onDelete: Cascade, onUpdate: NoAction)
+  bookingTasks     Task[]
 
   @@index([homeId], map: "idx_home_todos_home")
   @@map("home_todos")
@@ -287,14 +288,17 @@ model BookingCategory {
 }
 
 model Task {
-  id        String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
-  bookingId String   @map("booking_id") @db.Uuid
-  label     String
-  done      Boolean? @default(false)
-  notes     String?
-  sortOrder Int?     @default(0) @map("sort_order")
-  booking   Booking  @relation(fields: [bookingId], references: [id], onDelete: Cascade, onUpdate: NoAction)
+  id         String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  bookingId  String    @map("booking_id") @db.Uuid
+  homeTodoId String?   @map("home_todo_id") @db.Uuid
+  label      String
+  done       Boolean?  @default(false)
+  notes      String?
+  sortOrder  Int?      @default(0) @map("sort_order")
+  booking    Booking   @relation(fields: [bookingId], references: [id], onDelete: Cascade, onUpdate: NoAction)
+  homeTodo   HomeTodo? @relation(fields: [homeTodoId], references: [id], onDelete: SetNull, onUpdate: NoAction)
 
+  @@index([homeTodoId], map: "idx_tasks_home_todo")
   @@map("tasks")
 }
 
