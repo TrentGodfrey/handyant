@@ -376,7 +376,7 @@ export default function HomeDetailPage({ params }: { params: Promise<{ id: strin
         const r = await fetch("/api/photos", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ homeId: id, dataUrl: url, label, type: "home" }),
+          body: JSON.stringify({ homeId: id, dataUrl: url, label, type: "general" }),
         });
         const data = await r.json().catch(() => ({}));
         if (!r.ok) throw new Error(data.error || "Photo upload failed");
@@ -386,7 +386,7 @@ export default function HomeDetailPage({ params }: { params: Promise<{ id: strin
           ...home,
           photos: [
             ...home.photos,
-            { id: `p${Date.now()}`, url, label, type: "home" },
+            { id: `p${Date.now()}`, url, label, type: "general" },
           ],
         });
       }

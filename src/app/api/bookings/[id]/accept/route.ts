@@ -2,6 +2,7 @@ import { NextRequest } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { requireTech, unauthorized, notFound } from "@/lib/session";
 import { decryptHomeAccess } from "@/lib/sensitive-data";
+import { sendActivityEmail } from "@/lib/activity-email";
 
 export async function POST(_req: NextRequest, ctx: { params: Promise<{ id: string }> }) {
   const tech = await requireTech();
@@ -19,7 +20,7 @@ export async function POST(_req: NextRequest, ctx: { params: Promise<{ id: strin
     },
     include: {
       home: true,
-      customer: { select: { id: true, name: true, phone: true, avatarUrl: true } },
+      customer: { select: { id: true, name: true, email: true, phone: true, avatarUrl: true } },
       tech: { select: { id: true, name: true, phone: true, avatarUrl: true } },
     },
   });
@@ -32,6 +33,16 @@ export async function POST(_req: NextRequest, ctx: { params: Promise<{ id: strin
       type: "booking",
       link: `/booking?id=${booking.id}`,
     },
+  });
+
+  await sendActivityEmail({
+    to: booking.customer.email,
+    recipientName: booking.customer.name,
+    subject: "Your MCQ booking is confirmed",
+    heading: "Booking confirmed",
+    message: `${tech.name ?? "Your MCQ technician"} accepted your booking.`,
+    actionPath: `/booking?id=${booking.id}`,
+    actionLabel: "View booking",
   });
 
   return Response.json({ ...booking, home: booking.home ? decryptHomeAccess(booking.home) : null });

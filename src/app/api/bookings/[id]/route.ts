@@ -6,6 +6,17 @@ import { completedStatusDelta, getVisitUsage } from "@/lib/subscription-usage";
 import { decryptHomeAccess } from "@/lib/sensitive-data";
 import { bookingTimeToDatabaseDate } from "@/lib/booking-time";
 import { isBookingSlotStart } from "@/lib/booking-slots";
+import { sendActivityEmail } from "@/lib/activity-email";
+
+function bookingUpdateSummary(body: Record<string, unknown>) {
+  if (typeof body.status === "string") {
+    return `Your MCQ visit status was updated to ${body.status.replaceAll("_", " ")}.`;
+  }
+  if (body.scheduledDate !== undefined || body.scheduledTime !== undefined) {
+    return "The date or time for your MCQ visit was updated.";
+  }
+  return "There is an update to your MCQ visit.";
+}
 
 export async function GET(_req: NextRequest, ctx: { params: Promise<{ id: string }> }) {
   const user = await requireUser();
@@ -99,8 +110,8 @@ export async function PATCH(req: NextRequest, ctx: { params: Promise<{ id: strin
       data,
       include: {
         home: true,
-        customer: { select: { id: true, name: true, phone: true, avatarUrl: true } },
-        tech: { select: { id: true, name: true, phone: true, avatarUrl: true } },
+        customer: { select: { id: true, name: true, email: true, phone: true, avatarUrl: true } },
+        tech: { select: { id: true, name: true, email: true, phone: true, avatarUrl: true } },
         tasks: { orderBy: { sortOrder: "asc" } },
       },
     });
@@ -125,6 +136,17 @@ export async function PATCH(req: NextRequest, ctx: { params: Promise<{ id: strin
     return updated;
   });
 
+  const recipient = isTech ? booking.customer : booking.tech;
+  await sendActivityEmail({
+    to: recipient?.email,
+    recipientName: recipient?.name,
+    subject: "Your MCQ visit was updated",
+    heading: "Visit update",
+    message: bookingUpdateSummary(body),
+    actionPath: isTech ? `/booking?id=${booking.id}` : `/jobs/${booking.id}`,
+    actionLabel: "View visit",
+  });
+
   return Response.json({ ...booking, home: booking.home ? decryptHomeAccess(booking.home) : null });
 }
 
@@ -133,7 +155,13 @@ export async function DELETE(_req: NextRequest, ctx: { params: Promise<{ id: str
   if (!user) return unauthorized();
   const { id } = await ctx.params;
 
-  const existing = await prisma.booking.findUnique({ where: { id } });
+  const existing = await prisma.booking.findUnique({
+    where: { id },
+    include: {
+      customer: { select: { name: true, email: true } },
+      tech: { select: { name: true, email: true } },
+    },
+  });
   if (!existing) return notFound("Booking not found");
   const isCustomer = existing.customerId === user.id;
   const isTech = user.role === "tech" && existing.techId === user.id;
@@ -153,6 +181,17 @@ export async function DELETE(_req: NextRequest, ctx: { params: Promise<{ id: str
         });
       }
     }
+  });
+
+  const recipient = isTech ? existing.customer : existing.tech;
+  await sendActivityEmail({
+    to: recipient?.email,
+    recipientName: recipient?.name,
+    subject: "MCQ visit cancelled",
+    heading: "Visit cancelled",
+    message: "Your MCQ visit was cancelled.",
+    actionPath: isTech ? "/home" : "/jobs",
+    actionLabel: "Open MCQ",
   });
   return Response.json({ ok: true });
 }

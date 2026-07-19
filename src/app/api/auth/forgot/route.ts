@@ -63,6 +63,7 @@ export async function POST(req: NextRequest) {
       subject: "Reset your MCQ Property Care password",
       html,
       text: `Reset your MCQ Property Care password: ${resetUrl}\n\nThis link expires in 1 hour. If you didn't request a reset, you can ignore this email.`,
+      sensitive: true,
     });
   }
 

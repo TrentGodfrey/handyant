@@ -2,7 +2,7 @@
 
 import { useState, useRef, useEffect, useCallback, Suspense } from "react";
 import { useSearchParams } from "next/navigation";
-import { Send, Camera, Paperclip, ArrowLeft, MoreVertical, Search, Plus, X } from "lucide-react";
+import { Send, Camera, Paperclip, ArrowLeft, MoreVertical, Search, Plus, Trash2, X } from "lucide-react";
 import { useDemoMode } from "@/lib/useDemoMode";
 import { demoCustomerBy } from "@/lib/demoData";
 import Spinner from "@/components/Spinner";
@@ -474,6 +474,31 @@ function AdminMessagesPageInner() {
     }
   }
 
+  async function deleteMessage(message: Message) {
+    if (!activeConvo) return;
+    if (typeof window !== "undefined" && !window.confirm("Delete this message? This cannot be undone.")) return;
+
+    if (!isDemo && !message.id.startsWith("tmp-")) {
+      const response = await fetch(`/api/messages/${message.id}`, { method: "DELETE" });
+      if (!response.ok) {
+        const body = await response.json().catch(() => ({}));
+        toast.error(body?.error ?? "Message could not be deleted");
+        return;
+      }
+    }
+
+    const remaining = (messagesByConvo[activeConvo.id] || []).filter((item) => item.id !== message.id);
+    setMessagesByConvo((prev) => ({ ...prev, [activeConvo.id]: remaining }));
+    setConversations((prev) =>
+      prev.map((conversation) =>
+        conversation.id === activeConvo.id
+          ? { ...conversation, lastMessage: remaining.at(-1)?.text ?? "", time: remaining.at(-1)?.timestamp ?? "" }
+          : conversation
+      )
+    );
+    toast.success("Message deleted");
+  }
+
   // ── New-conversation picker ─────────────────────────────────────────────
   async function openPicker() {
     setPickerOpen(true);
@@ -779,7 +804,12 @@ function AdminMessagesPageInner() {
               }
               const isTech = msg.sender === "tech";
               return (
-                <div key={msg.id} className={`flex ${isTech ? "justify-end" : "justify-start"}`}>
+                <div key={msg.id} className={`group flex items-center gap-1.5 ${isTech ? "justify-end" : "justify-start"}`}>
+                  {!isTech && (
+                    <button type="button" onClick={() => deleteMessage(msg)} className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full text-text-tertiary hover:bg-error-light hover:text-error" aria-label="Delete message">
+                      <Trash2 size={14} />
+                    </button>
+                  )}
                   <div className={`max-w-[80%] rounded-2xl px-4 py-2.5 ${
                     isTech
                       ? "bg-primary text-white rounded-br-md"
@@ -788,6 +818,11 @@ function AdminMessagesPageInner() {
                     <p className="text-[14px] leading-relaxed">{msg.text}</p>
                     <p className={`text-[10px] mt-1 ${isTech ? "text-white/50" : "text-text-tertiary"}`}>{msg.timestamp}</p>
                   </div>
+                  {isTech && (
+                    <button type="button" onClick={() => deleteMessage(msg)} className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full text-text-tertiary hover:bg-error-light hover:text-error" aria-label="Delete message">
+                      <Trash2 size={14} />
+                    </button>
+                  )}
                 </div>
               );
             })

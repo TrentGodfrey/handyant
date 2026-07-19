@@ -1,6 +1,7 @@
 import { NextRequest } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { requireUser, unauthorized, notFound, badRequest } from "@/lib/session";
+import { sendActivityEmail } from "@/lib/activity-email";
 
 export async function GET(req: NextRequest) {
   const user = await requireUser();
@@ -75,6 +76,10 @@ export async function POST(req: NextRequest) {
       id: body.conversationId,
       OR: [{ customerId: userId }, { techId: userId }],
     },
+    include: {
+      customer: { select: { id: true, name: true, email: true } },
+      tech: { select: { id: true, name: true, email: true } },
+    },
   });
   if (!convo) {
     return Response.json({ error: "Conversation not found" }, { status: 404 });
@@ -94,6 +99,17 @@ export async function POST(req: NextRequest) {
   await prisma.conversation.update({
     where: { id: body.conversationId },
     data: { lastMessageAt: new Date() },
+  });
+
+  const recipient = userId === convo.customerId ? convo.tech : convo.customer;
+  await sendActivityEmail({
+    to: recipient.email,
+    recipientName: recipient.name,
+    subject: `New MCQ message from ${message.sender.name ?? "your contact"}`,
+    heading: "You have a new message",
+    message: text,
+    actionPath: recipient.id === convo.techId ? `/admin-messages?customerId=${convo.customerId}` : "/messages",
+    actionLabel: "Reply in MCQ",
   });
 
   return Response.json(message, { status: 201 });

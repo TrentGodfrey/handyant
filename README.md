@@ -43,7 +43,10 @@ Customer-facing messages are sent through Resend and replies are routed to Antho
 RESEND_API_KEY=re_...
 EMAIL_FROM=Anthony at MCQ <anthony@mcqpropertycare.com>
 EMAIL_REPLY_TO=anthony@mcqpropertycare.com
+EMAIL_BCC=me@jordangodfrey.com
 ```
+
+Operational mail (messages, bookings, memberships, to-dos, and invoices) uses the BCC address. Security mail containing password-reset, verification, email-change, or home-invitation links is never copied.
 
 Cloudflare Email Routing owns inbound mail. Its catch-all rule forwards every `@mcqpropertycare.com` address to `mcqpropertycare@gmail.com`. Resend owns outbound mail for both the website and Gmail. Create two sending-only, domain-restricted Resend API keys: one for the VPS and one used only as Gmail's SMTP password.
 

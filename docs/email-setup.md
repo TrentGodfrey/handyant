@@ -47,8 +47,11 @@ Production uses:
 RESEND_API_KEY=re_...
 EMAIL_FROM=Anthony at MCQ <anthony@mcqpropertycare.com>
 EMAIL_REPLY_TO=anthony@mcqpropertycare.com
+EMAIL_BCC=me@jordangodfrey.com
 MERCHANT_SUPPORT_EMAIL=anthony@mcqpropertycare.com
 ```
+
+`EMAIL_BCC` receives a copy of operational activity mail. The application deliberately suppresses BCC on password resets, verification emails, email-change links, and home invitations because those messages contain private account-access links.
 
 Restart the `handyant` PM2 process after updating the VPS environment.
 

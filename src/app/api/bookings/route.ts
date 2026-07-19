@@ -1,7 +1,7 @@
 import { NextRequest } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { requireUser, unauthorized } from "@/lib/session";
-import { sendEmail, emailShell, escapeHtml } from "@/lib/email";
+import { sendActivityEmail } from "@/lib/activity-email";
 import { decryptHomeAccess } from "@/lib/sensitive-data";
 import { bookingTimeToDatabaseDate } from "@/lib/booking-time";
 import { bookingListWhere } from "@/lib/booking-view";
@@ -98,7 +98,7 @@ export async function POST(req: NextRequest) {
       scheduledTime,
       description: body.description ?? null,
       customerNotes: body.customerNotes ?? null,
-      durationMinutes: body.durationMinutes ?? 120,
+      durationMinutes: body.durationMinutes ?? 105,
       serviceType: body.serviceType ?? "one_time",
       status: isTechCreating ? "confirmed" : "pending",
       categories: body.categoryIds?.length
@@ -121,70 +121,51 @@ export async function POST(req: NextRequest) {
     },
   });
 
-  // Notify the assigned tech for customer-created bookings only - techs
-  // booking on behalf of a customer obviously already know.
-  if (!isTechCreating && assignedTechId) {
-    try {
-      const [customer, tech] = await Promise.all([
-        prisma.user.findUnique({
-          where: { id: customerId },
-          select: { name: true },
-        }),
-        prisma.user.findUnique({
-          where: { id: assignedTechId },
-          select: { email: true, name: true },
-        }),
-      ]);
+  try {
+    const [customer, tech] = await Promise.all([
+      prisma.user.findUnique({ where: { id: customerId }, select: { name: true, email: true } }),
+      assignedTechId
+        ? prisma.user.findUnique({ where: { id: assignedTechId }, select: { email: true, name: true } })
+        : null,
+    ]);
+    const customerName = customer?.name ?? "A customer";
+    const dateLabel = booking.scheduledDate.toLocaleDateString("en-US", { weekday: "short", month: "short", day: "numeric" });
+    const timeLabel = booking.scheduledTime.toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit", timeZone: "UTC" });
+    const scheduleMessage = `${dateLabel} at ${timeLabel}`;
 
-      const customerName = customer?.name ?? "A customer";
-      const dateLabel = booking.scheduledDate.toLocaleDateString("en-US", {
-        weekday: "short",
-        month: "short",
-        day: "numeric",
-      });
-      const timeLabel = booking.scheduledTime.toLocaleTimeString("en-US", {
-        hour: "numeric",
-        minute: "2-digit",
-        timeZone: "UTC",
-      });
-
-      // In-app notification linked to the tech's job detail page.
+    if (!isTechCreating && assignedTechId) {
       await prisma.notification.create({
         data: {
           userId: assignedTechId,
           title: "New booking request",
-          body: `${customerName} requested a visit on ${dateLabel} at ${timeLabel}`,
+          body: `${customerName} requested a visit on ${scheduleMessage}`,
           type: "booking",
           link: `/jobs/${booking.id}`,
         },
       });
-
-      // Email Anthony (fire-and-forget; sendEmail degrades gracefully if not configured).
-      if (tech?.email) {
-        const baseUrl = process.env.NEXTAUTH_URL ?? "";
-        const jobUrl = `${baseUrl.replace(/\/$/, "")}/jobs/${booking.id}`;
-        const subject = `New booking from ${customerName}`;
-        const html = emailShell({
-          preheader: `New booking on ${dateLabel} at ${timeLabel}`,
-          contentHtml: `
-            <p style="margin:0 0 12px 0;font-size:16px;font-weight:600;color:#1a1a1a;">New booking request</p>
-            <p style="margin:0 0 16px 0;">
-              <strong>${escapeHtml(customerName)}</strong> just booked a visit on
-              <strong>${escapeHtml(dateLabel)}</strong> at <strong>${escapeHtml(timeLabel)}</strong>.
-            </p>
-            <p style="margin:24px 0 0 0;">
-              <a href="${escapeHtml(jobUrl)}" style="display:inline-block;background-color:#4F9598;color:#ffffff;text-decoration:none;font-weight:600;padding:10px 18px;border-radius:8px;font-size:14px;">View booking</a>
-            </p>
-          `,
-        });
-        const text = `New booking from ${customerName} on ${dateLabel} at ${timeLabel}. View at: ${jobUrl}`;
-        // Don't await - keep the POST response fast; sendEmail logs its own errors.
-        void sendEmail({ to: tech.email, subject, html, text });
-      }
-    } catch (err) {
-      // Notification failures must not break booking creation.
-      console.error("[bookings] failed to notify tech of new booking", err);
+      await sendActivityEmail({
+        to: tech?.email,
+        recipientName: tech?.name,
+        subject: `New booking from ${customerName}`,
+        heading: "New booking request",
+        message: `${customerName} requested a visit on ${scheduleMessage}.`,
+        actionPath: `/jobs/${booking.id}`,
+        actionLabel: "View booking",
+      });
     }
+
+    await sendActivityEmail({
+      to: customer?.email,
+      recipientName: customer?.name,
+      subject: isTechCreating ? "Your MCQ visit is scheduled" : "We received your MCQ booking",
+      heading: isTechCreating ? "Your visit is scheduled" : "Booking request received",
+      message: `${isTechCreating ? "Anthony scheduled" : "We received"} your visit for ${scheduleMessage}.`,
+      actionPath: "/home",
+      actionLabel: "View your visit",
+    });
+  } catch (err) {
+    // Notification failures must not break booking creation.
+    console.error("[bookings] failed to send booking notifications", err);
   }
 
   return Response.json({

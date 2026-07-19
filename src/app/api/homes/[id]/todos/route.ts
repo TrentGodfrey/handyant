@@ -1,6 +1,7 @@
 import { NextRequest } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { requireUser, unauthorized, notFound, forbidden, badRequest } from "@/lib/session";
+import { sendHomeTaskEmail } from "@/lib/task-email";
 
 export async function GET(_req: NextRequest, ctx: { params: Promise<{ id: string }> }) {
   const user = await requireUser();
@@ -50,6 +51,14 @@ export async function POST(req: NextRequest, ctx: { params: Promise<{ id: string
       photoIds,
       notes: body.notes ?? null,
     },
+  });
+
+  await sendHomeTaskEmail({
+    homeId: id,
+    actorRole: user.role,
+    subject: `New MCQ to-do: ${todo.task}`,
+    message: `${user.name} added “${todo.task}” to the home to-do list.`,
+    taskId: todo.id,
   });
 
   return Response.json(todo, { status: 201 });

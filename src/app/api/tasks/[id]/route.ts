@@ -1,6 +1,7 @@
 import { NextRequest } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { requireUser, unauthorized, notFound, forbidden } from "@/lib/session";
+import { sendActivityEmail } from "@/lib/activity-email";
 
 export async function PATCH(req: NextRequest, ctx: { params: Promise<{ id: string }> }) {
   const user = await requireUser();
@@ -9,7 +10,7 @@ export async function PATCH(req: NextRequest, ctx: { params: Promise<{ id: strin
 
   const task = await prisma.task.findUnique({
     where: { id },
-    include: { booking: true },
+    include: { booking: { include: { customer: { select: { name: true, email: true } } } } },
   });
   if (!task) return notFound("Task not found");
 
@@ -25,6 +26,15 @@ export async function PATCH(req: NextRequest, ctx: { params: Promise<{ id: strin
   if (body.sortOrder !== undefined) data.sortOrder = body.sortOrder;
 
   const updated = await prisma.task.update({ where: { id }, data });
+  await sendActivityEmail({
+    to: task.booking.customer.email,
+    recipientName: task.booking.customer.name,
+    subject: `Visit task updated: ${updated.label}`,
+    heading: "Visit task updated",
+    message: `${user.name} updated “${updated.label}”.${body.done !== undefined ? ` It is now ${body.done ? "complete" : "open"}.` : ""}`,
+    actionPath: `/booking?id=${task.booking.id}`,
+    actionLabel: "View booking",
+  });
   return Response.json(updated);
 }
 
@@ -35,7 +45,7 @@ export async function DELETE(_req: NextRequest, ctx: { params: Promise<{ id: str
 
   const task = await prisma.task.findUnique({
     where: { id },
-    include: { booking: true },
+    include: { booking: { include: { customer: { select: { name: true, email: true } } } } },
   });
   if (!task) return notFound("Task not found");
 
@@ -45,5 +55,14 @@ export async function DELETE(_req: NextRequest, ctx: { params: Promise<{ id: str
   if (!isAssignedTech) return forbidden();
 
   await prisma.task.delete({ where: { id } });
+  await sendActivityEmail({
+    to: task.booking.customer.email,
+    recipientName: task.booking.customer.name,
+    subject: `Visit task removed: ${task.label}`,
+    heading: "Visit task removed",
+    message: `${user.name} removed “${task.label}” from your MCQ visit.`,
+    actionPath: `/booking?id=${task.booking.id}`,
+    actionLabel: "View booking",
+  });
   return Response.json({ ok: true });
 }

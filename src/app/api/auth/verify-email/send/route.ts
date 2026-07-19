@@ -65,6 +65,7 @@ export async function POST() {
     subject: "Verify your MCQ Property Care email address",
     html,
     text: `Verify your MCQ Property Care email: ${verifyUrl}\n\nThis link expires in 24 hours.`,
+    sensitive: true,
   });
 
   return Response.json({ ok: true });

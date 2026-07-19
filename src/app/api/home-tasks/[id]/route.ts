@@ -1,6 +1,7 @@
 import { NextRequest } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { badRequest, forbidden, notFound, requireUser, unauthorized } from "@/lib/session";
+import { sendHomeTaskEmail } from "@/lib/task-email";
 
 const ALLOWED_FIELDS = new Set(["task", "description", "priority", "status", "partsDescription", "partsBuyer", "notes", "photoIds", "hasPhoto"]);
 
@@ -45,5 +46,12 @@ export async function PATCH(req: NextRequest, ctx: { params: Promise<{ id: strin
     data.hasPhoto = valid.length > 0;
   }
   const updated = await prisma.homeTodo.update({ where: { id }, data, include: { home: { select: { id: true, address: true } } } });
+  await sendHomeTaskEmail({
+    homeId: access.task.homeId,
+    actorRole: access.user.role,
+    subject: `MCQ to-do updated: ${updated.task}`,
+    message: `${access.user.name} updated “${updated.task}”.${body.status ? ` Status: ${String(body.status).replaceAll("_", " ")}.` : ""}`,
+    taskId: updated.id,
+  });
   return Response.json(await taskResponse(updated));
 }
