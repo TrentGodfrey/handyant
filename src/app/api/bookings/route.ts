@@ -5,6 +5,7 @@ import { sendEmail, emailShell, escapeHtml } from "@/lib/email";
 import { decryptHomeAccess } from "@/lib/sensitive-data";
 import { bookingTimeToDatabaseDate } from "@/lib/booking-time";
 import { bookingListWhere } from "@/lib/booking-view";
+import { isBookingSlotStart } from "@/lib/booking-slots";
 
 export async function GET(req: NextRequest) {
   const user = await requireUser();
@@ -53,12 +54,16 @@ export async function POST(req: NextRequest) {
     if (!ownedHome) return Response.json({ error: "Home does not belong to this customer" }, { status: 403 });
   }
   const scheduledDate = new Date(body.scheduledDate);
-  const scheduledTime = typeof body.scheduledTime === "string" ? bookingTimeToDatabaseDate(body.scheduledTime) : null;
+  const scheduledTimeInput = typeof body.scheduledTime === "string" ? body.scheduledTime : "";
+  const scheduledTime = bookingTimeToDatabaseDate(scheduledTimeInput);
   if (!body.scheduledDate || Number.isNaN(scheduledDate.getTime())) {
     return Response.json({ error: "A valid scheduled date is required" }, { status: 400 });
   }
   if (!scheduledTime) {
     return Response.json({ error: "A valid scheduled time is required" }, { status: 400 });
+  }
+  if (!isBookingSlotStart(scheduledTimeInput)) {
+    return Response.json({ error: "Choose one of the four available daily time slots" }, { status: 400 });
   }
 
   // Auto-assign a tech for customer-created bookings. For now there's a single

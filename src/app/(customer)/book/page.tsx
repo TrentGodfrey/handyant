@@ -13,6 +13,7 @@ import {
 } from "lucide-react";
 import { useDemoMode } from "@/lib/useDemoMode";
 import { prepareImageForUpload } from "@/lib/client-image-upload";
+import { VISIT_DURATION_MINUTES } from "@/lib/booking-slots";
 
 // ─── Calendar generation ────────────────────────────────────────────────────
 
@@ -80,11 +81,10 @@ function buildCalendar(start: Date, weeksCount: number): CalendarDay[][] {
 const WEEKS_TOTAL = 10;
 const WEEKS_PER_PAGE = 3;
 
-// Demo-mode time slots - 6 fixed 1h 45m slots, matches /api/availability.
+// Demo-mode time slots - four fixed 1h 45m windows, matching /api/availability.
 // The 12 PM is shown booked in demo to illustrate how unavailable slots
-// look (real prod API filters booked slots out entirely).
+// look.
 const demoMorningSlots = [
-  { time: "6:00 AM", available: true },
   { time: "8:00 AM", available: true },
   { time: "10:00 AM", available: true },
 ];
@@ -92,11 +92,9 @@ const demoMorningSlots = [
 const demoAfternoonSlots = [
   { time: "12:00 PM", available: false },
   { time: "2:00 PM", available: true },
-  { time: "4:00 PM", available: true },
 ];
 
 // Render a slot start time as a range, e.g. "8:00 AM" -> "8:00 - 9:45 AM".
-const VISIT_LENGTH_MINUTES = 105;
 function slotRangeLabel(displayTime: string): string {
   const [timePart, period] = displayTime.split(" ");
   if (!timePart || !period) return displayTime;
@@ -107,7 +105,7 @@ function slotRangeLabel(displayTime: string): string {
   const isPm = period === "PM";
   const startH24 = (isPm ? (h12 % 12) + 12 : h12 % 12);
   const startMins = startH24 * 60 + m;
-  const endMins = startMins + VISIT_LENGTH_MINUTES;
+  const endMins = startMins + VISIT_DURATION_MINUTES;
   const endH24 = Math.floor(endMins / 60) % 24;
   const endMin = endMins % 60;
   const endPeriod = endH24 >= 12 ? "PM" : "AM";
@@ -499,7 +497,7 @@ function BookingPageInner() {
           description: combinedDescription,
           customerNotes: partsNote || null,
           serviceType: BOOKING_SERVICE_TYPE,
-          durationMinutes: VISIT_LENGTH_MINUTES,
+          durationMinutes: VISIT_DURATION_MINUTES,
           homeId: homeIdToUse,
         }),
       });

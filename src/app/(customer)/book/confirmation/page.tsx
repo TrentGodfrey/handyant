@@ -197,7 +197,7 @@ function DemoConfirmation() {
               <div>
                 <p className="text-[11px] text-text-tertiary">Date & Time</p>
                 <p className="text-[14px] font-semibold text-text-primary">Tuesday, April 1, 2026</p>
-                <p className="text-[12px] text-text-secondary">10:00 AM – 12:00 PM</p>
+                <p className="text-[12px] text-text-secondary">10:00 AM – 11:45 AM</p>
               </div>
             </div>
             <div className="h-px bg-border" />

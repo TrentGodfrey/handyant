@@ -1,8 +1,9 @@
 import { NextRequest } from "next/server";
 import { prisma } from "@/lib/prisma";
+import { BOOKING_SLOT_STARTS, VISIT_DURATION_MINUTES } from "@/lib/booking-slots";
 
 // Public endpoint - unauthenticated visitors can pick a time before signing up.
-// Returns 30-min slot grid for the default tech (Anthony) on the requested date.
+// Returns the four fixed daily booking windows for the default tech (Anthony).
 //
 // GET /api/availability?date=YYYY-MM-DD
 // → { slots: [{ time: "08:00", available: true }, ...] }
@@ -98,19 +99,16 @@ export async function GET(req: NextRequest) {
     return Response.json({ slots: [] });
   }
 
-  // Fixed 6-slot day, each visit is 1h 45m (105 min) with a 15-min buffer
+  // Fixed 4-slot day, each visit is 1h 45m (105 min) with a 15-min buffer
   // before the next start:
-  //   06:00 - 07:45
   //   08:00 - 09:45
   //   10:00 - 11:45
   //   12:00 - 13:45
   //   14:00 - 15:45
-  //   16:00 - 17:45
   // Slots are only shown if they fall within the tech's working hours for
-  // the day AND are not already booked. Booked slots are filtered out
-  // entirely so customers only see what they can actually pick.
-  const VISIT_LENGTH = 105;
-  const SLOT_STARTS = [6 * 60, 8 * 60, 10 * 60, 12 * 60, 14 * 60, 16 * 60];
+  // the day. Booked slots remain in the response as unavailable so the UI
+  // consistently presents the day's four-window schedule.
+  const SLOT_STARTS = BOOKING_SLOT_STARTS.map(parseHHMM);
 
   // Pull bookings for that tech on that date.
   const bookings = await prisma.booking.findMany({
@@ -129,9 +127,9 @@ export async function GET(req: NextRequest) {
     const t = new Date(b.scheduledTime);
     if (Number.isNaN(t.getTime())) continue;
     const bookingStart = t.getUTCHours() * 60 + t.getUTCMinutes();
-    const bookingEnd = bookingStart + (b.durationMinutes ?? VISIT_LENGTH);
+    const bookingEnd = bookingStart + (b.durationMinutes ?? VISIT_DURATION_MINUTES);
     for (const slotStart of SLOT_STARTS) {
-      const slotEnd = slotStart + VISIT_LENGTH;
+      const slotEnd = slotStart + VISIT_DURATION_MINUTES;
       // Overlap if intervals intersect at all.
       if (slotStart < bookingEnd && bookingStart < slotEnd) {
         blockedStarts.add(slotStart);
@@ -139,11 +137,10 @@ export async function GET(req: NextRequest) {
     }
   }
 
-  // Build the slot list. Skip any slot outside working hours or already booked.
+  // Build the slot list. Skip slots outside working hours and mark overlaps booked.
   const slots: { time: string; available: boolean }[] = SLOT_STARTS
-    .filter((m) => m >= startMin && m + VISIT_LENGTH <= endMin)
-    .filter((m) => !blockedStarts.has(m))
-    .map((m) => ({ time: fmtHHMM(m), available: true }));
+    .filter((m) => m >= startMin && m + VISIT_DURATION_MINUTES <= endMin)
+    .map((m) => ({ time: fmtHHMM(m), available: !blockedStarts.has(m) }));
 
   return Response.json({ slots });
 }

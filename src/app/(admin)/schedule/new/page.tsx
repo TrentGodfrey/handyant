@@ -20,6 +20,7 @@ import {
   CalendarDays,
 } from "lucide-react";
 import { useDemoMode } from "@/lib/useDemoMode";
+import { BOOKING_SLOT_STARTS, VISIT_DURATION_MINUTES } from "@/lib/booking-slots";
 import { DEMO_CUSTOMERS } from "@/lib/demoData";
 
 type Mode = "job" | "block";
@@ -47,13 +48,14 @@ const DEMO_CLIENTS: ClientView[] = DEMO_CUSTOMERS.map((c) => ({
   initials: c.initials,
 }));
 
-const DURATIONS = ["1h", "1.5h", "2h", "2.5h", "3h", "4h+"];
+const DURATIONS = ["1h", "1.5h", "1h 45m", "2h", "2.5h", "3h", "4h+"];
 const BLOCK_REASONS = ["Personal", "Supplies Run", "Admin", "Lunch", "Travel", "Other"];
-// Fixed 6-slot day matching customer booking + /api/availability output:
-// 6 AM, 8 AM, 10 AM, 12 PM, 2 PM, 4 PM.
-const JOB_TIME_SLOTS = [
-  "6:00 AM", "8:00 AM", "10:00 AM", "12:00 PM", "2:00 PM", "4:00 PM",
-];
+// Fixed four-window day matching customer booking + /api/availability output.
+const JOB_TIME_SLOTS = BOOKING_SLOT_STARTS.map((slot) => {
+  const hour = Number(slot.slice(0, 2));
+  const displayHour = hour > 12 ? hour - 12 : hour;
+  return `${displayHour}:00 ${hour >= 12 ? "PM" : "AM"}`;
+});
 // Block-time mode still needs 30-min granularity for arbitrary ranges.
 const TIME_SLOTS = [
   "7:00 AM", "7:30 AM", "8:00 AM", "8:30 AM", "9:00 AM", "9:30 AM",
@@ -127,6 +129,7 @@ function initialsOf(name: string): string {
 }
 
 function durationToMinutes(d: string): number {
+  if (d === "1h 45m") return VISIT_DURATION_MINUTES;
   if (d === "4h+") return 240;
   if (d.endsWith("h")) {
     return Math.round(parseFloat(d.slice(0, -1)) * 60);
@@ -186,7 +189,7 @@ function ScheduleNewPageInner() {
   const [selectedDate, setSelectedDate] = useState<Date | null>(null);
   const [timeSlot, setTimeSlot] = useState("8:00 AM");
   const [showTimeDropdown, setShowTimeDropdown] = useState(false);
-  const [duration, setDuration] = useState("2h");
+  const [duration, setDuration] = useState("1h 45m");
   const [description, setDescription] = useState("");
   const [hasParts, setHasParts] = useState(false);
   const [partsList, setPartsList] = useState("");

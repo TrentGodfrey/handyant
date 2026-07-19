@@ -10,6 +10,7 @@ import { useDemoMode } from "@/lib/useDemoMode";
 import { toast } from "@/components/Toaster";
 import { PLANS, type PlanId } from "@/lib/plans";
 import { bookingDateToLocalDate, bookingTimeInputValue, formatBookingTime } from "@/lib/booking-time";
+import { VISIT_DURATION_MINUTES } from "@/lib/booking-slots";
 import {
   MapPin, Clock, Star, ArrowRight, Camera,
   MessageCircle, Phone, CheckCircle2,
@@ -600,7 +601,13 @@ function formatSlotLabel(time: string): string {
   const m = parseInt(mm, 10);
   const ampm = h >= 12 ? "PM" : "AM";
   const h12 = h % 12 === 0 ? 12 : h % 12;
-  return `${h12}:${String(m).padStart(2, "0")} ${ampm}`;
+  const start = `${h12}:${String(m).padStart(2, "0")} ${ampm}`;
+  const endTotal = h * 60 + m + VISIT_DURATION_MINUTES;
+  const endHour = Math.floor(endTotal / 60) % 24;
+  const endMinute = endTotal % 60;
+  const endAmpm = endHour >= 12 ? "PM" : "AM";
+  const endHour12 = endHour % 12 === 0 ? 12 : endHour % 12;
+  return `${start} – ${endHour12}:${String(endMinute).padStart(2, "0")} ${endAmpm}`;
 }
 
 function parseCurrentTime(scheduledTime: string): string {

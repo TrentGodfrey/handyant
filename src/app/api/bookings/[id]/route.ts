@@ -5,6 +5,7 @@ import { BookingStatus } from "@/generated/prisma/enums";
 import { completedStatusDelta, getVisitUsage } from "@/lib/subscription-usage";
 import { decryptHomeAccess } from "@/lib/sensitive-data";
 import { bookingTimeToDatabaseDate } from "@/lib/booking-time";
+import { isBookingSlotStart } from "@/lib/booking-slots";
 
 export async function GET(_req: NextRequest, ctx: { params: Promise<{ id: string }> }) {
   const user = await requireUser();
@@ -76,8 +77,10 @@ export async function PATCH(req: NextRequest, ctx: { params: Promise<{ id: strin
   if (body.techId !== undefined && isTech) data.techId = body.techId;
   if (body.scheduledDate !== undefined && isTech) data.scheduledDate = new Date(body.scheduledDate);
   if (body.scheduledTime !== undefined && isTech) {
-    const scheduledTime = typeof body.scheduledTime === "string" ? bookingTimeToDatabaseDate(body.scheduledTime) : null;
+    const scheduledTimeInput = typeof body.scheduledTime === "string" ? body.scheduledTime : "";
+    const scheduledTime = bookingTimeToDatabaseDate(scheduledTimeInput);
     if (!scheduledTime) return badRequest("Invalid scheduled time");
+    if (!isBookingSlotStart(scheduledTimeInput)) return badRequest("Choose one of the four available daily time slots");
     data.scheduledTime = scheduledTime;
   }
   if (body.durationMinutes !== undefined && isTech) data.durationMinutes = body.durationMinutes;
