@@ -52,6 +52,12 @@ interface ApiSubscription {
   visitsUsed: number;
 }
 
+interface HomeSummary {
+  id: string;
+  address: string;
+  city: string | null;
+}
+
 const DEMO_BOOKING: BookingData = {
   id: "demo",
   scheduledDate: "2026-04-08",
@@ -76,6 +82,7 @@ export default function CustomerHome() {
   const [activePlanId, setActivePlanId] = useState<string | null>(null);
   const [completedCount, setCompletedCount] = useState(0);
   const [techPhone, setTechPhone] = useState<string | null>(null);
+  const [profileHome, setProfileHome] = useState<HomeSummary | null>(null);
   const [rescheduleOpen, setRescheduleOpen] = useState(false);
   const [cancelOpen, setCancelOpen] = useState(false);
   const [cancelling, setCancelling] = useState(false);
@@ -102,24 +109,29 @@ export default function CustomerHome() {
       setActivePlanId("pro");
       setCompletedCount(12);
       setTechPhone("+12144697795");
+      setProfileHome(DEMO_BOOKING.home ? { id: "demo", ...DEMO_BOOKING.home } : null);
       setLoading(false);
       return;
     }
 
     let cancelled = false;
     Promise.all([
-      fetch("/api/bookings").then((r) => (r.ok ? r.json() : [])).catch(() => []),
+      fetch("/api/bookings?view=customer").then((r) => (r.ok ? r.json() : [])).catch(() => []),
       fetch("/api/reviews").then((r) => (r.ok ? r.json() : [])).catch(() => []),
       fetch("/api/subscriptions").then((r) => (r.ok ? r.json() : [])).catch(() => []),
+      fetch("/api/homes").then((r) => (r.ok ? r.json() : [])).catch(() => []),
     ])
-      .then(([bookings, reviews, subs]) => {
+      .then(([bookings, reviews, subs, homes]) => {
         if (cancelled) return;
 
         const bookingList: BookingData[] = Array.isArray(bookings) ? bookings : [];
-        const upcoming = bookingList.find((b) =>
-          ["pending", "confirmed", "in_progress"].includes(b.status)
-        );
+        const upcoming = bookingList
+          .filter((b) => ["pending", "confirmed", "in_progress"].includes(b.status))
+          .sort((a, b) => bookingDateToLocalDate(a.scheduledDate).getTime() - bookingDateToLocalDate(b.scheduledDate).getTime())[0];
         setNextBooking(upcoming || null);
+
+        const homeList: HomeSummary[] = Array.isArray(homes) ? homes : [];
+        setProfileHome(homeList[0] ?? null);
 
         // Surface a tech phone for the Call button (prefer the upcoming booking's tech).
         const phone =
@@ -165,6 +177,8 @@ export default function CustomerHome() {
     ? `tel:${techPhone.replace(/[^+\d]/g, "")}`
     : FALLBACK_TEL;
 
+  const displayHome = profileHome ?? nextBooking?.home ?? null;
+
   const formatDate = (dateStr: string) => {
     const d = bookingDateToLocalDate(dateStr);
     return d.toLocaleDateString("en-US", { weekday: "long", month: "long", day: "numeric" });
@@ -182,11 +196,11 @@ export default function CustomerHome() {
             <h1 className="mt-0.5 text-[22px] font-bold text-text-primary leading-tight">
               {userName}&apos;s Home
             </h1>
-            {nextBooking?.home && (
+            {displayHome && (
               <div className="mt-1 flex items-center gap-1 text-text-tertiary">
                 <MapPin size={12} />
                 <span className="text-[12px]">
-                  {nextBooking.home.address}{nextBooking.home.city ? `, ${nextBooking.home.city}` : ""}
+                  {displayHome.address}{displayHome.city ? `, ${displayHome.city}` : ""}
                 </span>
               </div>
             )}

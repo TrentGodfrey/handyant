@@ -181,7 +181,7 @@ export default function MessagesPage() {
     try {
       const [convoRes, bookingsRes, defaultTechRes] = await Promise.all([
         fetch("/api/conversations").then((r) => r.json()),
-        fetch("/api/bookings").then((r) => r.json()).catch(() => []),
+        fetch("/api/bookings?view=customer").then((r) => r.json()).catch(() => []),
         // Always look up a default tech so customers without bookings can still
         // initiate a conversation. Falls back gracefully if route 404s.
         fetch("/api/tech/default").then((r) => (r.ok ? r.json() : null)).catch(() => null),

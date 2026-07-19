@@ -340,7 +340,7 @@ export default function TrackPage() {
       setLoading(false);
       return;
     }
-    fetch("/api/bookings")
+    fetch("/api/bookings?view=customer")
       .then((r) => r.json())
       .then((data: ApiBooking[]) => {
         if (!Array.isArray(data)) {

@@ -4,13 +4,14 @@ import { requireUser, unauthorized } from "@/lib/session";
 import { sendEmail, emailShell, escapeHtml } from "@/lib/email";
 import { decryptHomeAccess } from "@/lib/sensitive-data";
 import { bookingTimeToDatabaseDate } from "@/lib/booking-time";
+import { bookingListWhere } from "@/lib/booking-view";
 
-export async function GET() {
+export async function GET(req: NextRequest) {
   const user = await requireUser();
   if (!user) return unauthorized();
 
   const bookings = await prisma.booking.findMany({
-    where: user.role === "tech" ? { techId: user.id } : { customerId: user.id },
+    where: bookingListWhere(user, req.nextUrl.searchParams.get("view")),
     include: {
       home: true,
       customer: { select: { id: true, name: true, phone: true, avatarUrl: true } },

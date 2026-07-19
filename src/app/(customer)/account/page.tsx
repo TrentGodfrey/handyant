@@ -62,7 +62,7 @@ export default function AccountPage() {
     }
     // Fetch completed bookings + active subscription + homes (for todo counts)
     Promise.all([
-      fetch("/api/bookings").then((r) => (r.ok ? r.json() : [])).catch(() => []),
+      fetch("/api/bookings?view=customer").then((r) => (r.ok ? r.json() : [])).catch(() => []),
       fetch("/api/subscriptions").then((r) => (r.ok ? r.json() : [])).catch(() => []),
       fetch("/api/homes").then((r) => (r.ok ? r.json() : [])).catch(() => []),
     ]).then(async ([bookings, subs, homes]) => {

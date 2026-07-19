@@ -128,7 +128,7 @@ export async function GET(req: NextRequest) {
     priorPeriodBookings,
   ] = await Promise.all([
     prisma.booking.findMany({
-      where: { scheduledDate: { gte: startOfDay, lt: endOfDay } },
+      where: { techId: tech.id, scheduledDate: { gte: startOfDay, lt: endOfDay } },
       include: {
         tasks: true,
         parts: true,
@@ -138,18 +138,28 @@ export async function GET(req: NextRequest) {
       orderBy: { scheduledTime: "asc" },
     }),
     prisma.booking.findMany({
-      where: { scheduledDate: { gte: startOfWeek, lt: endOfWeek } },
+      where: { techId: tech.id, scheduledDate: { gte: startOfWeek, lt: endOfWeek } },
       include: { tasks: true },
     }),
     prisma.booking.findMany({
-      where: { scheduledDate: { gte: startOfMonth, lt: endOfMonth } },
+      where: { techId: tech.id, scheduledDate: { gte: startOfMonth, lt: endOfMonth } },
       include: { tasks: true },
     }),
     prisma.part.findMany({
-      where: { status: "needed", booking: { status: { not: "completed" } } },
+      where: {
+        status: "needed",
+        booking: {
+          techId: tech.id,
+          status: { in: ["pending", "confirmed"] },
+          scheduledDate: { gte: startOfDay },
+        },
+      },
       include: { booking: { include: { customer: true } } },
     }),
-    prisma.review.findMany({ select: { rating: true, createdAt: true } }),
+    prisma.review.findMany({
+      where: { techId: tech.id },
+      select: { rating: true, createdAt: true },
+    }),
     prisma.booking.findMany({
       where: {
         techId: tech.id,
