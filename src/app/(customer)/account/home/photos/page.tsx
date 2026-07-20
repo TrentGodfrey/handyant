@@ -2,7 +2,6 @@
 
 import { useState, useEffect, useRef, useCallback } from "react";
 import Link from "next/link";
-import Image from "next/image";
 import {
   ChevronLeft, Camera, X,
   ChevronLeft as ArrowLeft, ChevronRight as ArrowRight,
@@ -465,12 +464,12 @@ function RealPhotoGallery() {
                 className="group rounded-2xl border border-border bg-surface overflow-hidden text-left active:scale-[0.97] transition-transform shadow-[0_1px_4px_rgba(0,0,0,0.06)]"
               >
                 <div className="relative h-[120px] bg-surface-secondary flex items-center justify-center overflow-hidden">
-                  <Image
+                  {/* Protected uploads load directly so the browser includes the login cookie. */}
+                  {/* eslint-disable-next-line @next/next/no-img-element */}
+                  <img
                     src={photo.url}
                     alt={photo.label ?? "Photo"}
-                    fill
-                    sizes="(max-width: 640px) 50vw, 320px"
-                    className="object-cover"
+                    className="absolute inset-0 h-full w-full object-cover"
                   />
                   <div className="absolute inset-0 bg-black/0 group-hover:bg-black/10 transition-colors flex items-center justify-center opacity-0 group-hover:opacity-100">
                     <div className="bg-white/90 rounded-full p-1.5">
@@ -543,12 +542,11 @@ function RealPhotoGallery() {
             )}
 
             <div className="relative w-full max-w-sm aspect-square rounded-2xl bg-surface-secondary overflow-hidden flex items-center justify-center shadow-xl">
-              <Image
+              {/* eslint-disable-next-line @next/next/no-img-element */}
+              <img
                 src={modalPhoto.url}
                 alt={modalPhoto.label ?? "Photo"}
-                fill
-                sizes="384px"
-                className="object-contain"
+                className="absolute inset-0 h-full w-full object-contain"
               />
             </div>
 

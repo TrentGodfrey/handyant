@@ -53,6 +53,7 @@ export default function HomeDetailPage({ params }: { params: Promise<{ id: strin
   const [photoError, setPhotoError] = useState<string | null>(null);
   const [preparingPhoto, setPreparingPhoto] = useState(false);
   const [savingPhoto, setSavingPhoto] = useState(false);
+  const [deletingPhotoId, setDeletingPhotoId] = useState<string | null>(null);
 
   // Show/hide gate code
   const [gateCodeVisible, setGateCodeVisible] = useState(false);
@@ -399,6 +400,34 @@ export default function HomeDetailPage({ params }: { params: Promise<{ id: strin
     }
   }
 
+  async function deletePhoto(photoId: string) {
+    if (!home || !window.confirm("Delete this photo permanently?")) return;
+
+    if (isDemo) {
+      setHome({ ...home, photos: home.photos.filter((photo) => photo.id !== photoId) });
+      toast.success("Photo deleted");
+      return;
+    }
+
+    setDeletingPhotoId(photoId);
+    setPhotoError(null);
+    try {
+      const response = await fetch(`/api/photos/${photoId}`, { method: "DELETE" });
+      const data = await response.json().catch(() => ({}));
+      if (!response.ok) throw new Error(data.error || "Photo could not be deleted");
+      setHome((current) => current
+        ? { ...current, photos: current.photos.filter((photo) => photo.id !== photoId) }
+        : current);
+      toast.success("Photo deleted");
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "Photo could not be deleted";
+      setPhotoError(message);
+      toast.error(message);
+    } finally {
+      setDeletingPhotoId(null);
+    }
+  }
+
   async function deleteHome() {
     if (!home) return;
     if (isDemo) {
@@ -507,8 +536,10 @@ export default function HomeDetailPage({ params }: { params: Promise<{ id: strin
         photoError={photoError}
         preparingPhoto={preparingPhoto}
         savingPhoto={savingPhoto}
+        deletingPhotoId={deletingPhotoId}
         selectPhoto={selectPhoto}
         addPhoto={addPhoto}
+        deletePhoto={deletePhoto}
       />
 
       <TodoList

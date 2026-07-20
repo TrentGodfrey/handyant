@@ -2,7 +2,6 @@
 
 import { useState, useEffect, use, useRef } from "react";
 import Link from "next/link";
-import Image from "next/image";
 import Button from "@/components/Button";
 import Card from "@/components/Card";
 import StatusBadge from "@/components/StatusBadge";
@@ -183,6 +182,7 @@ export default function JobDetailPage({ params }: { params: Promise<{ id: string
   const [showCancelModal, setShowCancelModal] = useState(false);
   const [cancelling, setCancelling] = useState(false);
   const [uploading, setUploading] = useState(false);
+  const [deletingPhotoId, setDeletingPhotoId] = useState<string | null>(null);
   const [uploadError, setUploadError] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [showAddTask, setShowAddTask] = useState(false);
@@ -564,6 +564,31 @@ export default function JobDetailPage({ params }: { params: Promise<{ id: string
     }
   }
 
+  async function deletePhoto(photoId: string) {
+    if (!window.confirm("Delete this visit photo permanently?")) return;
+    if (isDemo) {
+      setPhotos((current) => current.filter((photo) => photo.id !== photoId));
+      toast.success("Photo deleted");
+      return;
+    }
+
+    setDeletingPhotoId(photoId);
+    setUploadError(null);
+    try {
+      const response = await fetch(`/api/photos/${photoId}`, { method: "DELETE" });
+      const data = await response.json().catch(() => ({}));
+      if (!response.ok) throw new Error(data.error || "Photo could not be deleted");
+      setPhotos((current) => current.filter((photo) => photo.id !== photoId));
+      toast.success("Photo deleted");
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "Photo could not be deleted";
+      setUploadError(message);
+      toast.error(message);
+    } finally {
+      setDeletingPhotoId(null);
+    }
+  }
+
   if (loading) {
     return (
       <div className="min-h-screen bg-background flex items-center justify-center">
@@ -794,12 +819,12 @@ export default function JobDetailPage({ params }: { params: Promise<{ id: string
                 className="relative aspect-square rounded-xl bg-surface-secondary border border-border flex flex-col items-center justify-center gap-1.5 overflow-hidden"
               >
                 {photo.url ? (
-                  <Image
+                  // Protected uploads must load in the browser so the session cookie is included.
+                  // eslint-disable-next-line @next/next/no-img-element
+                  <img
                     src={photo.url}
                     alt={photo.label}
-                    fill
-                    sizes="(max-width: 640px) 33vw, 200px"
-                    className="object-cover"
+                    className="absolute inset-0 h-full w-full object-cover"
                   />
                 ) : (
                   <>
@@ -807,6 +832,15 @@ export default function JobDetailPage({ params }: { params: Promise<{ id: string
                     <p className="text-[9px] text-text-tertiary px-1 text-center truncate w-full">{photo.label}</p>
                   </>
                 )}
+                <button
+                  type="button"
+                  onClick={() => deletePhoto(photo.id)}
+                  disabled={deletingPhotoId === photo.id}
+                  aria-label={`Delete ${photo.label || "visit photo"}`}
+                  className="absolute right-1.5 top-1.5 z-10 flex h-8 w-8 items-center justify-center rounded-full bg-black/70 text-white shadow-sm active:bg-black/85 disabled:opacity-60"
+                >
+                  <Trash2 size={14} />
+                </button>
               </div>
             ))}
             <button
