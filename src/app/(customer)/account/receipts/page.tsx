@@ -76,7 +76,7 @@ function formatDate(iso: string | null): string {
 }
 
 function formatHours(durationMinutes: number | null): string {
-  const mins = durationMinutes ?? 120;
+  const mins = durationMinutes ?? 105;
   const hours = mins / 60;
   return Number.isInteger(hours) ? `${hours}h` : `${hours.toFixed(1)}h`;
 }

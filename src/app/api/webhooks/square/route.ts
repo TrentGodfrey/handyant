@@ -2,6 +2,8 @@ import { createHash } from "node:crypto";
 import { NextRequest } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { isValidSquareWebhookSignature, squareWebhookUrl } from "@/lib/square";
+import { sendActivityEmail } from "@/lib/activity-email";
+import { planMeta } from "@/lib/plans";
 
 interface SquarePaymentEvent {
   event_id?: string;
@@ -48,7 +50,10 @@ export async function POST(req: NextRequest) {
     return Response.json({ ok: true, ignored: true });
   }
 
-  const checkout = await prisma.paymentCheckout.findUnique({ where: { squareOrderId: payment.order_id } });
+  const checkout = await prisma.paymentCheckout.findUnique({
+    where: { squareOrderId: payment.order_id },
+    include: { customer: { select: { name: true, email: true } } },
+  });
   if (!checkout) {
     await prisma.squareWebhookEvent.create({ data: { eventId: event.event_id, type: event.type, payloadHash } });
     return Response.json({ ok: true, ignored: true });
@@ -58,6 +63,7 @@ export async function POST(req: NextRequest) {
   const paidAt = payment.created_at ? new Date(payment.created_at) : new Date();
   const validAmount = money?.amount === checkout.amountCents && money.currency === checkout.currency;
 
+  let completedKind: "membership" | "invoice" | null = null;
   await prisma.$transaction(async (tx) => {
     await tx.squareWebhookEvent.create({ data: { eventId: event.event_id!, type: event.type!, payloadHash } });
     if (payment.status !== "COMPLETED" || !validAmount || !payment.id || checkout.status === "paid") return;
@@ -86,6 +92,7 @@ export async function POST(req: NextRequest) {
           endsAt,
         },
       });
+      completedKind = "membership";
     } else if (checkout.kind === "invoice" && checkout.invoiceId) {
       const invoice = await tx.invoice.update({
         where: { id: checkout.invoiceId },
@@ -103,8 +110,35 @@ export async function POST(req: NextRequest) {
           },
         });
       }
+      completedKind = "invoice";
     }
   });
+
+  if (completedKind === "membership" && checkout.plan) {
+    await sendActivityEmail({
+      to: checkout.customer.email,
+      recipientName: checkout.customer.name,
+      subject: `Welcome to MCQ ${planMeta(checkout.plan).label}`,
+      heading: "Membership activated",
+      message: `Your payment was received and your ${planMeta(checkout.plan).label} membership is now active.`,
+      actionPath: "/account",
+      actionLabel: "View membership",
+    });
+    const tech = await prisma.user.findFirst({
+      where: { role: "tech", email: { not: null } },
+      orderBy: { createdAt: "asc" },
+      select: { name: true, email: true },
+    });
+    await sendActivityEmail({
+      to: tech?.email,
+      recipientName: tech?.name,
+      subject: `New ${planMeta(checkout.plan).label} membership — ${checkout.customer.name}`,
+      heading: "New membership",
+      message: `${checkout.customer.name} completed payment for an MCQ ${planMeta(checkout.plan).label} membership.`,
+      actionPath: "/admin-clients",
+      actionLabel: "View customer",
+    });
+  }
 
   return Response.json({ ok: true });
 }

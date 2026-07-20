@@ -2,7 +2,6 @@
 
 import { useState, useEffect, use, useRef } from "react";
 import Link from "next/link";
-import Image from "next/image";
 import Button from "@/components/Button";
 import Card from "@/components/Card";
 import StatusBadge from "@/components/StatusBadge";
@@ -12,9 +11,11 @@ import {
   Plus, AlertTriangle, Check, Package, Star, Trash2,
 } from "lucide-react";
 import { useDemoMode } from "@/lib/useDemoMode";
+import { prepareImageForUpload } from "@/lib/client-image-upload";
 import { toast } from "@/components/Toaster";
 import { demoCustomerBy } from "@/lib/demoData";
 import Spinner from "@/components/Spinner";
+import { bookingDateToLocalDate, formatBookingTime } from "@/lib/booking-time";
 
 // ── Types ────────────────────────────────────────────────────────────────────
 
@@ -38,13 +39,11 @@ interface JobDetail {
   date: string;
   time: string;
   status: UiStatus;
-  estimate: string;
   tasks: { id: string; label: string; done: boolean; notes?: string }[];
   parts: { item: string; qty: number; status: "purchased" | "needed" | "ordered" }[];
   photos: { id: string; label: string; url?: string }[];
   techNotes: string;
   customerNotes: string;
-  rating?: number;
 }
 
 function apiStatusToUi(s: string): UiStatus {
@@ -59,7 +58,6 @@ const DEMO_JOBS: Record<string, JobDetail> = {
   "1": {
     id: "1", client: demoCustomerBy("1")!.name, address: "4821 Oak Hollow Dr, Plano TX 75024",
     phone: "(972) 555-0142", date: "Today", time: "9:00 AM", status: "confirmed",
-    estimate: "$340",
     tasks: [
       { id: "t1", label: "Replace kitchen faucet (Moen brushed nickel)", done: false },
       { id: "t2", label: "Fix garage door sensor alignment", done: false, notes: "Laser level needed" },
@@ -80,7 +78,6 @@ const DEMO_JOBS: Record<string, JobDetail> = {
   "2": {
     id: "2", client: demoCustomerBy("2")!.name, address: "1205 Elm Creek Ct, Frisco TX 75034",
     phone: "(469) 555-0298", date: "Today", time: "11:30 AM", status: "confirmed",
-    estimate: "$280",
     tasks: [
       { id: "t1", label: "Install Nest Learning Thermostat (3rd gen)", done: false },
       { id: "t2", label: "Replace 3 duplex outlets - master BR + office + garage", done: false },
@@ -93,7 +90,6 @@ const DEMO_JOBS: Record<string, JobDetail> = {
   "3": {
     id: "3", client: demoCustomerBy("3")!.name, address: "890 Sunset Ridge, Roanoke TX 76262",
     phone: "(817) 555-0377", date: "Today", time: "2:00 PM", status: "pending",
-    estimate: "$190",
     tasks: [
       { id: "t1", label: "Drywall patch - 2 holes from TV mount removal", done: false },
       { id: "t2", label: "Touch-up paint - living room & hallway", done: false, notes: "Paint color: SW Alabaster" },
@@ -115,8 +111,6 @@ interface ApiBooking {
   status: string;
   scheduledDate: string;
   scheduledTime: string;
-  estimatedCost: string | number | null;
-  finalCost: string | number | null;
   description: string | null;
   customerNotes: string | null;
   techNotes: string | null;
@@ -128,16 +122,13 @@ interface ApiBooking {
 }
 
 function bookingToDetail(b: ApiBooking): JobDetail {
-  const cost = b.finalCost ?? b.estimatedCost;
-  const numCost = cost == null ? 0 : Number(cost);
-  const dateObj = new Date(b.scheduledDate);
-  const timeObj = new Date(b.scheduledTime);
+  const dateObj = bookingDateToLocalDate(b.scheduledDate);
   const today = new Date();
   const isToday = dateObj.toDateString() === today.toDateString();
   const dateLabel = isToday
     ? "Today"
     : dateObj.toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" });
-  const timeLabel = timeObj.toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit" });
+  const timeLabel = formatBookingTime(b.scheduledTime);
 
   const homeStr = b.home
     ? `${b.home.address}${b.home.city ? `, ${b.home.city}` : ""}${b.home.state ? ` ${b.home.state}` : ""}${b.home.zip ? ` ${b.home.zip}` : ""}`
@@ -152,7 +143,6 @@ function bookingToDetail(b: ApiBooking): JobDetail {
     date: dateLabel,
     time: timeLabel,
     status: apiStatusToUi(b.status),
-    estimate: numCost > 0 ? `$${numCost.toFixed(0)}` : "$0",
     tasks: b.tasks.map((t) => ({
       id: t.id,
       label: t.label,
@@ -187,10 +177,10 @@ export default function JobDetailPage({ params }: { params: Promise<{ id: string
   const [savingNote, setSavingNote] = useState(false);
   const [showCompleteModal, setShowCompleteModal] = useState(false);
   const [completing, setCompleting] = useState(false);
-  const [completeRating, setCompleteRating] = useState<number>(5);
   const [showCancelModal, setShowCancelModal] = useState(false);
   const [cancelling, setCancelling] = useState(false);
   const [uploading, setUploading] = useState(false);
+  const [deletingPhotoId, setDeletingPhotoId] = useState<string | null>(null);
   const [uploadError, setUploadError] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [showAddTask, setShowAddTask] = useState(false);
@@ -463,7 +453,7 @@ export default function JobDetailPage({ params }: { params: Promise<{ id: string
   async function completeJob() {
     if (isDemo) {
       setShowCompleteModal(false);
-      setJob((prev) => (prev ? { ...prev, status: "completed", rating: completeRating } : prev));
+      setJob((prev) => (prev ? { ...prev, status: "completed" } : prev));
       toast.success("Visit completed");
       return;
     }
@@ -475,7 +465,7 @@ export default function JobDetailPage({ params }: { params: Promise<{ id: string
         body: JSON.stringify({ status: "completed" }),
       });
       if (res.ok) {
-        setJob((prev) => (prev ? { ...prev, status: "completed", rating: completeRating } : prev));
+        setJob((prev) => (prev ? { ...prev, status: "completed" } : prev));
         toast.success("Visit completed");
       } else {
         toast.error("Failed to complete visit");
@@ -530,13 +520,8 @@ export default function JobDetailPage({ params }: { params: Promise<{ id: string
     if (!file) return;
     setUploadError(null);
 
-    const dataUrl = await new Promise<string>((resolve, reject) => {
-      const reader = new FileReader();
-      reader.onload = () => resolve(String(reader.result));
-      reader.onerror = () => reject(new Error("Failed to read file"));
-      reader.readAsDataURL(file);
-    }).catch((err) => {
-      setUploadError(err.message);
+    const dataUrl = await prepareImageForUpload(file).catch((err: unknown) => {
+      setUploadError(err instanceof Error ? err.message : "Failed to prepare photo");
       return null;
     });
     if (!dataUrl) return;
@@ -574,6 +559,31 @@ export default function JobDetailPage({ params }: { params: Promise<{ id: string
       setUploadError(err instanceof Error ? err.message : "Upload failed");
     } finally {
       setUploading(false);
+    }
+  }
+
+  async function deletePhoto(photoId: string) {
+    if (!window.confirm("Delete this visit photo permanently?")) return;
+    if (isDemo) {
+      setPhotos((current) => current.filter((photo) => photo.id !== photoId));
+      toast.success("Photo deleted");
+      return;
+    }
+
+    setDeletingPhotoId(photoId);
+    setUploadError(null);
+    try {
+      const response = await fetch(`/api/photos/${photoId}`, { method: "DELETE" });
+      const data = await response.json().catch(() => ({}));
+      if (!response.ok) throw new Error(data.error || "Photo could not be deleted");
+      setPhotos((current) => current.filter((photo) => photo.id !== photoId));
+      toast.success("Photo deleted");
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "Photo could not be deleted";
+      setUploadError(message);
+      toast.error(message);
+    } finally {
+      setDeletingPhotoId(null);
     }
   }
 
@@ -617,7 +627,6 @@ export default function JobDetailPage({ params }: { params: Promise<{ id: string
           </div>
           <div className="flex flex-col items-end gap-2 shrink-0">
             <StatusBadge status={job.status} />
-            <span className="text-[18px] font-bold text-text-primary">{job.estimate}</span>
           </div>
         </div>
 
@@ -808,12 +817,12 @@ export default function JobDetailPage({ params }: { params: Promise<{ id: string
                 className="relative aspect-square rounded-xl bg-surface-secondary border border-border flex flex-col items-center justify-center gap-1.5 overflow-hidden"
               >
                 {photo.url ? (
-                  <Image
+                  // Protected uploads must load in the browser so the session cookie is included.
+                  // eslint-disable-next-line @next/next/no-img-element
+                  <img
                     src={photo.url}
                     alt={photo.label}
-                    fill
-                    sizes="(max-width: 640px) 33vw, 200px"
-                    className="object-cover"
+                    className="absolute inset-0 h-full w-full object-cover"
                   />
                 ) : (
                   <>
@@ -821,6 +830,15 @@ export default function JobDetailPage({ params }: { params: Promise<{ id: string
                     <p className="text-[9px] text-text-tertiary px-1 text-center truncate w-full">{photo.label}</p>
                   </>
                 )}
+                <button
+                  type="button"
+                  onClick={() => deletePhoto(photo.id)}
+                  disabled={deletingPhotoId === photo.id}
+                  aria-label={`Delete ${photo.label || "visit photo"}`}
+                  className="absolute right-1.5 top-1.5 z-10 flex h-8 w-8 items-center justify-center rounded-full bg-black/70 text-white shadow-sm active:bg-black/85 disabled:opacity-60"
+                >
+                  <Trash2 size={14} />
+                </button>
               </div>
             ))}
             <button
@@ -961,19 +979,6 @@ export default function JobDetailPage({ params }: { params: Promise<{ id: string
           )}
         </div>
 
-        {/* Invoice estimate */}
-        <div>
-          <p className="mb-2 text-sm font-semibold uppercase tracking-wider text-text-secondary">Estimate</p>
-          <Card>
-            <div className="space-y-2">
-              <div className="flex justify-between">
-                <span className="text-[14px] font-semibold text-text-primary">Total</span>
-                <span className="text-[16px] font-bold text-primary">{job.estimate}</span>
-              </div>
-            </div>
-          </Card>
-        </div>
-
         {/* Complete Visit CTA + Cancel */}
         {tasks.length > 0 && completedCount === tasks.length ? (
           <Button
@@ -1016,29 +1021,10 @@ export default function JobDetailPage({ params }: { params: Promise<{ id: string
                 This will mark the visit as done for {job.client}.
               </p>
             </div>
-            <div className="mb-4">
-              <p className="mb-2 text-[12px] font-semibold text-text-secondary">How would you rate this job?</p>
-              <div className="flex justify-center gap-1">
-                {[1,2,3,4,5].map((s) => {
-                  const active = s <= completeRating;
-                  return (
-                    <button
-                      key={s}
-                      type="button"
-                      onClick={() => setCompleteRating(s)}
-                      aria-label={`${s} star${s !== 1 ? "s" : ""}`}
-                      className="p-0.5 transition-transform active:scale-90"
-                    >
-                      <Star
-                        size={28}
-                        className={active ? "text-warning fill-warning" : "text-text-tertiary/40"}
-                      />
-                    </button>
-                  );
-                })}
-              </div>
-              <p className="mt-1.5 text-center text-[11px] text-text-tertiary">
-                We&apos;ll notify your customer in-app to leave a review.
+            <div className="mb-4 flex items-start gap-3 rounded-xl border border-warning/25 bg-warning-light p-3">
+              <Star size={18} className="mt-0.5 shrink-0 fill-warning text-warning" />
+              <p className="text-[12px] leading-relaxed text-text-secondary">
+                The customer will receive an email and an in-app prompt to leave their review.
               </p>
             </div>
             <Button

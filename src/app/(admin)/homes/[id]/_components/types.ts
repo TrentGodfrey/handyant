@@ -1,5 +1,7 @@
 // Shared types + constants + helpers for the admin Home Detail page.
 
+import { bookingDateToLocalDate } from "@/lib/booking-time";
+
 export type Priority = "high" | "medium" | "low";
 export type ItemStatus = "needs-parts" | "in-progress" | "pending" | "completed";
 
@@ -161,7 +163,7 @@ export function initialsFor(name: string): string {
 
 export function formatLongDate(iso: string): string {
   try {
-    return new Date(iso).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" });
+    return bookingDateToLocalDate(iso).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" });
   } catch {
     return iso;
   }

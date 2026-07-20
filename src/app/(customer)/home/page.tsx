@@ -9,6 +9,8 @@ import Spinner from "@/components/Spinner";
 import { useDemoMode } from "@/lib/useDemoMode";
 import { toast } from "@/components/Toaster";
 import { PLANS, type PlanId } from "@/lib/plans";
+import { bookingDateToLocalDate, bookingTimeInputValue, formatBookingTime } from "@/lib/booking-time";
+import { VISIT_DURATION_MINUTES, visitDurationMinutes } from "@/lib/booking-slots";
 import {
   MapPin, Clock, Star, ArrowRight, Camera,
   MessageCircle, Phone, CheckCircle2,
@@ -32,6 +34,7 @@ interface BookingData {
   id: string;
   scheduledDate: string;
   scheduledTime: string;
+  durationMinutes: number | null;
   status: string;
   description: string | null;
   tasks: { label: string; done: boolean }[];
@@ -42,6 +45,7 @@ interface BookingData {
 interface ApiReview {
   id: string;
   rating: number;
+  booking?: { id: string } | null;
 }
 
 interface ApiSubscription {
@@ -51,10 +55,17 @@ interface ApiSubscription {
   visitsUsed: number;
 }
 
+interface HomeSummary {
+  id: string;
+  address: string;
+  city: string | null;
+}
+
 const DEMO_BOOKING: BookingData = {
   id: "demo",
   scheduledDate: "2026-04-08",
   scheduledTime: "09:00",
+  durationMinutes: VISIT_DURATION_MINUTES,
   status: "confirmed",
   description: null,
   tasks: [
@@ -72,9 +83,11 @@ export default function CustomerHome() {
   const [nextBooking, setNextBooking] = useState<BookingData | null>(null);
   const [loading, setLoading] = useState(true);
   const [reviewStats, setReviewStats] = useState<{ count: number; avg: number } | null>(null);
+  const [pendingReview, setPendingReview] = useState<BookingData | null>(null);
   const [activePlanId, setActivePlanId] = useState<string | null>(null);
   const [completedCount, setCompletedCount] = useState(0);
   const [techPhone, setTechPhone] = useState<string | null>(null);
+  const [profileHome, setProfileHome] = useState<HomeSummary | null>(null);
   const [rescheduleOpen, setRescheduleOpen] = useState(false);
   const [cancelOpen, setCancelOpen] = useState(false);
   const [cancelling, setCancelling] = useState(false);
@@ -98,27 +111,33 @@ export default function CustomerHome() {
     if (isDemo) {
       setNextBooking(DEMO_BOOKING);
       setReviewStats({ count: 86, avg: 4.9 });
+      setPendingReview(null);
       setActivePlanId("pro");
       setCompletedCount(12);
       setTechPhone("+12144697795");
+      setProfileHome(DEMO_BOOKING.home ? { id: "demo", ...DEMO_BOOKING.home } : null);
       setLoading(false);
       return;
     }
 
     let cancelled = false;
     Promise.all([
-      fetch("/api/bookings").then((r) => (r.ok ? r.json() : [])).catch(() => []),
+      fetch("/api/bookings?view=customer").then((r) => (r.ok ? r.json() : [])).catch(() => []),
       fetch("/api/reviews").then((r) => (r.ok ? r.json() : [])).catch(() => []),
       fetch("/api/subscriptions").then((r) => (r.ok ? r.json() : [])).catch(() => []),
+      fetch("/api/homes").then((r) => (r.ok ? r.json() : [])).catch(() => []),
     ])
-      .then(([bookings, reviews, subs]) => {
+      .then(([bookings, reviews, subs, homes]) => {
         if (cancelled) return;
 
         const bookingList: BookingData[] = Array.isArray(bookings) ? bookings : [];
-        const upcoming = bookingList.find((b) =>
-          ["pending", "confirmed", "in_progress"].includes(b.status)
-        );
+        const upcoming = bookingList
+          .filter((b) => ["pending", "confirmed", "in_progress"].includes(b.status))
+          .sort((a, b) => bookingDateToLocalDate(a.scheduledDate).getTime() - bookingDateToLocalDate(b.scheduledDate).getTime())[0];
         setNextBooking(upcoming || null);
+
+        const homeList: HomeSummary[] = Array.isArray(homes) ? homes : [];
+        setProfileHome(homeList[0] ?? null);
 
         // Surface a tech phone for the Call button (prefer the upcoming booking's tech).
         const phone =
@@ -128,6 +147,13 @@ export default function CustomerHome() {
         setTechPhone(phone ?? null);
 
         const reviewList: ApiReview[] = Array.isArray(reviews) ? reviews : [];
+        const reviewedBookingIds = new Set(
+          reviewList.map((review) => review.booking?.id).filter((id): id is string => !!id),
+        );
+        const latestUnreviewedVisit = bookingList
+          .filter((booking) => booking.status === "completed" && !reviewedBookingIds.has(booking.id))
+          .sort((a, b) => bookingDateToLocalDate(b.scheduledDate).getTime() - bookingDateToLocalDate(a.scheduledDate).getTime())[0];
+        setPendingReview(latestUnreviewedVisit ?? null);
         if (reviewList.length > 0) {
           const sum = reviewList.reduce((acc, r) => acc + (r.rating ?? 0), 0);
           setReviewStats({
@@ -155,7 +181,7 @@ export default function CustomerHome() {
     ...(reviewStats
       ? [{ icon: Star, label: `${reviewStats.avg} Rating`, sub: `${reviewStats.count} review${reviewStats.count === 1 ? "" : "s"}`, color: "text-warning" }]
       : []),
-    { icon: Users, label: "DFW Since 2024", sub: "Justin · Plano · Frisco", color: "text-success" },
+    { icon: Users, label: "DFW Since 2024", sub: null, color: "text-success" },
   ];
 
   const trustGridCols = trustStats.length === 3 ? "grid-cols-3" : "grid-cols-2";
@@ -164,8 +190,10 @@ export default function CustomerHome() {
     ? `tel:${techPhone.replace(/[^+\d]/g, "")}`
     : FALLBACK_TEL;
 
+  const displayHome = profileHome ?? nextBooking?.home ?? null;
+
   const formatDate = (dateStr: string) => {
-    const d = new Date(dateStr);
+    const d = bookingDateToLocalDate(dateStr);
     return d.toLocaleDateString("en-US", { weekday: "long", month: "long", day: "numeric" });
   };
 
@@ -181,11 +209,11 @@ export default function CustomerHome() {
             <h1 className="mt-0.5 text-[22px] font-bold text-text-primary leading-tight">
               {userName}&apos;s Home
             </h1>
-            {nextBooking?.home && (
+            {displayHome && (
               <div className="mt-1 flex items-center gap-1 text-text-tertiary">
                 <MapPin size={12} />
                 <span className="text-[12px]">
-                  {nextBooking.home.address}{nextBooking.home.city ? `, ${nextBooking.home.city}` : ""}
+                  {displayHome.address}{displayHome.city ? `, ${displayHome.city}` : ""}
                 </span>
               </div>
             )}
@@ -196,7 +224,7 @@ export default function CustomerHome() {
         </div>
 
         {!activePlanId && (
-          <Link href="/account/plans">
+          <Link href="/messages?topic=membership">
             <div className="flex min-h-12 items-center gap-3 rounded-xl border border-border bg-surface-secondary px-4 py-3 active:scale-[0.99] transition-transform">
               <BadgeCheck size={18} className="text-primary shrink-0" />
               <span className="text-[14px] font-semibold text-text-primary">Choose your membership</span>
@@ -206,6 +234,23 @@ export default function CustomerHome() {
       </div>
 
       <div className="px-5 pt-4">
+
+        {pendingReview && (
+          <Link href={`/account/rate/${pendingReview.id}`} className="mb-5 block">
+            <div className="flex items-center gap-3 rounded-2xl border border-warning/30 bg-warning-light px-4 py-4 shadow-[0_1px_5px_rgba(0,0,0,0.05)] active:scale-[0.99] transition-transform">
+              <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full bg-white">
+                <Star size={21} className="fill-warning text-warning" />
+              </div>
+              <div className="min-w-0 flex-1">
+                <p className="text-[15px] font-bold text-text-primary">How did your visit go?</p>
+                <p className="mt-0.5 text-[12px] leading-relaxed text-text-secondary">
+                  Your {formatDate(pendingReview.scheduledDate)} visit is complete. Tap to leave a review.
+                </p>
+              </div>
+              <ArrowRight size={18} className="shrink-0 text-warning" />
+            </div>
+          </Link>
+        )}
 
         {/* spacer */}
 
@@ -263,7 +308,7 @@ export default function CustomerHome() {
                   </div>
                   <div className="flex items-center gap-1.5 mt-0.5 text-text-secondary">
                     <Clock size={13} />
-                    <span className="text-[13px]">{nextBooking.scheduledTime}</span>
+                    <span className="text-[13px]">{formatBookingTime(nextBooking.scheduledTime)}</span>
                   </div>
                 </div>
                 {nextBooking.status === "confirmed" && (
@@ -376,7 +421,7 @@ export default function CustomerHome() {
                 <span className="text-[11px] font-semibold text-text-secondary">Photos</span>
               </div>
             </Link>
-            <Link href="/account/receipts" className="block">
+            <Link href="/account" className="block">
               <div className="flex flex-col items-center gap-1.5 rounded-xl border border-border bg-surface py-3 active:bg-surface-secondary transition-colors">
                 <Clock size={18} className="text-primary" />
                 <span className="text-[11px] font-semibold text-text-secondary">History</span>
@@ -396,7 +441,9 @@ export default function CustomerHome() {
                 <stat.icon size={22} className={stat.color} />
                 <div>
                   <p className="text-[12px] font-semibold text-text-primary leading-tight">{stat.label}</p>
-                  <p className="text-[10px] text-text-tertiary mt-0.5 leading-tight">{stat.sub}</p>
+                  {stat.sub && (
+                    <p className="text-[10px] text-text-tertiary mt-0.5 leading-tight">{stat.sub}</p>
+                  )}
                 </div>
               </Card>
             ))}
@@ -430,13 +477,13 @@ export default function CustomerHome() {
           if (!plan) {
             // No active membership - invite them to subscribe.
             return (
-              <Link href="/account/plans" className="block mt-5 mb-2">
+              <Link href="/messages?topic=membership" className="block mt-5 mb-2">
                 <div className="rounded-2xl bg-surface border border-border px-4 py-3.5 hover:border-primary/40 transition-colors">
                   <div className="flex items-center justify-between gap-3">
                     <div className="min-w-0">
                       <p className="text-[13px] font-semibold text-text-primary">No active membership</p>
                       <p className="text-[12px] font-medium text-primary mt-0.5">
-                        See plans starting at $1,950/yr →
+                        Ask Anthony about a visit plan →
                       </p>
                     </div>
                     <div className="flex h-9 w-9 items-center justify-center rounded-full bg-primary-50 shrink-0">
@@ -450,7 +497,7 @@ export default function CustomerHome() {
           // Active membership - show plan, price, visit usage, manage link.
           const usagePct = Math.min(100, Math.round((completedCount / plan.visits) * 100));
           return (
-            <Link href="/account/plans" className="block mt-5 mb-2">
+            <Link href="/account" className="block mt-5 mb-2">
               <div className="rounded-2xl bg-surface border border-border px-4 py-4 hover:border-primary/40 transition-colors">
                 <div className="flex items-start justify-between gap-3">
                   <div className="min-w-0 flex-1">
@@ -579,26 +626,27 @@ function toISODate(d: Date): string {
   return `${y}-${m}-${day}`;
 }
 
-function formatSlotLabel(time: string): string {
+function formatSlotLabel(time: string, visitCount: number): string {
   const [hh, mm] = time.split(":");
   const h = parseInt(hh, 10);
   const m = parseInt(mm, 10);
   const ampm = h >= 12 ? "PM" : "AM";
   const h12 = h % 12 === 0 ? 12 : h % 12;
-  return `${h12}:${String(m).padStart(2, "0")} ${ampm}`;
+  const start = `${h12}:${String(m).padStart(2, "0")} ${ampm}`;
+  const endTotal = h * 60 + m + visitDurationMinutes(visitCount);
+  const endHour = Math.floor(endTotal / 60) % 24;
+  const endMinute = endTotal % 60;
+  const endAmpm = endHour >= 12 ? "PM" : "AM";
+  const endHour12 = endHour % 12 === 0 ? 12 : endHour % 12;
+  return `${start} – ${endHour12}:${String(endMinute).padStart(2, "0")} ${endAmpm}`;
 }
 
 function parseCurrentTime(scheduledTime: string): string {
-  // scheduledTime can be ISO or "HH:MM". Normalize to "HH:MM".
-  if (scheduledTime.includes("T")) {
-    const d = new Date(scheduledTime);
-    return `${String(d.getHours()).padStart(2, "0")}:${String(d.getMinutes()).padStart(2, "0")}`;
-  }
-  const [hh, mm] = scheduledTime.split(":");
-  return `${hh}:${mm}`;
+  return bookingTimeInputValue(scheduledTime);
 }
 
 function RescheduleModal({ booking, onClose, onRescheduled }: RescheduleModalProps) {
+  const visitCount = Math.min(4, Math.max(1, Math.round((booking.durationMinutes ?? VISIT_DURATION_MINUTES) / VISIT_DURATION_MINUTES)));
   // Build a 30-day window starting today.
   const today = new Date();
   today.setHours(0, 0, 0, 0);
@@ -626,7 +674,7 @@ function RescheduleModal({ booking, onClose, onRescheduled }: RescheduleModalPro
     let cancelled = false;
     setLoadingSlots(true);
     setError(null);
-    fetch(`/api/availability?date=${selectedDate}`)
+    fetch(`/api/availability?date=${selectedDate}&visits=${visitCount}`)
       .then((r) => (r.ok ? r.json() : { slots: [] }))
       .then((data: { slots?: { time: string; available: boolean }[] }) => {
         if (cancelled) return;
@@ -702,7 +750,7 @@ function RescheduleModal({ booking, onClose, onRescheduled }: RescheduleModalPro
           <div>
             <h2 className="text-[16px] font-bold text-text-primary">Reschedule visit</h2>
             <p className="text-[12px] text-text-secondary mt-0.5">
-              Currently {currentDateLabel} at {formatSlotLabel(currentTime)}
+              Currently {currentDateLabel} at {formatSlotLabel(currentTime, visitCount)}
             </p>
           </div>
           <button
@@ -777,7 +825,7 @@ function RescheduleModal({ booking, onClose, onRescheduled }: RescheduleModalPro
                           : "border-border bg-surface-secondary text-text-tertiary cursor-not-allowed line-through"
                     }`}
                   >
-                    {formatSlotLabel(slot.time)}
+                    {formatSlotLabel(slot.time, visitCount)}
                   </button>
                 );
               })}

@@ -8,8 +8,9 @@ import { useDemoMode } from "@/lib/useDemoMode";
 import { prepareImageForUpload } from "@/lib/client-image-upload";
 import { toast } from "@/components/Toaster";
 import Spinner from "@/components/Spinner";
+import type { NewTaskPayload } from "@/components/AddTaskForm";
 
-import type { ApiHome, EditFormState, ItemStatus, Priority } from "./_components/types";
+import type { ApiHome, EditFormState, ItemStatus } from "./_components/types";
 import {
   formatLongDate, normalizePriority, normalizeStatus,
 } from "./_components/types";
@@ -20,8 +21,8 @@ import HomeSubscriptionCard from "./_components/HomeSubscriptionCard";
 import Photos from "./_components/Photos";
 import TodoList from "./_components/TodoList";
 import {
-  Appliances, HandymanNotes, Receipts, VisitHistory,
-  type ReceiptRow, type VisitRow,
+  Appliances, HandymanNotes, VisitHistory,
+  type VisitRow,
 } from "./_components/HistoryAndNotes";
 
 // ─── Page ──────────────────────────────────────────────────────────────────────
@@ -41,8 +42,6 @@ export default function HomeDetailPage({ params }: { params: Promise<{ id: strin
 
   // Add Task inline form
   const [showAddTask, setShowAddTask] = useState(false);
-  const [newTaskText, setNewTaskText] = useState("");
-  const [newTaskPriority, setNewTaskPriority] = useState<Priority>("medium");
   const [savingTask, setSavingTask] = useState(false);
 
   // Add Photo inline form
@@ -53,6 +52,7 @@ export default function HomeDetailPage({ params }: { params: Promise<{ id: strin
   const [photoError, setPhotoError] = useState<string | null>(null);
   const [preparingPhoto, setPreparingPhoto] = useState(false);
   const [savingPhoto, setSavingPhoto] = useState(false);
+  const [deletingPhotoId, setDeletingPhotoId] = useState<string | null>(null);
 
   // Show/hide gate code
   const [gateCodeVisible, setGateCodeVisible] = useState(false);
@@ -149,15 +149,10 @@ export default function HomeDetailPage({ params }: { params: Promise<{ id: strin
 
   const openTasks = todoItems.filter((t) => t.status !== "completed").length;
   const totalVisits = home?.bookings.filter((b) => b.status === "completed").length ?? 0;
-  const totalSpent = (home?.bookings ?? []).reduce(
-    (sum, b) => sum + (b.finalCost ? Number(b.finalCost) : 0),
-    0
-  );
-
   const visitHistory: VisitRow[] = (home?.bookings ?? [])
     .filter((b) => b.status === "completed")
     .map((b) => {
-      const mins = b.durationMinutes ?? 120;
+      const mins = b.durationMinutes ?? 105;
       const hrs = mins / 60;
       const hrLabel = Number.isInteger(hrs) ? `${hrs}h` : `${hrs.toFixed(1)}h`;
       return {
@@ -166,18 +161,6 @@ export default function HomeDetailPage({ params }: { params: Promise<{ id: strin
         tasks: b.tasks.length,
         hours: hrLabel,
         notes: b.techNotes || b.description || "Service visit completed",
-      };
-    });
-
-  const receipts: ReceiptRow[] = (home?.bookings ?? [])
-    .filter((b) => b.status === "completed" && (b.finalCost || b.estimatedCost))
-    .map((b) => {
-      const amount = b.finalCost ? Number(b.finalCost) : Number(b.estimatedCost ?? 0);
-      return {
-        id: b.id,
-        date: formatLongDate(b.scheduledDate),
-        desc: b.description || "Service visit",
-        amount: `$${amount.toFixed(2)}`,
       };
     });
 
@@ -283,18 +266,21 @@ export default function HomeDetailPage({ params }: { params: Promise<{ id: strin
     }
   }
 
-  async function addTask() {
-    if (!newTaskText.trim() || !home) return;
-    const task = newTaskText.trim();
+  async function addTask(payload: NewTaskPayload) {
+    if (!home) throw new Error("Home is not loaded yet.");
     setSavingTask(true);
     try {
       if (!isDemo) {
         const r = await fetch(`/api/homes/${id}/todos`, {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ task, priority: newTaskPriority, status: "pending" }),
+          body: JSON.stringify({ ...payload, status: "pending" }),
         });
-        if (r.ok) await loadHome();
+        if (!r.ok) {
+          const body = await r.json().catch(() => ({}));
+          throw new Error(body.error ?? "Failed to add task");
+        }
+        await loadHome();
       } else {
         setHome({
           ...home,
@@ -302,25 +288,26 @@ export default function HomeDetailPage({ params }: { params: Promise<{ id: strin
             ...home.todos,
             {
               id: `t${Date.now()}`,
-              task,
-              description: null,
-              priority: newTaskPriority,
+              task: payload.task,
+              description: payload.description,
+              priority: payload.priority,
               status: "pending",
-              parts: null,
-              partStatus: null,
-              partsDescription: null,
-              partsBuyer: null,
+              parts: payload.parts,
+              partStatus: payload.partStatus,
+              partsDescription: payload.partsDescription,
+              partsBuyer: payload.partsBuyer,
               specialist: false,
-              hasPhoto: false,
-              photoIds: [],
+              hasPhoto: payload.photoIds.length > 0,
+              photoIds: payload.photoIds,
               notes: null,
             },
           ],
         });
       }
-      setNewTaskText("");
-      setNewTaskPriority("medium");
       setShowAddTask(false);
+      toast.success("Task saved");
+    } catch (error) {
+      throw error instanceof Error ? error : new Error("Failed to add task");
     } finally {
       setSavingTask(false);
     }
@@ -393,7 +380,7 @@ export default function HomeDetailPage({ params }: { params: Promise<{ id: strin
         const r = await fetch("/api/photos", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ homeId: id, dataUrl: url, label, type: "home" }),
+          body: JSON.stringify({ homeId: id, dataUrl: url, label, type: "general" }),
         });
         const data = await r.json().catch(() => ({}));
         if (!r.ok) throw new Error(data.error || "Photo upload failed");
@@ -403,7 +390,7 @@ export default function HomeDetailPage({ params }: { params: Promise<{ id: strin
           ...home,
           photos: [
             ...home.photos,
-            { id: `p${Date.now()}`, url, label, type: "home" },
+            { id: `p${Date.now()}`, url, label, type: "general" },
           ],
         });
       }
@@ -413,6 +400,34 @@ export default function HomeDetailPage({ params }: { params: Promise<{ id: strin
       setPhotoError(e instanceof Error ? e.message : "Photo upload failed");
     } finally {
       setSavingPhoto(false);
+    }
+  }
+
+  async function deletePhoto(photoId: string) {
+    if (!home || !window.confirm("Delete this photo permanently?")) return;
+
+    if (isDemo) {
+      setHome({ ...home, photos: home.photos.filter((photo) => photo.id !== photoId) });
+      toast.success("Photo deleted");
+      return;
+    }
+
+    setDeletingPhotoId(photoId);
+    setPhotoError(null);
+    try {
+      const response = await fetch(`/api/photos/${photoId}`, { method: "DELETE" });
+      const data = await response.json().catch(() => ({}));
+      if (!response.ok) throw new Error(data.error || "Photo could not be deleted");
+      setHome((current) => current
+        ? { ...current, photos: current.photos.filter((photo) => photo.id !== photoId) }
+        : current);
+      toast.success("Photo deleted");
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "Photo could not be deleted";
+      setPhotoError(message);
+      toast.error(message);
+    } finally {
+      setDeletingPhotoId(null);
     }
   }
 
@@ -499,7 +514,6 @@ export default function HomeDetailPage({ params }: { params: Promise<{ id: strin
         home={home}
         openTasks={openTasks}
         totalVisits={totalVisits}
-        totalSpent={totalSpent}
         fullAddress={fullAddress}
         gateCodeVisible={gateCodeVisible}
         setGateCodeVisible={setGateCodeVisible}
@@ -525,8 +539,10 @@ export default function HomeDetailPage({ params }: { params: Promise<{ id: strin
         photoError={photoError}
         preparingPhoto={preparingPhoto}
         savingPhoto={savingPhoto}
+        deletingPhotoId={deletingPhotoId}
         selectPhoto={selectPhoto}
         addPhoto={addPhoto}
+        deletePhoto={deletePhoto}
       />
 
       <TodoList
@@ -535,12 +551,9 @@ export default function HomeDetailPage({ params }: { params: Promise<{ id: strin
         onTogglePhotoForm={() => setShowAddPhoto((v) => !v)}
         showAddTask={showAddTask}
         setShowAddTask={setShowAddTask}
-        newTaskText={newTaskText}
-        setNewTaskText={setNewTaskText}
-        newTaskPriority={newTaskPriority}
-        setNewTaskPriority={setNewTaskPriority}
         savingTask={savingTask}
         addTask={addTask}
+        homeId={home.id}
         toggleTaskComplete={toggleTaskComplete}
         deleteTask={deleteTask}
       />
@@ -548,8 +561,6 @@ export default function HomeDetailPage({ params }: { params: Promise<{ id: strin
       <Appliances appliances={home.appliances ?? []} />
 
       <VisitHistory visits={visitHistory} />
-
-      <Receipts receipts={receipts} totalSpent={totalSpent} />
 
       <HandymanNotes
         notes={home.techNotes}

@@ -24,11 +24,12 @@ import { useDemoMode } from "@/lib/useDemoMode";
 import { toast } from "@/components/Toaster";
 import { demoCustomerBy } from "@/lib/demoData";
 import Spinner from "@/components/Spinner";
+import { bookingDateToLocalDate, formatBookingTime } from "@/lib/booking-time";
 
 // ── Types ────────────────────────────────────────────────────────────────────
 
 type PipelineStage = "pending" | "confirmed" | "in-progress" | "completed";
-type JobStatus = PipelineStage | "needs-parts" | "scheduled";
+type JobStatus = PipelineStage | "needs-parts" | "scheduled" | "cancelled";
 
 interface Job {
   id: string;
@@ -40,7 +41,6 @@ interface Job {
   status: JobStatus;
   partsNeeded: boolean;
   photos: number;
-  estimate: string;
 }
 
 // API booking shape (subset used here)
@@ -49,8 +49,6 @@ interface ApiBooking {
   status: string;
   scheduledDate: string;
   scheduledTime: string;
-  estimatedCost: string | number | null;
-  finalCost: string | number | null;
   customer: { id: string; name: string } | null;
   home: { address: string; city: string | null } | null;
   tasks: { id: string; label: string; done: boolean | null }[];
@@ -83,29 +81,25 @@ function bucketDate(date: Date): "today" | "this-week" | "future" | "past" {
 }
 
 function formatJobDate(dateIso: string, timeIso: string): string {
-  const d = new Date(dateIso);
-  const t = new Date(timeIso);
+  const d = bookingDateToLocalDate(dateIso);
   const now = new Date();
   const isToday = d.toDateString() === now.toDateString();
-  const timeStr = t.toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit" });
+  const timeStr = formatBookingTime(timeIso);
   if (isToday) return `Today, ${timeStr}`;
   return `${d.toLocaleDateString("en-US", { month: "short", day: "numeric" })}, ${timeStr}`;
 }
 
 function bookingToJob(b: ApiBooking): Job {
-  const cost = b.finalCost ?? b.estimatedCost;
-  const numCost = cost == null ? 0 : Number(cost);
   return {
     id: b.id,
     client: b.customer?.name ?? "Customer",
     address: b.home ? `${b.home.address}${b.home.city ? `, ${b.home.city}` : ""}` : "-",
     date: formatJobDate(b.scheduledDate, b.scheduledTime),
-    dateGroup: bucketDate(new Date(b.scheduledDate)),
+    dateGroup: bucketDate(bookingDateToLocalDate(b.scheduledDate)),
     tasks: b.tasks.map((t) => t.label),
     status: apiStatusToUi(b.status),
     partsNeeded: (b.parts ?? []).some((p) => p.status === "needed" || p.status === "ordered"),
     photos: (b.photos ?? []).length,
-    estimate: numCost > 0 ? `$${numCost.toFixed(0)}` : "$0",
   };
 }
 
@@ -119,14 +113,10 @@ const STAGES: { key: PipelineStage; label: string; color: string; dotClass: stri
 ];
 
 /** Map any job status to its pipeline stage */
-function toPipelineStage(status: JobStatus): PipelineStage {
+function toPipelineStage(status: JobStatus): PipelineStage | null {
+  if (status === "cancelled") return null;
   if (status === "needs-parts" || status === "scheduled") return "pending";
   return status;
-}
-
-/** Parse dollar string to number */
-function parseDollars(s: string): number {
-  return Number(s.replace(/[^0-9.]/g, "")) || 0;
 }
 
 // ── Demo data (used only when demo_mode cookie is set) ──────────────────────
@@ -142,7 +132,6 @@ const DEMO_JOBS: Job[] = [
     status: "confirmed",
     partsNeeded: true,
     photos: 3,
-    estimate: "$340",
   },
   {
     id: "2",
@@ -154,7 +143,6 @@ const DEMO_JOBS: Job[] = [
     status: "confirmed",
     partsNeeded: false,
     photos: 0,
-    estimate: "$280",
   },
   {
     id: "3",
@@ -166,7 +154,6 @@ const DEMO_JOBS: Job[] = [
     status: "pending",
     partsNeeded: false,
     photos: 2,
-    estimate: "$190",
   },
   {
     id: "4",
@@ -178,7 +165,6 @@ const DEMO_JOBS: Job[] = [
     status: "pending",
     partsNeeded: true,
     photos: 5,
-    estimate: "$620",
   },
   {
     id: "5",
@@ -190,7 +176,6 @@ const DEMO_JOBS: Job[] = [
     status: "needs-parts",
     partsNeeded: true,
     photos: 1,
-    estimate: "$175",
   },
   {
     id: "6",
@@ -202,7 +187,6 @@ const DEMO_JOBS: Job[] = [
     status: "scheduled",
     partsNeeded: false,
     photos: 0,
-    estimate: "$230",
   },
   // In-progress job
   {
@@ -215,7 +199,6 @@ const DEMO_JOBS: Job[] = [
     status: "in-progress",
     partsNeeded: false,
     photos: 4,
-    estimate: "$480",
   },
   // Completed jobs
   {
@@ -228,7 +211,6 @@ const DEMO_JOBS: Job[] = [
     status: "completed",
     partsNeeded: false,
     photos: 2,
-    estimate: "$215",
   },
   {
     id: "9",
@@ -240,7 +222,6 @@ const DEMO_JOBS: Job[] = [
     status: "completed",
     partsNeeded: false,
     photos: 3,
-    estimate: "$310",
   },
 ];
 
@@ -299,15 +280,15 @@ function JobsEmptyState({ hasSearch, searchQuery }: { hasSearch: boolean; search
   );
 }
 
-// ── Move-to dropdown ─────────────────────────────────────────────────────────
+// ── Status dropdown ──────────────────────────────────────────────────────────
 
-function MoveToDropdown({
+function StatusDropdown({
   currentStage,
-  onMove,
+  onStatusChange,
   align = "right",
 }: {
   currentStage: PipelineStage;
-  onMove: (stage: PipelineStage) => void;
+  onStatusChange: (stage: PipelineStage) => void;
   align?: "right" | "left";
 }) {
   const [open, setOpen] = useState(false);
@@ -342,7 +323,7 @@ function MoveToDropdown({
         }}
         className="flex items-center gap-1 rounded-lg border border-border bg-surface px-2.5 py-1 text-[11px] font-semibold text-text-secondary hover:bg-surface-secondary hover:border-gray-300 transition-colors"
       >
-        Move
+        Status
         <ChevronDown size={12} />
       </button>
       {open && (
@@ -356,7 +337,7 @@ function MoveToDropdown({
               onClick={(e) => {
                 e.preventDefault();
                 e.stopPropagation();
-                onMove(stage.key);
+                onStatusChange(stage.key);
                 setOpen(false);
               }}
               className="flex w-full items-center gap-2 px-3 py-2 text-[12px] text-text-primary hover:bg-surface-secondary transition-colors"
@@ -377,14 +358,10 @@ function PipelineSummary({
   stageCounts,
   activeStage,
   onStageClick,
-  totalRevenue,
-  showTotal,
 }: {
   stageCounts: Record<PipelineStage, number>;
   activeStage: PipelineStage | "all";
   onStageClick: (stage: PipelineStage | "all") => void;
-  totalRevenue: number;
-  showTotal: boolean;
 }) {
   const totalJobs = Object.values(stageCounts).reduce((a, b) => a + b, 0);
 
@@ -428,12 +405,6 @@ function PipelineSummary({
         ))}
       </div>
 
-      {showTotal && totalRevenue > 0 && (
-        <div className="hidden shrink-0 rounded-full border border-border bg-surface px-3.5 py-1.5 text-[12px] font-semibold text-text-secondary lg:block">
-          <span className="text-text-tertiary">Pipeline:</span>{" "}
-          <span className="text-text-primary">${totalRevenue.toLocaleString()}</span>
-        </div>
-      )}
     </div>
   );
 }
@@ -442,12 +413,13 @@ function PipelineSummary({
 
 function JobCardList({
   job,
-  onMove,
+  onStatusChange,
 }: {
   job: Job;
-  onMove: (jobId: string, stage: PipelineStage) => void;
+  onStatusChange: (jobId: string, stage: PipelineStage) => void;
 }) {
   const stage = toPipelineStage(job.status);
+  if (!stage) return null;
 
   return (
     <Link href={`/jobs/${job.id}`} className="block">
@@ -467,9 +439,6 @@ function JobCardList({
               <span className="text-[12px] text-text-secondary">{job.date}</span>
             </div>
           </div>
-          <div className="flex flex-col items-end gap-1 shrink-0">
-            <span className="text-[16px] font-bold text-text-primary">{job.estimate}</span>
-          </div>
         </div>
 
         {/* Task chips */}
@@ -481,7 +450,7 @@ function JobCardList({
           ))}
         </div>
 
-        {/* Meta row + Move to */}
+        {/* Meta row + status control */}
         <div className="mt-3 flex items-center justify-between border-t border-border pt-3">
           <div className="flex items-center gap-4">
             {job.photos > 0 && (
@@ -497,7 +466,7 @@ function JobCardList({
               </span>
             )}
           </div>
-          <MoveToDropdown currentStage={stage} onMove={(newStage) => onMove(job.id, newStage)} />
+          <StatusDropdown currentStage={stage} onStatusChange={(newStage) => onStatusChange(job.id, newStage)} />
         </div>
       </Card>
     </Link>
@@ -508,13 +477,14 @@ function JobCardList({
 
 function JobCardCompact({
   job,
-  onMove,
+  onStatusChange,
 }: {
   job: Job;
-  onMove: (jobId: string, stage: PipelineStage) => void;
+  onStatusChange: (jobId: string, stage: PipelineStage) => void;
 }) {
   const router = useRouter();
   const stage = toPipelineStage(job.status);
+  if (!stage) return null;
   const stageConfig = STAGES.find((s) => s.key === stage)!;
   const taskSummary = job.tasks[0] ?? "No tasks";
   const extraTasks = job.tasks.length > 1 ? job.tasks.length - 1 : 0;
@@ -569,7 +539,7 @@ function JobCardCompact({
         </div>
       )}
 
-      {/* Footer: status chip + amount + move */}
+      {/* Footer: status chip + status control */}
       <div className="mt-3 flex items-center justify-between border-t border-border-light pt-2.5">
         <div className="flex items-center gap-2 min-w-0">
           <span
@@ -579,9 +549,8 @@ function JobCardCompact({
             <span className="h-1.5 w-1.5 rounded-full" style={{ backgroundColor: stageConfig.color }} />
             {stageConfig.label}
           </span>
-          <span className="text-[13px] font-bold text-text-primary">{job.estimate}</span>
         </div>
-        <MoveToDropdown currentStage={stage} onMove={(newStage) => onMove(job.id, newStage)} />
+        <StatusDropdown currentStage={stage} onStatusChange={(newStage) => onStatusChange(job.id, newStage)} />
       </div>
     </div>
   );
@@ -592,13 +561,11 @@ function JobCardCompact({
 function KanbanColumn({
   stage,
   jobs: columnJobs,
-  revenue,
-  onMove,
+  onStatusChange,
 }: {
   stage: (typeof STAGES)[number];
   jobs: Job[];
-  revenue: number;
-  onMove: (jobId: string, stage: PipelineStage) => void;
+  onStatusChange: (jobId: string, stage: PipelineStage) => void;
 }) {
   return (
     <div className="flex flex-col rounded-xl border border-border bg-surface-secondary/40">
@@ -617,11 +584,6 @@ function KanbanColumn({
               {columnJobs.length}
             </span>
           </div>
-          {revenue > 0 && (
-            <span className="text-[11px] font-semibold text-text-tertiary shrink-0">
-              ${revenue.toLocaleString()}
-            </span>
-          )}
         </div>
       </div>
 
@@ -633,7 +595,7 @@ function KanbanColumn({
           </div>
         ) : (
           columnJobs.map((job) => (
-            <JobCardCompact key={job.id} job={job} onMove={onMove} />
+            <JobCardCompact key={job.id} job={job} onStatusChange={onStatusChange} />
           ))
         )}
       </div>
@@ -644,7 +606,7 @@ function KanbanColumn({
 // ── Page ─────────────────────────────────────────────────────────────────────
 
 // Multi-select filter set
-type FilterStatus = "pending" | "confirmed" | "in-progress" | "completed" | "cancelled" | "needs-parts" | "scheduled";
+type FilterStatus = "pending" | "confirmed" | "in-progress" | "completed" | "needs-parts" | "scheduled";
 
 const FILTER_STATUSES: { key: FilterStatus; label: string }[] = [
   { key: "pending", label: "Pending" },
@@ -653,7 +615,6 @@ const FILTER_STATUSES: { key: FilterStatus; label: string }[] = [
   { key: "needs-parts", label: "Needs Parts" },
   { key: "scheduled", label: "Scheduled" },
   { key: "completed", label: "Completed" },
-  { key: "cancelled", label: "Cancelled" },
 ];
 
 const DATE_BUCKETS: { key: "today" | "this-week" | "future" | "past"; label: string }[] = [
@@ -722,8 +683,8 @@ export default function JobsPage() {
       .finally(() => setLoading(false));
   }, [isDemo, activeStage, mounted, reloadKey]);
 
-  // Move handler - optimistic update + PATCH (with revert on failure)
-  const handleMove = (jobId: string, newStage: PipelineStage) => {
+  // Status handler - optimistic update + PATCH (with revert on failure)
+  const handleStatusChange = (jobId: string, newStage: PipelineStage) => {
     let prevSnapshot: Job[] = [];
     setJobData((prev) => {
       prevSnapshot = prev;
@@ -743,24 +704,20 @@ export default function JobsPage() {
         if (!r.ok) throw new Error(`HTTP ${r.status}`);
       })
       .catch((e) => {
-        toast.error("Couldn't move job: " + (e instanceof Error ? e.message : String(e)));
+        toast.error("Couldn't update job status: " + (e instanceof Error ? e.message : String(e)));
         setJobData(prevSnapshot);
       });
   };
 
-  // Compute stage counts & revenue from full data (before search filter)
-  const { stageCounts, stageRevenue, totalRevenue } = useMemo(() => {
+  // Compute stage counts from full data (before search filter)
+  const stageCounts = useMemo(() => {
     const counts: Record<PipelineStage, number> = { pending: 0, confirmed: 0, "in-progress": 0, completed: 0 };
-    const revenue: Record<PipelineStage, number> = { pending: 0, confirmed: 0, "in-progress": 0, completed: 0 };
-    let total = 0;
     for (const j of jobData) {
       const s = toPipelineStage(j.status);
+      if (!s) continue;
       counts[s]++;
-      const amt = parseDollars(j.estimate);
-      revenue[s] += amt;
-      total += amt;
     }
-    return { stageCounts: counts, stageRevenue: revenue, totalRevenue: total };
+    return counts;
   }, [jobData]);
 
   // Filtered jobs
@@ -832,7 +789,8 @@ export default function JobsPage() {
   const groupedByStage = useMemo(() => {
     const groups: Record<PipelineStage, Job[]> = { pending: [], confirmed: [], "in-progress": [], completed: [] };
     for (const j of filtered) {
-      groups[toPipelineStage(j.status)].push(j);
+      const stage = toPipelineStage(j.status);
+      if (stage) groups[stage].push(j);
     }
     return groups;
   }, [filtered]);
@@ -1009,8 +967,6 @@ export default function JobsPage() {
         stageCounts={stageCounts}
         activeStage={activeStage}
         onStageClick={setActiveStage}
-        totalRevenue={totalRevenue}
-        showTotal={view === "board"}
       />
 
       {/* Results count */}
@@ -1033,7 +989,7 @@ export default function JobsPage() {
           {showEmpty ? (
             <JobsEmptyState hasSearch={search.trim() !== "" || activeStage !== "all"} searchQuery={search} />
           ) : (
-            filtered.map((job) => <JobCardList key={job.id} job={job} onMove={handleMove} />)
+            filtered.map((job) => <JobCardList key={job.id} job={job} onStatusChange={handleStatusChange} />)
           )}
         </div>
       )}
@@ -1050,8 +1006,7 @@ export default function JobsPage() {
                   key={stage.key}
                   stage={stage}
                   jobs={groupedByStage[stage.key]}
-                  revenue={stageRevenue[stage.key]}
-                  onMove={handleMove}
+                  onStatusChange={handleStatusChange}
                 />
               ))}
             </div>

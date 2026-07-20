@@ -24,8 +24,9 @@ export function getVisitUsage(plan: MembershipPlan, visitsUsed: number) {
   };
 }
 
-export function completedStatusDelta(previous: string, next: string): number {
-  if (previous !== "completed" && next === "completed") return 1;
-  if (previous === "completed" && next !== "completed") return -1;
+export function completedStatusDelta(previous: string, next: string, visitUnits = 1): number {
+  const units = Math.max(1, Math.floor(visitUnits));
+  if (previous !== "completed" && next === "completed") return units;
+  if (previous === "completed" && next !== "completed") return -units;
   return 0;
 }

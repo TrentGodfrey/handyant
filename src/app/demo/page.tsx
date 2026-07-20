@@ -47,7 +47,7 @@ export default function DemoPage() {
             </div>
             <div className="flex-1 min-w-0">
               <p className="text-[15px] font-semibold text-text-primary">I&rsquo;m a tradesperson</p>
-              <p className="text-[12px] text-text-secondary mt-0.5">Dashboard, jobs board, schedule, invoicing, reports</p>
+              <p className="text-[12px] text-text-secondary mt-0.5">Dashboard, jobs board, homes, and schedule</p>
             </div>
             <ArrowRight size={18} className="text-text-tertiary shrink-0" />
           </div>

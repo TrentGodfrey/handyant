@@ -13,7 +13,6 @@ import {
   Clock,
   MapPin,
   Wrench,
-  DollarSign,
   ArrowRight,
   Bell,
   ShoppingCart,
@@ -27,6 +26,7 @@ import {
 } from "lucide-react";
 import { useDemoMode } from "@/lib/useDemoMode";
 import { demoCustomerBy } from "@/lib/demoData";
+import { bookingDateToLocalDate, formatBookingTime } from "@/lib/booking-time";
 
 type ScheduleItem = {
   id: string | number;
@@ -57,13 +57,7 @@ type PendingOffer = {
   scheduledDate: string;
   scheduledTime: string;
   description: string | null;
-  estimatedCost: string | null;
   categories: string[];
-};
-
-type WeeklyRevenuePoint = {
-  weekStart: string;
-  revenue: number;
 };
 
 type StatsResponse = {
@@ -83,17 +77,15 @@ type StatsResponse = {
       home: { address: string; city: string | null } | null;
     }>;
   };
-  week: { jobs: number; hours: number; revenue: number };
+  week: { jobs: number; hours: number };
   month: {
     jobs: number;
     completed: number;
-    revenue: number;
     tasksPerVisit: number;
     avgRating: number;
     reviewCount: number;
   };
   partsNeeded: { id: string; item: string; qty: number; bookingId: string; client: string }[];
-  weeklyRevenue: WeeklyRevenuePoint[];
   pendingOffers: PendingOffer[];
 };
 
@@ -161,7 +153,6 @@ const demoPendingOffers = [
     service: "Full bathroom wallpaper removal",
     date: "Apr 3",
     area: "McKinney",
-    est: "$280",
   },
   {
     id: "demo-2",
@@ -169,14 +160,12 @@ const demoPendingOffers = [
     service: "Ceiling fan install (3 fans)",
     date: "Apr 5",
     area: "Plano",
-    est: "$195",
   },
 ];
 
 const demoMonthlyMetrics: MonthlyMetric[] = [
   { label: "Tasks / Visit", value: "3.2", trend: "+0.4", positive: true, icon: Wrench, sparkline: [2.8, 3.0, 2.9, 3.1, 3.2] },
   { label: "Avg Rating", value: "4.9", trend: "+0.1", positive: true, icon: Star, sparkline: [4.8, 4.8, 4.9, 4.9, 4.9] },
-  { label: "Revenue", value: "$8.2k", trend: "+12%", positive: true, icon: TrendingUp, sparkline: [6800, 7200, 7500, 7800, 8200] },
   { label: "Total Visits", value: "18", trend: "+3", positive: true, icon: Calendar, sparkline: [14, 15, 16, 17, 18] },
 ];
 
@@ -184,19 +173,7 @@ const demoKpis = {
   jobs: "4",
   hours: "7.5",
   partsToBuy: "2",
-  weekRevenue: "$2.4k",
 };
-
-const demoWeeklyRevenue: WeeklyRevenuePoint[] = [
-  { weekStart: "w1", revenue: 1800 },
-  { weekStart: "w2", revenue: 2100 },
-  { weekStart: "w3", revenue: 1950 },
-  { weekStart: "w4", revenue: 2400 },
-  { weekStart: "w5", revenue: 2200 },
-  { weekStart: "w6", revenue: 2650 },
-  { weekStart: "w7", revenue: 2100 },
-  { weekStart: "w8", revenue: 2400 },
-];
 
 function MiniSparkline({ data, positive }: { data: number[]; positive: boolean }) {
   const min = Math.min(...data);
@@ -227,214 +204,13 @@ function MiniSparkline({ data, positive }: { data: number[]; positive: boolean }
   );
 }
 
-function RevenueTrendChart({
-  weeklyRevenue,
-  monthlyTotal,
-}: {
-  weeklyRevenue: WeeklyRevenuePoint[];
-  monthlyTotal: number;
-}) {
-  const [period, setPeriod] = useState<"week" | "month">("week");
-
-  const values = weeklyRevenue.map((w) => w.revenue);
-  const hasAny = values.some((v) => v > 0);
-
-  if (!hasAny) {
-    return (
-      <div className="mb-6">
-        <Card padding="md">
-          <div className="mb-3">
-            <h3 className="text-[15px] font-semibold text-text-primary">Revenue Trend</h3>
-            <p className="text-[11px] text-text-tertiary">Last 8 weeks</p>
-          </div>
-          <div className="flex items-center justify-center py-8 text-center">
-            <p className="text-[13px] text-text-tertiary max-w-[260px]">
-              No revenue data yet - complete a job to see trends
-            </p>
-          </div>
-        </Card>
-      </div>
-    );
-  }
-
-  const chartW = 320;
-  const chartH = 160;
-  const padLeft = 0;
-  const padRight = 0;
-  const padTop = 12;
-  const padBottom = 24;
-  const plotW = chartW - padLeft - padRight;
-  const plotH = chartH - padTop - padBottom;
-
-  const maxRaw = Math.max(...values, 1);
-  // Round up to a clean axis
-  const maxVal = Math.ceil(maxRaw / 500) * 500 || 500;
-  const minVal = 0;
-
-  const points = values.map((v, i) => {
-    const x = padLeft + (i / Math.max(values.length - 1, 1)) * plotW;
-    const y = padTop + plotH - ((v - minVal) / (maxVal - minVal)) * plotH;
-    return { x, y };
-  });
-
-  const linePoints = points.map((p) => `${p.x},${p.y}`).join(" ");
-
-  const areaPath = `M${points[0].x},${points[0].y} ${points
-    .map((p) => `L${p.x},${p.y}`)
-    .join(" ")} L${points[points.length - 1].x},${padTop + plotH} L${points[0].x},${
-    padTop + plotH
-  } Z`;
-
-  const gridLines = [maxVal / 3, (maxVal / 3) * 2, maxVal].map((val) => {
-    const y = padTop + plotH - ((val - minVal) / (maxVal - minVal)) * plotH;
-    return { val, y };
-  });
-
-  const lastPoint = points[points.length - 1];
-
-  const thisWeek = values[values.length - 1] ?? 0;
-  const lastWeek = values[values.length - 2] ?? 0;
-  const delta = thisWeek - lastWeek;
-  const deltaPct = lastWeek > 0 ? Math.round((delta / lastWeek) * 100) : 0;
-  const positiveDelta = delta >= 0;
-
-  return (
-    <div className="mb-6">
-      <Card padding="md">
-        <div className="flex items-center justify-between mb-3">
-          <div>
-            <h3 className="text-[15px] font-semibold text-text-primary">Revenue Trend</h3>
-            <p className="text-[11px] text-text-tertiary">Last 8 weeks</p>
-          </div>
-          <div className="flex rounded-lg bg-surface-secondary p-0.5">
-            <button
-              onClick={() => setPeriod("week")}
-              className={`rounded-md px-2.5 py-1 text-[11px] font-semibold transition-colors ${
-                period === "week"
-                  ? "bg-surface text-text-primary shadow-sm"
-                  : "text-text-tertiary"
-              }`}
-            >
-              Week
-            </button>
-            <button
-              onClick={() => setPeriod("month")}
-              className={`rounded-md px-2.5 py-1 text-[11px] font-semibold transition-colors ${
-                period === "month"
-                  ? "bg-surface text-text-primary shadow-sm"
-                  : "text-text-tertiary"
-              }`}
-            >
-              Month
-            </button>
-          </div>
-        </div>
-
-        <svg
-          viewBox={`0 0 ${chartW} ${chartH}`}
-          className="w-full"
-          style={{ height: 160 }}
-          preserveAspectRatio="none"
-        >
-          <defs>
-            <linearGradient id="revGradient" x1="0" y1="0" x2="0" y2="1">
-              <stop offset="0%" stopColor="#4F9598" stopOpacity={0.2} />
-              <stop offset="100%" stopColor="#4F9598" stopOpacity={0} />
-            </linearGradient>
-          </defs>
-
-          {gridLines.map((g) => (
-            <line
-              key={g.val}
-              x1={padLeft}
-              y1={g.y}
-              x2={chartW - padRight}
-              y2={g.y}
-              stroke="currentColor"
-              className="text-border-light"
-              strokeWidth={0.5}
-              strokeDasharray="4 3"
-              opacity={0.6}
-            />
-          ))}
-
-          <path d={areaPath} fill="url(#revGradient)" />
-
-          <polyline
-            points={linePoints}
-            fill="none"
-            stroke="#4F9598"
-            strokeWidth={2}
-            strokeLinecap="round"
-            strokeLinejoin="round"
-          />
-
-          <circle cx={lastPoint.x} cy={lastPoint.y} r={3.5} fill="#4F9598" />
-          <circle cx={lastPoint.x} cy={lastPoint.y} r={6} fill="#4F9598" opacity={0.15} />
-
-          {values.map((_, i) => {
-            const x = padLeft + (i / Math.max(values.length - 1, 1)) * plotW;
-            return (
-              <text
-                key={i}
-                x={x}
-                y={chartH - 4}
-                textAnchor="middle"
-                className="fill-text-tertiary"
-                fontSize={10}
-                fontWeight={500}
-              >
-                W{i + 1}
-              </text>
-            );
-          })}
-        </svg>
-
-        <div className="mt-3 flex items-center gap-4 flex-wrap">
-          <div>
-            <span className="text-[13px] font-bold text-primary">
-              This {period === "week" ? "Week" : "Month"}: ${Math.round(thisWeek).toLocaleString()}
-            </span>
-          </div>
-          <div className="flex items-center gap-1">
-            {positiveDelta ? (
-              <TrendingUp size={12} className="text-success" />
-            ) : (
-              <TrendingDown size={12} className="text-error" />
-            )}
-            <span
-              className={`text-[12px] font-semibold ${
-                positiveDelta ? "text-success" : "text-error"
-              }`}
-            >
-              {positiveDelta ? "+" : ""}${Math.round(delta).toLocaleString()}
-              {lastWeek > 0 ? ` (${positiveDelta ? "+" : ""}${deltaPct}%)` : ""}
-            </span>
-            <span className="text-[11px] text-text-tertiary ml-0.5">vs last week</span>
-          </div>
-          <div className="ml-auto">
-            <span className="text-[12px] text-text-secondary font-medium">
-              Monthly total: ${Math.round(monthlyTotal).toLocaleString()}
-            </span>
-          </div>
-        </div>
-      </Card>
-    </div>
-  );
-}
-
 function formatHours(h: number) {
   if (!h) return "0";
   return h % 1 === 0 ? String(h) : h.toFixed(1);
 }
 
-function formatRevenue(n: number) {
-  if (n >= 1000) return `$${(n / 1000).toFixed(1)}k`;
-  return `$${Math.round(n)}`;
-}
-
 function formatTime(iso: string) {
-  return new Date(iso).toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit" });
+  return formatBookingTime(iso);
 }
 
 function formatDuration(mins: number | null) {
@@ -450,7 +226,7 @@ function isValidStatus(s: string): s is ScheduleItem["status"] {
 
 function formatOfferDate(iso: string) {
   try {
-    return new Date(iso).toLocaleDateString("en-US", { month: "short", day: "numeric" });
+    return bookingDateToLocalDate(iso).toLocaleDateString("en-US", { month: "short", day: "numeric" });
   } catch {
     return iso;
   }
@@ -516,7 +292,6 @@ export default function AdminDashboard() {
         jobs: String(stats?.today.jobs ?? 0),
         hours: formatHours(stats?.today.hours ?? 0),
         partsToBuy: String(stats?.today.partsToBuy ?? 0),
-        weekRevenue: formatRevenue(stats?.week.revenue ?? 0),
       };
 
   const monthlyMetrics: MonthlyMetric[] = isDemo
@@ -537,14 +312,6 @@ export default function AdminDashboard() {
           positive: true,
           icon: Star,
           sparkline: [4.8, 4.8, 4.9, 4.9, stats?.month.avgRating ?? 0],
-        },
-        {
-          label: "Revenue",
-          value: formatRevenue(stats?.month.revenue ?? 0),
-          trend: "-",
-          positive: true,
-          icon: TrendingUp,
-          sparkline: [6800, 7200, 7500, 7800, stats?.month.revenue ?? 0],
         },
         {
           label: "Total Visits",
@@ -576,12 +343,6 @@ export default function AdminDashboard() {
     ? new Date().toLocaleDateString("en-US", { weekday: "long", month: "long", day: "numeric" })
     : "";
   const notifBadge = isDemo ? 3 : unreadCount;
-
-  // Weekly revenue + monthly total
-  const weeklyRevenueData: WeeklyRevenuePoint[] = isDemo
-    ? demoWeeklyRevenue
-    : stats?.weeklyRevenue ?? [];
-  const monthlyTotal = isDemo ? 8200 : stats?.month.revenue ?? 0;
 
   async function handleAccept(id: string) {
     setDismissedOfferIds((prev) => new Set(prev).add(id));
@@ -704,7 +465,6 @@ export default function AdminDashboard() {
                     <p className="text-[12px] text-text-secondary truncate">{offer.service}</p>
                     <p className="text-[11px] text-text-tertiary mt-0.5">
                       {offer.date} · {offer.area}
-                      <span className="ml-2 font-semibold text-success">{offer.est}</span>
                     </p>
                   </div>
 
@@ -735,20 +495,8 @@ export default function AdminDashboard() {
                 .join("")
                 .slice(0, 2)
                 .toUpperCase();
-              const cost = offer.estimatedCost
-                ? `$${Math.round(Number(offer.estimatedCost))}`
-                : null;
               const dateLabel = formatOfferDate(offer.scheduledDate);
-              const timeLabel = (() => {
-                try {
-                  return new Date(offer.scheduledTime).toLocaleTimeString("en-US", {
-                    hour: "numeric",
-                    minute: "2-digit",
-                  });
-                } catch {
-                  return offer.scheduledTime;
-                }
-              })();
+              const timeLabel = formatBookingTime(offer.scheduledTime);
               return (
                 <Card key={offer.id} padding="sm">
                   <div className="flex items-center gap-3">
@@ -765,7 +513,6 @@ export default function AdminDashboard() {
                       </p>
                       <p className="text-[11px] text-text-tertiary mt-0.5">
                         {dateLabel} · {timeLabel}
-                        {cost && <span className="ml-2 font-semibold text-success">{cost}</span>}
                       </p>
                     </div>
 
@@ -791,12 +538,11 @@ export default function AdminDashboard() {
       </div>
 
       {/* ── KPI Cards ── */}
-      <div className="mb-6 grid grid-cols-4 gap-2.5">
+      <div className="mb-6 grid grid-cols-3 gap-2.5">
         {[
           { label: "Today's Jobs", value: kpis.jobs, sub: "jobs", icon: Calendar, iconBg: "bg-primary-50", iconColor: "text-primary" },
           { label: "Hours", value: kpis.hours, sub: "booked", icon: Clock, iconBg: "bg-[#EFF9FF]", iconColor: "text-info" },
           { label: "Parts", value: kpis.partsToBuy, sub: "to buy", icon: ShoppingCart, iconBg: "bg-warning-light", iconColor: "text-warning" },
-          { label: "This Week", value: kpis.weekRevenue, sub: "earned", icon: DollarSign, iconBg: "bg-success-light", iconColor: "text-success" },
         ].map((stat) => (
           <Card key={stat.label} padding="sm" className="flex flex-col items-center text-center gap-1.5">
             <div className={`flex h-8 w-8 items-center justify-center rounded-full ${stat.iconBg}`}>
@@ -807,9 +553,6 @@ export default function AdminDashboard() {
           </Card>
         ))}
       </div>
-
-      {/* ── Revenue Trend ── */}
-      <RevenueTrendChart weeklyRevenue={weeklyRevenueData} monthlyTotal={monthlyTotal} />
 
       {/* ── Parts Alert Banner ── */}
       {demoPartsAlert && (
@@ -975,16 +718,6 @@ export default function AdminDashboard() {
             ))}
           </div>
 
-          {/* Divider + CTA */}
-          <div className="mt-5 border-t border-border-light pt-4">
-            <Link
-              href="/reports"
-              className="flex items-center justify-between text-[13px] font-semibold text-primary active:opacity-70 transition-opacity"
-            >
-              View full report
-              <ChevronRight size={15} />
-            </Link>
-          </div>
         </Card>
       </div>
     </div>

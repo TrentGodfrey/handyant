@@ -2,10 +2,11 @@ import Link from "next/link";
 import {
   ArrowRight, CheckCircle2, Star, Shield, Clock,
   Droplet, Zap, Hammer, PaintBucket, Square, Refrigerator, Trees, Wifi,
-  CalendarPlus, MessageCircle, MapPin, ChevronRight,
+  CalendarPlus, MessageCircle, MapPin,
 } from "lucide-react";
 import { DEMO_TECH } from "@/lib/demoData";
-import { WHY_MCQ, PLANS, VISIT_USES, ONE_OFF_PAYMENT_URL } from "@/lib/plans";
+import { WHY_MCQ, PLANS, VISIT_USES } from "@/lib/plans";
+import { LandingHeaderActions, LandingPrimaryActions } from "@/components/LandingSessionActions";
 
 const categories = [
   { name: "Plumbing", icon: Droplet, color: "text-blue-500", bg: "bg-blue-50" },
@@ -77,21 +78,7 @@ export default function LandingPage() {
             </div>
             <span className="text-[18px] font-black tracking-tight text-text-primary">MCQ Property Care</span>
           </Link>
-          <div className="flex items-center gap-2">
-            <Link
-              href="/login"
-              className="hidden sm:inline-flex items-center px-4 py-2 text-[13px] font-semibold text-text-secondary hover:text-text-primary transition-colors"
-            >
-              Sign in
-            </Link>
-            <Link
-              href="/signup"
-              className="inline-flex items-center gap-1.5 rounded-full bg-primary px-4 py-2 text-[13px] font-semibold text-white shadow-[0_2px_8px_rgba(79,149,152,0.25)] hover:bg-primary-dark transition-colors"
-            >
-              Get started
-              <ArrowRight size={14} />
-            </Link>
-          </div>
+          <LandingHeaderActions />
         </div>
       </header>
 
@@ -144,15 +131,6 @@ export default function LandingPage() {
               </div>
 
               <div className="mt-3 flex flex-wrap items-center justify-center lg:justify-start gap-2">
-                <a
-                  href={ONE_OFF_PAYMENT_URL}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="inline-flex items-center gap-1.5 rounded-full border border-primary-100 bg-primary-50/60 px-3.5 py-1.5 text-[12px] font-semibold text-primary hover:bg-primary-50 transition-colors"
-                >
-                  <Hammer size={12} />
-                  Book a one-off visit · $250
-                </a>
                 <Link
                   href="/book?type=walkthrough"
                   className="inline-flex items-center gap-1.5 rounded-full border border-success/30 bg-success-light/60 px-3.5 py-1.5 text-[12px] font-semibold text-success hover:bg-success-light transition-colors"
@@ -426,31 +404,16 @@ export default function LandingPage() {
                       </li>
                     ))}
                   </ul>
-                  {plan.paymentUrl ? (
-                    <a
-                      href={plan.paymentUrl}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className={`mt-6 flex items-center justify-center gap-2 rounded-xl py-3 text-[14px] font-bold transition-colors ${
-                        isPopular
-                          ? "bg-primary text-white shadow-[0_2px_8px_rgba(79,149,152,0.30)] hover:bg-primary-dark"
-                          : "bg-primary text-white hover:bg-primary-dark"
-                      }`}
-                    >
-                      Pay ${plan.annualPrice.toLocaleString()} & activate
-                    </a>
-                  ) : (
-                    <Link
-                      href="/signup"
-                      className={`mt-6 flex items-center justify-center gap-2 rounded-xl py-3 text-[14px] font-bold transition-colors ${
-                        isPopular
-                          ? "bg-primary text-white shadow-[0_2px_8px_rgba(79,149,152,0.30)] hover:bg-primary-dark"
-                          : "border border-border bg-white text-text-primary hover:bg-surface-secondary"
-                      }`}
-                    >
-                      Get started
-                    </Link>
-                  )}
+                  <Link
+                    href="/signup"
+                    className={`mt-6 flex items-center justify-center gap-2 rounded-xl py-3 text-[14px] font-bold transition-colors ${
+                      isPopular
+                        ? "bg-primary text-white shadow-[0_2px_8px_rgba(79,149,152,0.30)] hover:bg-primary-dark"
+                        : "border border-border bg-white text-text-primary hover:bg-surface-secondary"
+                    }`}
+                  >
+                    Talk to Anthony
+                  </Link>
                 </div>
               );
             })}
@@ -502,22 +465,7 @@ export default function LandingPage() {
           <p className="mt-4 max-w-xl mx-auto text-[16px] text-text-secondary">
             Book MCQ Property Care in 30 seconds. Get back to your life.
           </p>
-          <div className="mt-7 flex flex-col sm:flex-row items-stretch sm:items-center gap-3 sm:justify-center">
-            <Link
-              href="/signup"
-              className="inline-flex items-center justify-center gap-2 rounded-xl bg-primary px-7 py-3.5 text-[15px] font-bold text-white shadow-[0_4px_16px_rgba(79,149,152,0.30)] hover:bg-primary-dark transition-colors"
-            >
-              <CalendarPlus size={18} />
-              Book a visit
-            </Link>
-            <Link
-              href="/login"
-              className="inline-flex items-center justify-center gap-2 rounded-xl border border-border bg-white px-7 py-3.5 text-[15px] font-bold text-text-primary hover:bg-surface-secondary transition-colors"
-            >
-              Sign in
-              <ChevronRight size={16} />
-            </Link>
-          </div>
+          <div className="mt-7"><LandingPrimaryActions /></div>
         </div>
       </section>
 
@@ -539,6 +487,8 @@ export default function LandingPage() {
               <Link href="/login" className="hover:text-text-primary transition-colors">Sign in</Link>
               <Link href="/signup" className="hover:text-text-primary transition-colors">Sign up</Link>
               <Link href="#memberships" className="hover:text-text-primary transition-colors">Memberships</Link>
+              <Link href="/terms" className="hover:text-text-primary transition-colors">Terms</Link>
+              <Link href="/privacy" className="hover:text-text-primary transition-colors">Privacy</Link>
               <a href="tel:2144697795" className="hover:text-text-primary transition-colors flex items-center gap-1.5">
                 <MessageCircle size={12} />
                 (214) 469-7795

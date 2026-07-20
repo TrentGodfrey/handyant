@@ -6,12 +6,13 @@ import { useSession, signOut } from "next-auth/react";
 import Card from "@/components/Card";
 import StatusBadge from "@/components/StatusBadge";
 import {
-  Home, ChevronRight, FileText, CreditCard, Bell, Settings, LogOut,
+  Home, ChevronRight, Bell, Settings, LogOut,
   Calendar, Wrench, MessageCircle, Star, Shield, Edit2,
 } from "lucide-react";
 import { useDemoMode } from "@/lib/useDemoMode";
 import { demoCustomerBy } from "@/lib/demoData";
 import { PLANS } from "@/lib/plans";
+import { bookingDateToLocalDate } from "@/lib/booking-time";
 
 interface PastJob {
   date: string;
@@ -29,8 +30,6 @@ const DEMO_JOBS: PastJob[] = [
 
 const menuItems = [
   { icon: Home, label: "Home Profile", href: "/account/home", desc: "To-do list, WiFi, household info", color: "bg-primary-50", iconColor: "text-primary" },
-  { icon: FileText, label: "Receipts & Invoices", href: "/account/receipts", desc: "View transaction history", color: "bg-success-light", iconColor: "text-success" },
-  { icon: CreditCard, label: "Payment Methods", href: "/account/manage", desc: "Add a payment method", color: "bg-[#EAF4F4]", iconColor: "text-info" },
   { icon: Bell, label: "Notifications", href: "/notifications", desc: "Text & email preferences", color: "bg-warning-light", iconColor: "text-accent-amber" },
   { icon: Settings, label: "Manage Account", href: "/account/manage", desc: "Profile, subscription, notifications", color: "bg-surface-secondary", iconColor: "text-text-secondary" },
 ];
@@ -63,7 +62,7 @@ export default function AccountPage() {
     }
     // Fetch completed bookings + active subscription + homes (for todo counts)
     Promise.all([
-      fetch("/api/bookings").then((r) => (r.ok ? r.json() : [])).catch(() => []),
+      fetch("/api/bookings?view=customer").then((r) => (r.ok ? r.json() : [])).catch(() => []),
       fetch("/api/subscriptions").then((r) => (r.ok ? r.json() : [])).catch(() => []),
       fetch("/api/homes").then((r) => (r.ok ? r.json() : [])).catch(() => []),
     ]).then(async ([bookings, subs, homes]) => {
@@ -71,7 +70,7 @@ export default function AccountPage() {
       if (Array.isArray(bookings)) {
         completedBookings = bookings.filter((b: Record<string, unknown>) => b.status === "completed");
         const completed = completedBookings.map((b: Record<string, unknown>) => ({
-          date: new Date(b.scheduledDate as string).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" }),
+          date: bookingDateToLocalDate(b.scheduledDate as string).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" }),
           tasks: (b.description as string) || "Service visit",
           status: "completed" as const,
           rating: 0,

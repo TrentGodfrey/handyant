@@ -1,7 +1,7 @@
 "use client";
 
 import Card from "@/components/Card";
-import { ImagePlus, Plus, X } from "lucide-react";
+import { ImagePlus, Loader2, Plus, Trash2, X } from "lucide-react";
 import type { ApiPhoto } from "./types";
 import type { ChangeEvent } from "react";
 
@@ -17,14 +17,17 @@ interface PhotosProps {
   photoError: string | null;
   preparingPhoto: boolean;
   savingPhoto: boolean;
+  deletingPhotoId: string | null;
   selectPhoto: (event: ChangeEvent<HTMLInputElement>) => void;
   addPhoto: () => void;
+  deletePhoto: (photoId: string) => void;
 }
 
 export default function Photos({
   photos, showAddPhoto, onOpenAddPhoto, onCancelAddPhoto,
   newPhotoDataUrl, newPhotoFileName, newPhotoLabel, setNewPhotoLabel,
   photoError, preparingPhoto, savingPhoto, selectPhoto, addPhoto,
+  deletingPhotoId, deletePhoto,
 }: PhotosProps) {
   return (
     <section className="mb-6">
@@ -113,7 +116,7 @@ export default function Photos({
           {photos.map((photo) => (
             <div
               key={photo.id}
-              className="aspect-square overflow-hidden rounded-xl border border-border bg-surface-secondary"
+              className="relative aspect-square overflow-hidden rounded-xl border border-border bg-surface-secondary"
             >
               {/* eslint-disable-next-line @next/next/no-img-element */}
               <img
@@ -121,6 +124,17 @@ export default function Photos({
                 alt={photo.label || "Home photo"}
                 className="h-full w-full object-cover"
               />
+              <button
+                type="button"
+                onClick={() => deletePhoto(photo.id)}
+                disabled={deletingPhotoId === photo.id}
+                aria-label={`Delete ${photo.label || "home photo"}`}
+                className="absolute right-1.5 top-1.5 flex h-9 w-9 items-center justify-center rounded-full bg-black/70 text-white shadow-sm active:bg-black/85 disabled:opacity-60"
+              >
+                {deletingPhotoId === photo.id
+                  ? <Loader2 size={15} className="animate-spin" />
+                  : <Trash2 size={15} />}
+              </button>
             </div>
           ))}
         </div>

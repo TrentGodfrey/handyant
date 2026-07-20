@@ -18,6 +18,8 @@ import TodoList from "./_components/TodoList";
 import VisitsAndNotes from "./_components/VisitsAndNotes";
 import Appliances from "./_components/Appliances";
 import AddHomeForm, { type AddHomeState } from "./_components/AddHomeForm";
+import { prepareImageForUpload } from "@/lib/client-image-upload";
+import { toast } from "@/components/Toaster";
 
 // =====================================================================
 // Page entry - chooses demo vs real
@@ -274,7 +276,7 @@ function RealHomeProfile() {
   }
 
   async function addTodoFull(payload: NewTaskPayload) {
-    if (!home) return;
+    if (!home) throw new Error("Home is not loaded yet.");
     setSavingTask(true);
     try {
       const res = await fetch(`/api/homes/${home.id}/todos`, {
@@ -282,11 +284,15 @@ function RealHomeProfile() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(payload),
       });
-      if (!res.ok) throw new Error("Failed to add task");
+      if (!res.ok) {
+        const body = await res.json().catch(() => ({}));
+        throw new Error(body.error ?? "Failed to add task");
+      }
       setShowAddTask(false);
       await refresh();
-    } catch {
-      /* noop */
+      toast.success("Task saved");
+    } catch (error) {
+      throw error instanceof Error ? error : new Error("Failed to add task");
     } finally {
       setSavingTask(false);
     }
@@ -315,26 +321,26 @@ function RealHomeProfile() {
     if (!todoId) return;
     setPhotoUploadingId(todoId);
     try {
-      const dataUrl = await new Promise<string>((resolve, reject) => {
-        const reader = new FileReader();
-        reader.onload = () => resolve(reader.result as string);
-        reader.onerror = () => reject(new Error("Failed to read file"));
-        reader.readAsDataURL(file);
-      });
+      const dataUrl = await prepareImageForUpload(file);
       const photoRes = await fetch("/api/photos", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ homeId: home.id, dataUrl, type: "before" }),
       });
-      if (!photoRes.ok) throw new Error("Photo upload failed");
-      await fetch(`/api/homes/${home.id}/todos/${todoId}`, {
+      const photo = await photoRes.json().catch(() => ({}));
+      if (!photoRes.ok || !photo.id) throw new Error(photo.error ?? "Photo upload failed");
+      const todo = home.todos.find((item) => item.id === todoId);
+      const existingPhotoIds = Array.isArray(todo?.photoIds) ? todo.photoIds : [];
+      const updateRes = await fetch(`/api/homes/${home.id}/todos/${todoId}`, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ hasPhoto: true }),
+        body: JSON.stringify({ hasPhoto: true, photoIds: [...existingPhotoIds, photo.id] }),
       });
+      if (!updateRes.ok) throw new Error("Photo uploaded but could not be attached to the task");
       await refresh();
-    } catch {
-      /* noop */
+      toast.success("Photo added to task");
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "Photo upload failed");
     } finally {
       setPhotoUploadingId(null);
       photoTargetTodoRef.current = null;

@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import { useRouter, usePathname } from "next/navigation";
 import { Eye, X } from "lucide-react";
+import { useSession } from "next-auth/react";
 
 /**
  * Sticky banner that appears on every page when the demo_mode cookie is set.
@@ -13,13 +14,20 @@ import { Eye, X } from "lucide-react";
 export default function DemoBanner() {
   const router = useRouter();
   const pathname = usePathname();
+  const { status } = useSession();
   const [isDemo, setIsDemo] = useState(false);
   const [mounted, setMounted] = useState(false);
 
   useEffect(() => {
+    if (status === "loading") return;
     setMounted(true);
+    if (status === "authenticated") {
+      document.cookie = "demo_mode=; max-age=0; path=/; samesite=lax";
+      setIsDemo(false);
+      return;
+    }
     setIsDemo(document.cookie.includes("demo_mode=true"));
-  }, [pathname]);
+  }, [pathname, status]);
 
   if (!mounted || !isDemo) return null;
 

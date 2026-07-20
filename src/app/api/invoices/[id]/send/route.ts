@@ -64,7 +64,7 @@ export async function POST(req: NextRequest, ctx: { params: Promise<{ id: string
   const techPhone = businessProfile?.phone ?? invoice.booking.tech?.phone ?? "";
 
   // Build line items: labor (from duration) + parts.
-  const durationMins = invoice.booking.durationMinutes ?? 120;
+  const durationMins = invoice.booking.durationMinutes ?? 105;
   const hours = durationMins / 60;
   const laborRate = 80;
   const labor = Math.round(hours * laborRate);

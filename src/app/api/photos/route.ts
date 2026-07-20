@@ -1,5 +1,6 @@
 import { NextRequest } from "next/server";
 import { mkdir, writeFile } from "node:fs/promises";
+import { unlink } from "node:fs/promises";
 import { randomUUID } from "node:crypto";
 import path from "node:path";
 import { prisma } from "@/lib/prisma";
@@ -86,17 +87,26 @@ export async function POST(req: NextRequest) {
 
   await ensureDir();
   const filename = `${randomUUID()}.${parsed.data.ext}`;
-  await writeFile(path.join(UPLOAD_DIR, filename), parsed.data.buffer);
+  const filePath = path.join(UPLOAD_DIR, filename);
+  await writeFile(filePath, parsed.data.buffer);
 
-  const photo = await prisma.photo.create({
-    data: {
-      bookingId: body.bookingId ?? null,
-      homeId: body.homeId ?? null,
-      url: `/api/uploads/${filename}`,
-      label: body.label ?? null,
-      type: body.type ?? "before",
-    },
-  });
+  const allowedTypes = new Set(["before", "after", "general"]);
+  const photoType = body.type && allowedTypes.has(body.type) ? body.type : "general";
+  let photo;
+  try {
+    photo = await prisma.photo.create({
+      data: {
+        bookingId: body.bookingId ?? null,
+        homeId: body.homeId ?? null,
+        url: `/api/uploads/${filename}`,
+        label: body.label ?? null,
+        type: photoType,
+      },
+    });
+  } catch (error) {
+    await unlink(filePath).catch(() => undefined);
+    throw error;
+  }
 
   return Response.json(photo, { status: 201 });
 }

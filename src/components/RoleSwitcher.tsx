@@ -8,10 +8,15 @@ export default function RoleSwitcher() {
   const pathname = usePathname();
   const { data: session } = useSession();
 
-  // Only show switcher for tech users who can access both views
-  if (session?.user?.role !== "tech") return null;
+  const adminPrefixes = ["/dashboard", "/schedule", "/jobs", "/homes", "/people", "/admin-messages", "/admin-notifications", "/settings"];
+  const customerPrefixes = ["/home", "/book", "/todo", "/messages", "/account", "/services", "/notifications", "/track"];
+  const isAppRoute = [...adminPrefixes, ...customerPrefixes].some((p) => pathname === p || pathname.startsWith(`${p}/`));
 
-  const adminPrefixes = ["/dashboard", "/schedule", "/jobs", "/homes", "/admin-messages", "/reports", "/settings"];
+  // Keep the switcher inside the authenticated app. Showing it on the public
+  // landing/auth/legal pages made the site look signed in and signed out at once.
+  if (session?.user?.role !== "tech") return null;
+  if (!isAppRoute) return null;
+
   const isAdmin = adminPrefixes.some((p) => pathname.startsWith(p));
 
   return (

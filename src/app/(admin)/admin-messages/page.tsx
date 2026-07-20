@@ -2,10 +2,12 @@
 
 import { useState, useRef, useEffect, useCallback, Suspense } from "react";
 import { useSearchParams } from "next/navigation";
-import { Send, Camera, Paperclip, ArrowLeft, MoreVertical, Search, Plus, X } from "lucide-react";
+import { Send, Camera, Paperclip, ArrowLeft, MoreVertical, Search, Plus, Trash2, X } from "lucide-react";
 import { useDemoMode } from "@/lib/useDemoMode";
 import { demoCustomerBy } from "@/lib/demoData";
 import Spinner from "@/components/Spinner";
+import { toast } from "@/components/Toaster";
+import { bookingDateToLocalDate, formatBookingTime } from "@/lib/booking-time";
 
 interface Message {
   id: string;
@@ -192,14 +194,11 @@ type ApiClient = {
 };
 
 function formatVisit(dateStr: string, timeStr: string): string {
-  const d = new Date(dateStr);
+  const d = bookingDateToLocalDate(dateStr);
   if (Number.isNaN(d.getTime())) return "";
   const dayLabel = d.toLocaleDateString("en-US", { weekday: "short", month: "short", day: "numeric" });
   // scheduledTime arrives as ISO; format the time-of-day portion only.
-  const t = new Date(timeStr);
-  const timeLabel = Number.isNaN(t.getTime())
-    ? ""
-    : t.toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit" });
+  const timeLabel = formatBookingTime(timeStr);
   return timeLabel ? `${dayLabel} · ${timeLabel}` : dayLabel;
 }
 
@@ -234,6 +233,7 @@ function AdminMessagesPageInner() {
   const [hiddenConvoIds, setHiddenConvoIds] = useState<Set<string>>(new Set());
   const [convoMenuOpen, setConvoMenuOpen] = useState(false);
   const [uploadingPhoto, setUploadingPhoto] = useState(false);
+  const [sendingMessage, setSendingMessage] = useState(false);
   const bottomRef = useRef<HTMLDivElement>(null);
   const fileInputRef = useRef<HTMLInputElement | null>(null);
   const cameraInputRef = useRef<HTMLInputElement | null>(null);
@@ -429,32 +429,74 @@ function AdminMessagesPageInner() {
       return;
     }
 
+    setSendingMessage(true);
     try {
       const r = await fetch("/api/messages", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ conversationId: activeConvo.id, text }),
       });
-      if (r.ok) {
-        const saved: ApiMessage = await r.json();
-        setMessagesByConvo((prev) => ({
-          ...prev,
-          [activeConvo.id]: (prev[activeConvo.id] || []).map((m) =>
-            m.id === optimistic.id
-              ? {
-                  id: saved.id,
-                  text: saved.text,
-                  sender: "tech",
-                  timestamp: formatTimestamp(saved.createdAt),
-                  type: "text",
-                }
-              : m
-          ),
-        }));
+      if (!r.ok) {
+        const body = await r.json().catch(() => ({}));
+        throw new Error(body?.error ?? "Message failed to send");
       }
-    } catch {
-      /* keep optimistic message */
+      const saved: ApiMessage = await r.json();
+      setMessagesByConvo((prev) => ({
+        ...prev,
+        [activeConvo.id]: (prev[activeConvo.id] || []).map((m) =>
+          m.id === optimistic.id
+            ? {
+                id: saved.id,
+                text: saved.text,
+                sender: "tech",
+                timestamp: formatTimestamp(saved.createdAt),
+                type: "text",
+              }
+            : m
+        ),
+      }));
+      setConversations((prev) =>
+        prev.map((conversation) =>
+          conversation.id === activeConvo.id
+            ? { ...conversation, lastMessage: saved.text, time: "Just now" }
+            : conversation
+        )
+      );
+    } catch (error) {
+      setMessagesByConvo((prev) => ({
+        ...prev,
+        [activeConvo.id]: (prev[activeConvo.id] || []).filter((m) => m.id !== optimistic.id),
+      }));
+      setInput((current) => current || text);
+      toast.error(error instanceof Error ? error.message : "Message failed to send");
+    } finally {
+      setSendingMessage(false);
     }
+  }
+
+  async function deleteMessage(message: Message) {
+    if (!activeConvo) return;
+    if (typeof window !== "undefined" && !window.confirm("Delete this message? This cannot be undone.")) return;
+
+    if (!isDemo && !message.id.startsWith("tmp-")) {
+      const response = await fetch(`/api/messages/${message.id}`, { method: "DELETE" });
+      if (!response.ok) {
+        const body = await response.json().catch(() => ({}));
+        toast.error(body?.error ?? "Message could not be deleted");
+        return;
+      }
+    }
+
+    const remaining = (messagesByConvo[activeConvo.id] || []).filter((item) => item.id !== message.id);
+    setMessagesByConvo((prev) => ({ ...prev, [activeConvo.id]: remaining }));
+    setConversations((prev) =>
+      prev.map((conversation) =>
+        conversation.id === activeConvo.id
+          ? { ...conversation, lastMessage: remaining.at(-1)?.text ?? "", time: remaining.at(-1)?.timestamp ?? "" }
+          : conversation
+      )
+    );
+    toast.success("Message deleted");
   }
 
   // ── New-conversation picker ─────────────────────────────────────────────
@@ -762,7 +804,12 @@ function AdminMessagesPageInner() {
               }
               const isTech = msg.sender === "tech";
               return (
-                <div key={msg.id} className={`flex ${isTech ? "justify-end" : "justify-start"}`}>
+                <div key={msg.id} className={`group flex items-center gap-1.5 ${isTech ? "justify-end" : "justify-start"}`}>
+                  {!isTech && (
+                    <button type="button" onClick={() => deleteMessage(msg)} className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full text-text-tertiary hover:bg-error-light hover:text-error" aria-label="Delete message">
+                      <Trash2 size={14} />
+                    </button>
+                  )}
                   <div className={`max-w-[80%] rounded-2xl px-4 py-2.5 ${
                     isTech
                       ? "bg-primary text-white rounded-br-md"
@@ -771,6 +818,11 @@ function AdminMessagesPageInner() {
                     <p className="text-[14px] leading-relaxed">{msg.text}</p>
                     <p className={`text-[10px] mt-1 ${isTech ? "text-white/50" : "text-text-tertiary"}`}>{msg.timestamp}</p>
                   </div>
+                  {isTech && (
+                    <button type="button" onClick={() => deleteMessage(msg)} className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full text-text-tertiary hover:bg-error-light hover:text-error" aria-label="Delete message">
+                      <Trash2 size={14} />
+                    </button>
+                  )}
                 </div>
               );
             })
@@ -779,7 +831,10 @@ function AdminMessagesPageInner() {
         </div>
 
         {/* Input */}
-        <div className="bg-white border-t border-border px-4 py-3 pb-[env(safe-area-inset-bottom)] shrink-0">
+        <div
+          className="bg-white border-t border-border px-4 py-3 shrink-0"
+          style={{ paddingBottom: "calc(80px + env(safe-area-inset-bottom, 0px))" }}
+        >
           <div className="flex items-end gap-2">
             <input
               ref={fileInputRef}
@@ -819,14 +874,16 @@ function AdminMessagesPageInner() {
                 type="text"
                 value={input}
                 onChange={(e) => setInput(e.target.value)}
-                onKeyDown={(e) => e.key === "Enter" && sendMessage()}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter" && !sendingMessage) sendMessage();
+                }}
                 placeholder="Type a message…"
                 className="flex-1 bg-transparent text-[14px] text-text-primary placeholder:text-text-tertiary outline-none"
               />
             </div>
             <button
               onClick={sendMessage}
-              disabled={!input.trim()}
+              disabled={!input.trim() || sendingMessage}
               className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-full transition-all ${
                 input.trim() ? "bg-primary text-white shadow-sm" : "bg-surface-secondary text-text-tertiary"
               }`}

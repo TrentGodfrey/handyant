@@ -17,9 +17,11 @@ import {
   Layers,
   CalendarPlus,
   Sun,
+  Trash2,
 } from "lucide-react";
 import { useDemoMode } from "@/lib/useDemoMode";
 import { demoCustomerBy } from "@/lib/demoData";
+import { countsAsBooked, sumBookedMinutes } from "@/lib/booking-stats";
 
 const demoWeekDays = [
   { day: "Mon", date: 30, month: "Mar", jobs: 4, hours: 7.5 },
@@ -44,6 +46,7 @@ interface ScheduleItem {
   details?: string;
   homeId?: number | string;
   bookingId?: string;
+  blockId?: string;
 }
 
 const demoScheduleByDay: Record<number, ScheduleItem[]> = {
@@ -146,7 +149,7 @@ function formatTime(scheduledTime: string): string {
 }
 
 function formatDuration(mins: number | null): string {
-  const m = mins ?? 120;
+  const m = mins ?? 105;
   if (m < 60) return `${m} min`;
   const h = m / 60;
   return Number.isInteger(h) ? `${h}h` : `${h}h`;
@@ -221,6 +224,8 @@ export default function SchedulePage() {
   const [bookings, setBookings] = useState<ApiBooking[]>([]);
   const [blocks, setBlocks] = useState<ApiAvailabilityBlock[]>([]);
   const [loading, setLoading] = useState(!isDemo);
+  const [scheduleError, setScheduleError] = useState<string | null>(null);
+  const [deletingBlockId, setDeletingBlockId] = useState<string | null>(null);
 
   // Build week-day metadata for the header strip from weekStart.
   const weekDays = useMemo(() => {
@@ -229,9 +234,10 @@ export default function SchedulePage() {
       const d = new Date(weekStart);
       d.setDate(weekStart.getDate() + i);
       const iso = isoDate(d);
-      const dayBookings = bookings.filter((b) => b.scheduledDate.slice(0, 10) === iso);
-      const hours =
-        dayBookings.reduce((sum, b) => sum + (b.durationMinutes ?? 120), 0) / 60;
+      const dayBookings = bookings.filter(
+        (booking) => booking.scheduledDate.slice(0, 10) === iso && countsAsBooked(booking.status),
+      );
+      const hours = sumBookedMinutes(dayBookings) / 60;
       return {
         day: d.toLocaleDateString("en-US", { weekday: "short" }),
         date: d.getDate(),
@@ -256,6 +262,7 @@ export default function SchedulePage() {
     end.setDate(end.getDate() + 7);
     const to = isoDate(end);
     setLoading(true);
+    setScheduleError(null);
     Promise.all([
       fetch(`/api/admin/bookings?from=${from}&to=${to}`)
         .then((r) => (r.ok ? r.json() : []))
@@ -268,6 +275,7 @@ export default function SchedulePage() {
         setBookings(Array.isArray(b) ? b : []);
         setBlocks(Array.isArray(av) ? av : []);
       })
+      .catch(() => setScheduleError("Schedule could not be loaded. Please try again."))
       .finally(() => setLoading(false));
   }, [isDemo, weekStart, mounted]);
 
@@ -317,6 +325,7 @@ export default function SchedulePage() {
           type: "block" as const,
           duration: formatDuration(mins),
           details: blk.reason ?? "",
+          blockId: blk.id,
         };
       });
 
@@ -334,6 +343,20 @@ export default function SchedulePage() {
     const next = new Date(weekStart);
     next.setDate(weekStart.getDate() + deltaDays);
     setWeekStart(next);
+  }
+
+  async function deleteBlock(blockId: string) {
+    setDeletingBlockId(blockId);
+    setScheduleError(null);
+    try {
+      const response = await fetch(`/api/admin/availability?id=${encodeURIComponent(blockId)}`, { method: "DELETE" });
+      if (!response.ok) throw new Error("Could not remove blocked time");
+      setBlocks((current) => current.filter((block) => block.id !== blockId));
+    } catch (error) {
+      setScheduleError(error instanceof Error ? error.message : "Could not remove blocked time");
+    } finally {
+      setDeletingBlockId(null);
+    }
   }
 
   const headerLabel = isDemo ? "March 30 – April 5, 2026" : formatRange(weekStart);
@@ -450,6 +473,10 @@ export default function SchedulePage() {
         </div>
       )}
 
+      {scheduleError && (
+        <div className="mb-4 rounded-xl border border-error/20 bg-error-light px-4 py-3 text-[12px] font-medium text-error">{scheduleError}</div>
+      )}
+
       {/* ── Loading State ── */}
       {!isDemo && loading && (
         <div className="flex items-center justify-center py-12">
@@ -544,9 +571,20 @@ export default function SchedulePage() {
                           <p className="mt-0.5 text-[11px] text-text-tertiary truncate">{item.details}</p>
                         ) : null}
                       </div>
-                      <span className="rounded-full bg-border/60 px-2 py-0.5 text-[10px] font-semibold text-text-tertiary shrink-0">
-                        {item.duration}
-                      </span>
+                      <div className="flex shrink-0 items-center gap-1.5">
+                        <span className="rounded-full bg-border/60 px-2 py-0.5 text-[10px] font-semibold text-text-tertiary">{item.duration}</span>
+                        {item.blockId && (
+                          <button
+                            type="button"
+                            onClick={() => deleteBlock(item.blockId!)}
+                            disabled={deletingBlockId === item.blockId}
+                            aria-label={`Remove ${item.label} block`}
+                            className="flex h-8 w-8 items-center justify-center rounded-lg text-text-tertiary hover:bg-error-light hover:text-error disabled:opacity-50"
+                          >
+                            <Trash2 size={13} />
+                          </button>
+                        )}
+                      </div>
                     </div>
                   </div>
                 )}

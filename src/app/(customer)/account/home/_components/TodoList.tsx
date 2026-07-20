@@ -1,6 +1,7 @@
 "use client";
 
 import Card from "@/components/Card";
+import Link from "next/link";
 import StatusBadge from "@/components/StatusBadge";
 import AddTaskForm, { type NewTaskPayload } from "@/components/AddTaskForm";
 import {
@@ -98,7 +99,7 @@ export default function TodoList(props: TodoListProps) {
                   <div className={`mt-1.5 shrink-0 flex h-2.5 w-2.5 items-center justify-center rounded-full ring-4 ${pCfg.dot} ${pCfg.ring}`} />
                   <div className="flex-1 min-w-0">
                     <div className="flex items-start justify-between gap-2">
-                      <p className="text-[14px] font-semibold text-text-primary leading-snug">{item.task}</p>
+                      <Link href={`/task/${item.id}`} onClick={(event) => event.stopPropagation()} className="text-[14px] font-semibold text-text-primary leading-snug hover:text-primary">{item.task}</Link>
                       <div className="flex items-center gap-1 shrink-0">
                         {item.specialist && (
                           <span className="rounded-full bg-[#FFF7ED] px-2 py-0.5 text-[10px] font-semibold text-accent-coral">Specialist</span>

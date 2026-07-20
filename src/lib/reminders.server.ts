@@ -114,6 +114,6 @@ function combineDateAndTime(date: Date, time: Date): Date | null {
   if (!(date instanceof Date) || !(time instanceof Date)) return null;
   if (Number.isNaN(date.getTime()) || Number.isNaN(time.getTime())) return null;
   const out = new Date(date);
-  out.setHours(time.getHours(), time.getMinutes(), time.getSeconds(), 0);
+  out.setHours(time.getUTCHours(), time.getUTCMinutes(), time.getUTCSeconds(), 0);
   return out;
 }

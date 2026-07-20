@@ -70,6 +70,7 @@ export async function POST(
       `,
     }),
     text: `Create your MCQ Property Care login and link ${addressLabel}: ${inviteUrl}\n\nThis single-use link expires in 7 days.`,
+    sensitive: true,
   });
 
   return Response.json({

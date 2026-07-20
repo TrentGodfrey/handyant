@@ -21,3 +21,8 @@ test("completed status transitions produce a single counter delta", () => {
   assert.equal(completedStatusDelta("completed", "cancelled"), -1);
   assert.equal(completedStatusDelta("completed", "completed"), 0);
 });
+
+test("multi-visit completion consumes each reserved visit block", () => {
+  assert.equal(completedStatusDelta("confirmed", "completed", 3), 3);
+  assert.equal(completedStatusDelta("completed", "cancelled", 3), -3);
+});

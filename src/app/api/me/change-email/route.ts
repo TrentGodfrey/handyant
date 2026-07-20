@@ -97,6 +97,7 @@ export async function POST(req: NextRequest) {
     subject: "Confirm your new MCQ Property Care email address",
     html,
     text: `Confirm your new MCQ Property Care email: ${verifyUrl}\n\nThis link expires in 24 hours. If you didn't request this change, you can ignore it.`,
+    sensitive: true,
   });
 
   return Response.json({ ok: true, pendingVerification: true });

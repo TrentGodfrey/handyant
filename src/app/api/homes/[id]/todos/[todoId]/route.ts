@@ -1,6 +1,7 @@
 import { NextRequest } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { requireUser, unauthorized, notFound, forbidden } from "@/lib/session";
+import { sendHomeTaskEmail } from "@/lib/task-email";
 
 const ALLOWED_FIELDS = [
   "task",
@@ -45,6 +46,13 @@ export async function PATCH(
   }
 
   const updated = await prisma.homeTodo.update({ where: { id: todoId }, data });
+  await sendHomeTaskEmail({
+    homeId: id,
+    actorRole: access.user.role,
+    subject: `MCQ to-do updated: ${updated.task}`,
+    message: `${access.user.name} updated “${updated.task}”.${body.status ? ` Status: ${String(body.status).replaceAll("_", " ")}.` : ""}`,
+    taskId: updated.id,
+  });
   return Response.json(updated);
 }
 
@@ -60,5 +68,11 @@ export async function DELETE(
   if (!todo || todo.homeId !== id) return notFound("Todo not found");
 
   await prisma.homeTodo.delete({ where: { id: todoId } });
+  await sendHomeTaskEmail({
+    homeId: id,
+    actorRole: access.user.role,
+    subject: `MCQ to-do removed: ${todo.task}`,
+    message: `${access.user.name} removed “${todo.task}” from the home to-do list.`,
+  });
   return Response.json({ ok: true });
 }

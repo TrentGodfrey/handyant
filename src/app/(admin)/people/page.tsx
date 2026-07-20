@@ -80,6 +80,16 @@ const DEMO_CUSTOMER_ROWS: CustomerRow[] = [
     primaryHomeId: "demo-c-8",
     _count: { homes: 1, bookings: 3 },
   },
+  {
+    id: "demo-c-9",
+    name: "Test Customer",
+    email: "test.customer@example.com",
+    phone: null,
+    avatarUrl: null,
+    createdAt: new Date(2025, 2, 8).toISOString(),
+    primaryHomeId: null,
+    _count: { homes: 0, bookings: 0 },
+  },
 ];
 
 const DEMO_STAFF_ROWS: StaffRow[] = [
@@ -242,6 +252,46 @@ export default function PeoplePage() {
     }
   }
 
+  async function handleDeleteCustomer(customer: CustomerRow) {
+    if (customer._count.homes > 0) {
+      toast.error("Delete this customer's home first.");
+      return;
+    }
+
+    const historyNote = customer._count.bookings
+      ? ` This also permanently removes ${customer._count.bookings} booking${customer._count.bookings === 1 ? "" : "s"}.`
+      : "";
+    const ok = window.confirm(
+      `Delete ${customer.name}'s account? They have no home.${historyNote} This cannot be undone.`
+    );
+    if (!ok) return;
+
+    setRemovingId(customer.id);
+
+    if (isDemo) {
+      setCustomers((prev) => prev.filter((c) => c.id !== customer.id));
+      setRemovingId(null);
+      toast.success(`${customer.name} deleted`);
+      return;
+    }
+
+    try {
+      const res = await fetch(`/api/admin/customers/${encodeURIComponent(customer.id)}`, {
+        method: "DELETE",
+      });
+      if (!res.ok) {
+        const data = await res.json().catch(() => null);
+        throw new Error(data?.error || `Delete failed (${res.status})`);
+      }
+      setCustomers((prev) => prev.filter((c) => c.id !== customer.id));
+      toast.success(`${customer.name} deleted`);
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Failed to delete customer");
+    } finally {
+      setRemovingId(null);
+    }
+  }
+
   // ── Render ─────────────────────────────────────────────────────────────────
 
   return (
@@ -352,13 +402,9 @@ export default function PeoplePage() {
             />
           ) : (
             <div className="space-y-2.5">
-              {filteredCustomers.map((c) => (
-                <Link
-                  key={c.id}
-                  href={c.primaryHomeId ? `/homes/${c.primaryHomeId}` : `/people`}
-                  className="block"
-                >
-                  <Card padding="md" className="flex items-center gap-3.5">
+              {filteredCustomers.map((c) => {
+                const details = (
+                  <>
                     <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-full bg-primary-50">
                       <span className="text-[13px] font-bold text-primary">
                         {initialsOf(c.name)}
@@ -399,9 +445,38 @@ export default function PeoplePage() {
                         </span>
                       </div>
                     </div>
+                  </>
+                );
+
+                return (
+                  <Card key={c.id} padding="md" className="flex items-center gap-2">
+                    {c.primaryHomeId ? (
+                      <Link
+                        href={`/homes/${c.primaryHomeId}`}
+                        className="flex min-w-0 flex-1 items-center gap-3.5"
+                      >
+                        {details}
+                      </Link>
+                    ) : (
+                      <div className="flex min-w-0 flex-1 items-center gap-3.5">
+                        {details}
+                      </div>
+                    )}
+                    {c._count.homes === 0 && (
+                      <button
+                        type="button"
+                        onClick={() => handleDeleteCustomer(c)}
+                        disabled={removingId === c.id}
+                        aria-label={`Delete ${c.name}`}
+                        title="Delete customer"
+                        className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl text-text-tertiary hover:bg-error-light hover:text-error active:bg-error-light transition-colors disabled:opacity-40"
+                      >
+                        {removingId === c.id ? <Spinner size="sm" /> : <Trash2 size={16} />}
+                      </button>
+                    )}
                   </Card>
-                </Link>
-              ))}
+                );
+              })}
             </div>
           )}
         </>

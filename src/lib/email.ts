@@ -7,6 +7,9 @@ export interface SendEmailParams {
   text?: string;
   from?: string;
   replyTo?: string | string[];
+  bcc?: string | string[];
+  /** Never copy password resets, verification links, or invitations. */
+  sensitive?: boolean;
 }
 
 export interface SendEmailResult {
@@ -42,11 +45,13 @@ export async function sendEmail(params: SendEmailParams): Promise<SendEmailResul
 
   const from = params.from ?? process.env.EMAIL_FROM ?? DEFAULT_FROM;
   const replyTo = params.replyTo ?? process.env.EMAIL_REPLY_TO;
+  const bcc = params.sensitive ? undefined : (params.bcc ?? process.env.EMAIL_BCC);
 
   try {
     const result = await client.emails.send({
       from,
       to: params.to,
+      bcc,
       replyTo,
       subject: params.subject,
       html: params.html,

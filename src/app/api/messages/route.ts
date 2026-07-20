@@ -1,6 +1,7 @@
 import { NextRequest } from "next/server";
 import { prisma } from "@/lib/prisma";
-import { requireUser, unauthorized, notFound } from "@/lib/session";
+import { requireUser, unauthorized, notFound, badRequest } from "@/lib/session";
+import { sendActivityEmail } from "@/lib/activity-email";
 
 export async function GET(req: NextRequest) {
   const user = await requireUser();
@@ -64,12 +65,20 @@ export async function POST(req: NextRequest) {
 
   const userId = user.id;
   const body = await req.json();
+  const text = typeof body.text === "string" ? body.text.trim() : "";
+  if (!body.conversationId || !text) {
+    return badRequest("conversationId and message text are required");
+  }
 
   // Verify user is part of this conversation
   const convo = await prisma.conversation.findFirst({
     where: {
       id: body.conversationId,
       OR: [{ customerId: userId }, { techId: userId }],
+    },
+    include: {
+      customer: { select: { id: true, name: true, email: true } },
+      tech: { select: { id: true, name: true, email: true } },
     },
   });
   if (!convo) {
@@ -80,7 +89,7 @@ export async function POST(req: NextRequest) {
     data: {
       conversationId: body.conversationId,
       senderId: userId,
-      text: body.text,
+      text,
       type: body.type ?? "text",
     },
     include: { sender: { select: { id: true, name: true, avatarUrl: true } } },
@@ -90,6 +99,17 @@ export async function POST(req: NextRequest) {
   await prisma.conversation.update({
     where: { id: body.conversationId },
     data: { lastMessageAt: new Date() },
+  });
+
+  const recipient = userId === convo.customerId ? convo.tech : convo.customer;
+  await sendActivityEmail({
+    to: recipient.email,
+    recipientName: recipient.name,
+    subject: `New MCQ message from ${message.sender.name ?? "your contact"}`,
+    heading: "You have a new message",
+    message: text,
+    actionPath: recipient.id === convo.techId ? `/admin-messages?customerId=${convo.customerId}` : "/messages",
+    actionLabel: "Reply in MCQ",
   });
 
   return Response.json(message, { status: 201 });

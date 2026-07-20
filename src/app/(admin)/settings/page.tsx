@@ -934,7 +934,7 @@ export default function SettingsPage() {
         </section>
 
         {/* ── SECTION: Payment Methods ── */}
-        <section>
+        <section className="hidden" aria-hidden="true">
           <div className="flex items-center gap-2 mb-3">
             <CreditCard size={15} className="text-text-tertiary" />
             <h2 className="text-[12px] font-bold uppercase tracking-wider text-text-secondary">Payment Methods</h2>
@@ -1202,7 +1202,7 @@ export default function SettingsPage() {
               {
                 key: "email" as const,
                 label: "Email Summaries",
-                sub: "Daily recap of jobs and revenue",
+                sub: "Daily recap of jobs and schedule changes",
               },
               {
                 key: "leadAlerts" as const,
@@ -1312,7 +1312,7 @@ export default function SettingsPage() {
         </section>
 
         {/* ── SECTION: Subscription / Billing - demo only ── */}
-        {isDemo && (
+        {false && isDemo && (
           <section>
             <div className="flex items-center gap-2 mb-3">
               <CreditCard size={15} className="text-text-tertiary" />

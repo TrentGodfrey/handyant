@@ -10,6 +10,8 @@ const publicPaths = [
   "/forgot-password",
   "/reset-password",
   "/verify-email",
+  "/terms",
+  "/privacy",
   "/api/availability",
   "/api/home-invitations",
   "/api/webhooks/square",
@@ -18,6 +20,16 @@ const publicExact = new Set(["/"]);
 
 export async function proxy(req: NextRequest) {
   const { pathname } = req.nextUrl;
+
+  // Reporting and online-payment screens are intentionally retired while MCQ
+  // runs scheduling, memberships, and billing directly with customers.
+  if (pathname === "/reports") return NextResponse.redirect(new URL("/dashboard", req.url));
+  if (pathname === "/account/receipts" || pathname === "/account/plans") {
+    return NextResponse.redirect(new URL("/account", req.url));
+  }
+  if (/^\/jobs\/[^/]+\/invoice$/.test(pathname)) {
+    return NextResponse.redirect(new URL(pathname.replace(/\/invoice$/, ""), req.url));
+  }
 
   // Demo mode bypass - runs FIRST so the cookie is set even when landing on
   // a public path like / or /demo. Available in production as a "Try the demo"

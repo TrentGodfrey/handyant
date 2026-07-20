@@ -1017,7 +1017,7 @@ export default function AccountManagePage() {
                 <Mail size={16} className="text-text-secondary" />
                 <div>
                   <p className="text-[13px] font-semibold text-text-primary">Email notifications</p>
-                  <p className="text-[11px] text-text-tertiary">Receipts &amp; monthly summaries</p>
+                  <p className="text-[11px] text-text-tertiary">Booking confirmations &amp; visit updates</p>
                 </div>
               </div>
               <button
