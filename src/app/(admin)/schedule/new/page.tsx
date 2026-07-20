@@ -183,7 +183,14 @@ function ScheduleNewPageInner() {
   const [visitCount, setVisitCount] = useState(1);
   const [availableTimes, setAvailableTimes] = useState<Set<string>>(new Set(JOB_TIME_SLOTS));
   const [availabilityLoading, setAvailabilityLoading] = useState(false);
-  const [availableTodos, setAvailableTodos] = useState<{ id: string; task: string; priority?: string | null }[]>([]);
+  const [availableTodos, setAvailableTodos] = useState<{
+    id: string;
+    task: string;
+    priority?: string | null;
+    partsDescription?: string | null;
+    parts?: string | null;
+    partsBuyer?: string | null;
+  }[]>([]);
   const [selectedTodoIds, setSelectedTodoIds] = useState<string[]>([]);
   const [description, setDescription] = useState("");
   const [hasParts, setHasParts] = useState(false);
@@ -247,10 +254,20 @@ function ScheduleNewPageInner() {
         setAvailableTodos(
           (Array.isArray(todos) ? todos : [])
             .filter((todo: { status?: string }) => todo.status !== "completed")
-            .map((todo: { id: string; task: string; priority?: string | null }) => ({
+            .map((todo: {
+              id: string;
+              task: string;
+              priority?: string | null;
+              partsDescription?: string | null;
+              parts?: string | null;
+              partsBuyer?: string | null;
+            }) => ({
               id: todo.id,
               task: todo.task,
               priority: todo.priority ?? null,
+              partsDescription: todo.partsDescription ?? null,
+              parts: todo.parts ?? null,
+              partsBuyer: todo.partsBuyer ?? null,
             })),
         );
       })
@@ -708,7 +725,19 @@ function ScheduleNewPageInner() {
                         }`}>
                           {selected && <Check size={12} />}
                         </span>
-                        <span className="text-[13px] font-medium text-text-primary">{todo.task}</span>
+                        <span className="min-w-0 flex-1">
+                          <span className="block text-[13px] font-medium text-text-primary">{todo.task}</span>
+                          {(todo.partsDescription || todo.parts) && (
+                            <span className="mt-0.5 block truncate text-[11px] text-text-tertiary">
+                              Parts: {todo.partsDescription ?? todo.parts}
+                              {todo.partsBuyer === "tech"
+                                ? " · Anthony buys"
+                                : todo.partsBuyer === "customer"
+                                  ? " · Customer buys"
+                                  : ""}
+                            </span>
+                          )}
+                        </span>
                       </button>
                     );
                   })}

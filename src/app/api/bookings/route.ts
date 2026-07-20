@@ -5,6 +5,7 @@ import { sendActivityEmail } from "@/lib/activity-email";
 import { decryptHomeAccess } from "@/lib/sensitive-data";
 import { bookingTimeToDatabaseDate } from "@/lib/booking-time";
 import { bookingListWhere } from "@/lib/booking-view";
+import { mergeBookingPartItems } from "@/lib/booking-parts";
 import {
   VISIT_DURATION_MINUTES,
   canStartVisitBlocks,
@@ -103,9 +104,16 @@ export async function POST(req: NextRequest) {
     ? [...new Set<string>((body.homeTodoIds as unknown[]).filter((value): value is string => typeof value === "string"))].slice(0, 12)
     : [];
   const homeTodos = requestedTodoIds.length && typeof body.homeId === "string"
-    ? await prisma.homeTodo.findMany({
+      ? await prisma.homeTodo.findMany({
         where: { id: { in: requestedTodoIds }, homeId: body.homeId, status: { not: "completed" } },
-        select: { id: true, task: true, description: true, notes: true },
+        select: {
+          id: true,
+          task: true,
+          description: true,
+          notes: true,
+          parts: true,
+          partsDescription: true,
+        },
       })
     : [];
   if (homeTodos.length !== requestedTodoIds.length) {
@@ -113,6 +121,10 @@ export async function POST(req: NextRequest) {
   }
   const todoById = new Map(homeTodos.map((todo) => [todo.id, todo]));
   const selectedTodos = requestedTodoIds.map((id) => todoById.get(id)!);
+  // Parts entered while a task is waiting on the home automatically follow it
+  // into the eventual booking. Keep manually entered booking parts too, while
+  // avoiding duplicate rows when Anthony has entered the same item twice.
+  const bookingPartItems = mergeBookingPartItems(partItems, selectedTodos);
 
   let booking;
   try {
@@ -151,8 +163,8 @@ export async function POST(req: NextRequest) {
           categories: body.categoryIds?.length
             ? { create: body.categoryIds.map((categoryId: string) => ({ categoryId })) }
             : undefined,
-          parts: partItems.length
-            ? { create: partItems.map((item) => ({ item })) }
+          parts: bookingPartItems.length
+            ? { create: bookingPartItems.map((item) => ({ item })) }
             : undefined,
           tasks: selectedTodos.length
             ? {

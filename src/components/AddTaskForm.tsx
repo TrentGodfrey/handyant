@@ -43,6 +43,9 @@ interface AddTaskFormProps {
    */
   demoMode?: boolean;
   saving?: boolean;
+  /** Labels for the parts purchaser toggle. Staff screens can clarify that
+   * "customer" means the homeowner instead of the signed-in user. */
+  partsBuyerLabels?: { customer: string; tech: string };
 }
 
 const MAX_DESCRIPTION = 200;
@@ -56,6 +59,7 @@ const PRIORITY_OPTS: { value: Priority; label: string; dot: string }[] = [
 
 export default function AddTaskForm({
   open, onCancel, onSubmit, homeId, demoMode = false, saving = false,
+  partsBuyerLabels = { customer: "Me", tech: "Anthony" },
 }: AddTaskFormProps) {
   const [task, setTask] = useState("");
   const [description, setDescription] = useState("");
@@ -240,7 +244,7 @@ export default function AddTaskForm({
                 partsBuyer === "customer" ? "bg-primary text-white shadow-sm" : "text-text-secondary"
               }`}
             >
-              Me
+              {partsBuyerLabels.customer}
             </button>
             <button
               type="button"
@@ -249,7 +253,7 @@ export default function AddTaskForm({
                 partsBuyer === "tech" ? "bg-primary text-white shadow-sm" : "text-text-secondary"
               }`}
             >
-              Anthony
+              {partsBuyerLabels.tech}
             </button>
           </div>
         </div>

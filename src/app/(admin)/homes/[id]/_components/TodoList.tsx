@@ -2,11 +2,12 @@
 
 import Card from "@/components/Card";
 import StatusBadge from "@/components/StatusBadge";
+import AddTaskForm, { type NewTaskPayload } from "@/components/AddTaskForm";
 import Link from "next/link";
 import {
   Plus, Camera, ShoppingCart, AlertTriangle, CheckCircle2, X, Trash2,
 } from "lucide-react";
-import type { ItemStatus, NormalizedTodo, Priority } from "./types";
+import type { ItemStatus, NormalizedTodo } from "./types";
 import { priorityDot } from "./types";
 
 interface TodoListProps {
@@ -19,12 +20,9 @@ interface TodoListProps {
   // Add task form
   showAddTask: boolean;
   setShowAddTask: (v: boolean | ((p: boolean) => boolean)) => void;
-  newTaskText: string;
-  setNewTaskText: (v: string) => void;
-  newTaskPriority: Priority;
-  setNewTaskPriority: (p: Priority) => void;
   savingTask: boolean;
-  addTask: () => void;
+  addTask: (payload: NewTaskPayload) => Promise<void> | void;
+  homeId: string;
 
   // Per-task actions
   toggleTaskComplete: (id: string, status: ItemStatus) => void;
@@ -34,9 +32,7 @@ interface TodoListProps {
 export default function TodoList({
   items, openTasks, onTogglePhotoForm,
   showAddTask, setShowAddTask,
-  newTaskText, setNewTaskText,
-  newTaskPriority, setNewTaskPriority,
-  savingTask, addTask,
+  savingTask, addTask, homeId,
   toggleTaskComplete, deleteTask,
 }: TodoListProps) {
   return (
@@ -66,42 +62,14 @@ export default function TodoList({
         </div>
       </div>
 
-      {showAddTask && (
-        <div className="mb-3 rounded-xl border border-primary-200 bg-primary-50 p-3 space-y-2">
-          <input
-            type="text"
-            value={newTaskText}
-            onChange={(e) => setNewTaskText(e.target.value)}
-            placeholder="What needs to get done?"
-            className="w-full rounded-lg border border-border bg-white px-3 py-2 text-[13px] text-text-primary placeholder:text-text-tertiary focus:outline-none focus:border-primary"
-          />
-          <div className="flex items-center gap-2">
-            <span className="text-[11px] font-medium text-text-secondary">Priority:</span>
-            {(["low", "medium", "high"] as Priority[]).map((p) => (
-              <button
-                key={p}
-                onClick={() => setNewTaskPriority(p)}
-                className={`rounded-full px-2.5 py-1 text-[10px] font-semibold capitalize transition-colors ${
-                  newTaskPriority === p
-                    ? "bg-primary text-white"
-                    : "bg-white border border-border text-text-secondary"
-                }`}
-              >
-                {p}
-              </button>
-            ))}
-          </div>
-          <div className="flex justify-end">
-            <button
-              onClick={addTask}
-              disabled={!newTaskText.trim() || savingTask}
-              className="rounded-lg bg-primary px-4 py-1.5 text-[12px] font-semibold text-white disabled:opacity-40 active:bg-primary-dark transition-colors"
-            >
-              {savingTask ? "Saving…" : "Save Task"}
-            </button>
-          </div>
-        </div>
-      )}
+      <AddTaskForm
+        open={showAddTask}
+        onCancel={() => setShowAddTask(false)}
+        onSubmit={addTask}
+        homeId={homeId}
+        saving={savingTask}
+        partsBuyerLabels={{ customer: "Customer", tech: "Anthony" }}
+      />
 
       {items.length === 0 ? (
         <Card padding="md" variant="outlined">

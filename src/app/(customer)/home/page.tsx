@@ -181,7 +181,7 @@ export default function CustomerHome() {
     ...(reviewStats
       ? [{ icon: Star, label: `${reviewStats.avg} Rating`, sub: `${reviewStats.count} review${reviewStats.count === 1 ? "" : "s"}`, color: "text-warning" }]
       : []),
-    { icon: Users, label: "DFW Since 2024", sub: "Justin · Plano · Frisco", color: "text-success" },
+    { icon: Users, label: "DFW Since 2024", sub: null, color: "text-success" },
   ];
 
   const trustGridCols = trustStats.length === 3 ? "grid-cols-3" : "grid-cols-2";
@@ -441,7 +441,9 @@ export default function CustomerHome() {
                 <stat.icon size={22} className={stat.color} />
                 <div>
                   <p className="text-[12px] font-semibold text-text-primary leading-tight">{stat.label}</p>
-                  <p className="text-[10px] text-text-tertiary mt-0.5 leading-tight">{stat.sub}</p>
+                  {stat.sub && (
+                    <p className="text-[10px] text-text-tertiary mt-0.5 leading-tight">{stat.sub}</p>
+                  )}
                 </div>
               </Card>
             ))}

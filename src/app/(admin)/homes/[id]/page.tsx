@@ -8,8 +8,9 @@ import { useDemoMode } from "@/lib/useDemoMode";
 import { prepareImageForUpload } from "@/lib/client-image-upload";
 import { toast } from "@/components/Toaster";
 import Spinner from "@/components/Spinner";
+import type { NewTaskPayload } from "@/components/AddTaskForm";
 
-import type { ApiHome, EditFormState, ItemStatus, Priority } from "./_components/types";
+import type { ApiHome, EditFormState, ItemStatus } from "./_components/types";
 import {
   formatLongDate, normalizePriority, normalizeStatus,
 } from "./_components/types";
@@ -41,8 +42,6 @@ export default function HomeDetailPage({ params }: { params: Promise<{ id: strin
 
   // Add Task inline form
   const [showAddTask, setShowAddTask] = useState(false);
-  const [newTaskText, setNewTaskText] = useState("");
-  const [newTaskPriority, setNewTaskPriority] = useState<Priority>("medium");
   const [savingTask, setSavingTask] = useState(false);
 
   // Add Photo inline form
@@ -267,18 +266,21 @@ export default function HomeDetailPage({ params }: { params: Promise<{ id: strin
     }
   }
 
-  async function addTask() {
-    if (!newTaskText.trim() || !home) return;
-    const task = newTaskText.trim();
+  async function addTask(payload: NewTaskPayload) {
+    if (!home) throw new Error("Home is not loaded yet.");
     setSavingTask(true);
     try {
       if (!isDemo) {
         const r = await fetch(`/api/homes/${id}/todos`, {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ task, priority: newTaskPriority, status: "pending" }),
+          body: JSON.stringify({ ...payload, status: "pending" }),
         });
-        if (r.ok) await loadHome();
+        if (!r.ok) {
+          const body = await r.json().catch(() => ({}));
+          throw new Error(body.error ?? "Failed to add task");
+        }
+        await loadHome();
       } else {
         setHome({
           ...home,
@@ -286,25 +288,26 @@ export default function HomeDetailPage({ params }: { params: Promise<{ id: strin
             ...home.todos,
             {
               id: `t${Date.now()}`,
-              task,
-              description: null,
-              priority: newTaskPriority,
+              task: payload.task,
+              description: payload.description,
+              priority: payload.priority,
               status: "pending",
-              parts: null,
-              partStatus: null,
-              partsDescription: null,
-              partsBuyer: null,
+              parts: payload.parts,
+              partStatus: payload.partStatus,
+              partsDescription: payload.partsDescription,
+              partsBuyer: payload.partsBuyer,
               specialist: false,
-              hasPhoto: false,
-              photoIds: [],
+              hasPhoto: payload.photoIds.length > 0,
+              photoIds: payload.photoIds,
               notes: null,
             },
           ],
         });
       }
-      setNewTaskText("");
-      setNewTaskPriority("medium");
       setShowAddTask(false);
+      toast.success("Task saved");
+    } catch (error) {
+      throw error instanceof Error ? error : new Error("Failed to add task");
     } finally {
       setSavingTask(false);
     }
@@ -548,12 +551,9 @@ export default function HomeDetailPage({ params }: { params: Promise<{ id: strin
         onTogglePhotoForm={() => setShowAddPhoto((v) => !v)}
         showAddTask={showAddTask}
         setShowAddTask={setShowAddTask}
-        newTaskText={newTaskText}
-        setNewTaskText={setNewTaskText}
-        newTaskPriority={newTaskPriority}
-        setNewTaskPriority={setNewTaskPriority}
         savingTask={savingTask}
         addTask={addTask}
+        homeId={home.id}
         toggleTaskComplete={toggleTaskComplete}
         deleteTask={deleteTask}
       />
