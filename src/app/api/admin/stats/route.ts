@@ -1,5 +1,6 @@
 import { prisma } from "@/lib/prisma";
 import { requireTech, unauthorized } from "@/lib/session";
+import { sumBookedMinutes } from "@/lib/booking-stats";
 
 export async function GET() {
   const tech = await requireTech();
@@ -19,7 +20,11 @@ export async function GET() {
 
   const [todayBookings, weekBookings, monthBookings, partsNeeded, allReviews, pendingOffers] = await Promise.all([
     prisma.booking.findMany({
-      where: { techId: tech.id, scheduledDate: { gte: startOfDay, lt: endOfDay } },
+      where: {
+        techId: tech.id,
+        status: { not: "cancelled" },
+        scheduledDate: { gte: startOfDay, lt: endOfDay },
+      },
       include: {
         tasks: true,
         parts: true,
@@ -29,11 +34,19 @@ export async function GET() {
       orderBy: { scheduledTime: "asc" },
     }),
     prisma.booking.findMany({
-      where: { techId: tech.id, scheduledDate: { gte: startOfWeek, lt: endOfWeek } },
-      select: { durationMinutes: true },
+      where: {
+        techId: tech.id,
+        status: { not: "cancelled" },
+        scheduledDate: { gte: startOfWeek, lt: endOfWeek },
+      },
+      select: { status: true, durationMinutes: true },
     }),
     prisma.booking.findMany({
-      where: { techId: tech.id, scheduledDate: { gte: startOfMonth, lt: endOfMonth } },
+      where: {
+        techId: tech.id,
+        status: { not: "cancelled" },
+        scheduledDate: { gte: startOfMonth, lt: endOfMonth },
+      },
       include: { tasks: true },
     }),
     prisma.part.findMany({
@@ -62,8 +75,6 @@ export async function GET() {
     }),
   ]);
 
-  const sumMinutes = (list: { durationMinutes: number | null }[]) =>
-    list.reduce((total, booking) => total + (booking.durationMinutes ?? 0), 0);
   const completedThisMonth = monthBookings.filter((booking) => booking.status === "completed");
   const tasksThisMonth = completedThisMonth.reduce((total, booking) => total + booking.tasks.length, 0);
   const avgRating = allReviews.length
@@ -73,13 +84,13 @@ export async function GET() {
   return Response.json({
     today: {
       jobs: todayBookings.length,
-      hours: sumMinutes(todayBookings) / 60,
+      hours: sumBookedMinutes(todayBookings) / 60,
       partsToBuy: partsNeeded.length,
       schedule: todayBookings,
     },
     week: {
       jobs: weekBookings.length,
-      hours: sumMinutes(weekBookings) / 60,
+      hours: sumBookedMinutes(weekBookings) / 60,
     },
     month: {
       jobs: monthBookings.length,

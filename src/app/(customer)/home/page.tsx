@@ -45,6 +45,7 @@ interface BookingData {
 interface ApiReview {
   id: string;
   rating: number;
+  booking?: { id: string } | null;
 }
 
 interface ApiSubscription {
@@ -82,6 +83,7 @@ export default function CustomerHome() {
   const [nextBooking, setNextBooking] = useState<BookingData | null>(null);
   const [loading, setLoading] = useState(true);
   const [reviewStats, setReviewStats] = useState<{ count: number; avg: number } | null>(null);
+  const [pendingReview, setPendingReview] = useState<BookingData | null>(null);
   const [activePlanId, setActivePlanId] = useState<string | null>(null);
   const [completedCount, setCompletedCount] = useState(0);
   const [techPhone, setTechPhone] = useState<string | null>(null);
@@ -109,6 +111,7 @@ export default function CustomerHome() {
     if (isDemo) {
       setNextBooking(DEMO_BOOKING);
       setReviewStats({ count: 86, avg: 4.9 });
+      setPendingReview(null);
       setActivePlanId("pro");
       setCompletedCount(12);
       setTechPhone("+12144697795");
@@ -144,6 +147,13 @@ export default function CustomerHome() {
         setTechPhone(phone ?? null);
 
         const reviewList: ApiReview[] = Array.isArray(reviews) ? reviews : [];
+        const reviewedBookingIds = new Set(
+          reviewList.map((review) => review.booking?.id).filter((id): id is string => !!id),
+        );
+        const latestUnreviewedVisit = bookingList
+          .filter((booking) => booking.status === "completed" && !reviewedBookingIds.has(booking.id))
+          .sort((a, b) => bookingDateToLocalDate(b.scheduledDate).getTime() - bookingDateToLocalDate(a.scheduledDate).getTime())[0];
+        setPendingReview(latestUnreviewedVisit ?? null);
         if (reviewList.length > 0) {
           const sum = reviewList.reduce((acc, r) => acc + (r.rating ?? 0), 0);
           setReviewStats({
@@ -224,6 +234,23 @@ export default function CustomerHome() {
       </div>
 
       <div className="px-5 pt-4">
+
+        {pendingReview && (
+          <Link href={`/account/rate/${pendingReview.id}`} className="mb-5 block">
+            <div className="flex items-center gap-3 rounded-2xl border border-warning/30 bg-warning-light px-4 py-4 shadow-[0_1px_5px_rgba(0,0,0,0.05)] active:scale-[0.99] transition-transform">
+              <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full bg-white">
+                <Star size={21} className="fill-warning text-warning" />
+              </div>
+              <div className="min-w-0 flex-1">
+                <p className="text-[15px] font-bold text-text-primary">How did your visit go?</p>
+                <p className="mt-0.5 text-[12px] leading-relaxed text-text-secondary">
+                  Your {formatDate(pendingReview.scheduledDate)} visit is complete. Tap to leave a review.
+                </p>
+              </div>
+              <ArrowRight size={18} className="shrink-0 text-warning" />
+            </div>
+          </Link>
+        )}
 
         {/* spacer */}
 

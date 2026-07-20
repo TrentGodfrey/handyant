@@ -5,12 +5,12 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import {
   ChevronLeft, Calendar, MessageCircle, Package, CheckCircle2,
-  DollarSign, CreditCard, Bell, BellOff, AlertTriangle, RotateCw,
+  DollarSign, CreditCard, Bell, BellOff, AlertTriangle, RotateCw, Star,
 } from "lucide-react";
 import { useDemoMode } from "@/lib/useDemoMode";
 import Spinner from "@/components/Spinner";
 
-type NotifType = "appointment" | "message" | "parts" | "completed" | "invoice" | "billing";
+type NotifType = "appointment" | "message" | "parts" | "completed" | "invoice" | "billing" | "review";
 type FilterType = "all" | "unread" | "appointments" | "messages" | "updates";
 
 interface Notification {
@@ -137,6 +137,7 @@ const typeConfig: Record<NotifType, {
   completed: { icon: CheckCircle2, iconBg: "bg-success-light", iconColor: "text-success" },
   invoice: { icon: DollarSign, iconBg: "bg-success-light", iconColor: "text-success" },
   billing: { icon: CreditCard, iconBg: "bg-surface-secondary", iconColor: "text-text-secondary" },
+  review: { icon: Star, iconBg: "bg-warning-light", iconColor: "text-warning" },
 };
 
 const filters: { id: FilterType; label: string }[] = [
@@ -148,7 +149,7 @@ const filters: { id: FilterType; label: string }[] = [
 ];
 
 const ALLOWED_TYPES = new Set<NotifType>([
-  "appointment", "message", "parts", "completed", "invoice", "billing",
+  "appointment", "message", "parts", "completed", "invoice", "billing", "review",
 ]);
 
 function normalizeType(type: string | null): NotifType {
@@ -189,7 +190,7 @@ function matchesFilter(n: Notification, filter: FilterType): boolean {
   if (filter === "unread") return !n.read;
   if (filter === "appointments") return n.type === "appointment";
   if (filter === "messages") return n.type === "message";
-  if (filter === "updates") return ["parts", "completed", "invoice", "billing"].includes(n.type);
+  if (filter === "updates") return ["parts", "completed", "invoice", "billing", "review"].includes(n.type);
   return true;
 }
 

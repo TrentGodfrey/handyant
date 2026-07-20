@@ -44,7 +44,6 @@ interface JobDetail {
   photos: { id: string; label: string; url?: string }[];
   techNotes: string;
   customerNotes: string;
-  rating?: number;
 }
 
 function apiStatusToUi(s: string): UiStatus {
@@ -178,7 +177,6 @@ export default function JobDetailPage({ params }: { params: Promise<{ id: string
   const [savingNote, setSavingNote] = useState(false);
   const [showCompleteModal, setShowCompleteModal] = useState(false);
   const [completing, setCompleting] = useState(false);
-  const [completeRating, setCompleteRating] = useState<number>(5);
   const [showCancelModal, setShowCancelModal] = useState(false);
   const [cancelling, setCancelling] = useState(false);
   const [uploading, setUploading] = useState(false);
@@ -455,7 +453,7 @@ export default function JobDetailPage({ params }: { params: Promise<{ id: string
   async function completeJob() {
     if (isDemo) {
       setShowCompleteModal(false);
-      setJob((prev) => (prev ? { ...prev, status: "completed", rating: completeRating } : prev));
+      setJob((prev) => (prev ? { ...prev, status: "completed" } : prev));
       toast.success("Visit completed");
       return;
     }
@@ -467,7 +465,7 @@ export default function JobDetailPage({ params }: { params: Promise<{ id: string
         body: JSON.stringify({ status: "completed" }),
       });
       if (res.ok) {
-        setJob((prev) => (prev ? { ...prev, status: "completed", rating: completeRating } : prev));
+        setJob((prev) => (prev ? { ...prev, status: "completed" } : prev));
         toast.success("Visit completed");
       } else {
         toast.error("Failed to complete visit");
@@ -1023,29 +1021,10 @@ export default function JobDetailPage({ params }: { params: Promise<{ id: string
                 This will mark the visit as done for {job.client}.
               </p>
             </div>
-            <div className="mb-4">
-              <p className="mb-2 text-[12px] font-semibold text-text-secondary">How would you rate this job?</p>
-              <div className="flex justify-center gap-1">
-                {[1,2,3,4,5].map((s) => {
-                  const active = s <= completeRating;
-                  return (
-                    <button
-                      key={s}
-                      type="button"
-                      onClick={() => setCompleteRating(s)}
-                      aria-label={`${s} star${s !== 1 ? "s" : ""}`}
-                      className="p-0.5 transition-transform active:scale-90"
-                    >
-                      <Star
-                        size={28}
-                        className={active ? "text-warning fill-warning" : "text-text-tertiary/40"}
-                      />
-                    </button>
-                  );
-                })}
-              </div>
-              <p className="mt-1.5 text-center text-[11px] text-text-tertiary">
-                We&apos;ll notify your customer in-app to leave a review.
+            <div className="mb-4 flex items-start gap-3 rounded-xl border border-warning/25 bg-warning-light p-3">
+              <Star size={18} className="mt-0.5 shrink-0 fill-warning text-warning" />
+              <p className="text-[12px] leading-relaxed text-text-secondary">
+                The customer will receive an email and an in-app prompt to leave their review.
               </p>
             </div>
             <Button

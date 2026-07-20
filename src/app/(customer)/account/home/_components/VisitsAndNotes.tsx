@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import Card from "@/components/Card";
 import {
   CheckCircle2, ChevronRight, Star, Check, AlertTriangle, Info,
@@ -48,12 +49,20 @@ export default function VisitsAndNotes({
                         <span className="text-[11px] text-text-tertiary">
                           {visit.tasks.length} {visit.tasks.length === 1 ? "task" : "tasks"} · {formatHours(visit.durationMinutes)}
                         </span>
-                        {rating > 0 && (
+                        {rating > 0 ? (
                           <div className="flex items-center gap-0.5">
                             {Array.from({ length: 5 }).map((_, i) => (
                               <Star key={i} size={9} className={i < rating ? "fill-warning text-warning" : "fill-border text-border"} />
                             ))}
                           </div>
+                        ) : (
+                          <Link
+                            href={`/account/rate/${visit.id}`}
+                            onClick={(event) => event.stopPropagation()}
+                            className="rounded-full bg-warning-light px-2 py-1 text-[10px] font-bold text-warning active:opacity-70"
+                          >
+                            Leave a review
+                          </Link>
                         )}
                       </div>
                     </div>

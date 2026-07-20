@@ -12,6 +12,7 @@ import {
   visitDurationMinutes,
 } from "@/lib/booking-slots";
 import { sendActivityEmail } from "@/lib/activity-email";
+import { shouldRequestVisitReview } from "@/lib/review-prompt";
 
 function bookingUpdateSummary(body: Record<string, unknown>) {
   if (typeof body.status === "string") {
@@ -148,6 +149,7 @@ export async function PATCH(req: NextRequest, ctx: { params: Promise<{ id: strin
   const visitUnits = Math.max(1, Math.round(usageDuration / VISIT_DURATION_MINUTES));
   const usageDelta = completedStatusDelta(existing.status, nextStatus, visitUnits);
 
+  let shouldSendReviewRequest = false;
   const booking = await prisma.$transaction(async (tx) => {
     const updated = await tx.booking.update({
       where: { id },
@@ -177,19 +179,62 @@ export async function PATCH(req: NextRequest, ctx: { params: Promise<{ id: strin
       }
     }
 
+    if (existing.status !== "completed" && updated.status === "completed") {
+      const existingReview = await tx.review.findFirst({
+        where: { bookingId: updated.id, customerId: updated.customerId },
+        select: { id: true },
+      });
+      shouldSendReviewRequest = shouldRequestVisitReview(
+        existing.status,
+        updated.status,
+        !!existingReview,
+      );
+
+      if (shouldSendReviewRequest) {
+        const reviewLink = `/account/rate/${updated.id}`;
+        const existingPrompt = await tx.notification.findFirst({
+          where: { userId: updated.customerId, type: "review", link: reviewLink },
+          select: { id: true },
+        });
+        if (!existingPrompt) {
+          await tx.notification.create({
+            data: {
+              userId: updated.customerId,
+              title: "How was your visit?",
+              body: "Your MCQ visit is complete. Tap to leave a quick review for Anthony.",
+              type: "review",
+              link: reviewLink,
+            },
+          });
+        }
+      }
+    }
+
     return updated;
   });
 
-  const recipient = isTech ? booking.customer : booking.tech;
-  await sendActivityEmail({
-    to: recipient?.email,
-    recipientName: recipient?.name,
-    subject: "Your MCQ visit was updated",
-    heading: "Visit update",
-    message: bookingUpdateSummary(body),
-    actionPath: isTech ? `/booking?id=${booking.id}` : `/jobs/${booking.id}`,
-    actionLabel: "View visit",
-  });
+  if (shouldSendReviewRequest) {
+    await sendActivityEmail({
+      to: booking.customer.email,
+      recipientName: booking.customer.name,
+      subject: "How was your MCQ visit?",
+      heading: "Your visit is complete",
+      message: "Thanks for choosing MCQ Property Care. Please take a moment to rate your visit and share any feedback.",
+      actionPath: `/account/rate/${booking.id}`,
+      actionLabel: "Leave a review",
+    });
+  } else {
+    const recipient = isTech ? booking.customer : booking.tech;
+    await sendActivityEmail({
+      to: recipient?.email,
+      recipientName: recipient?.name,
+      subject: "Your MCQ visit was updated",
+      heading: "Visit update",
+      message: bookingUpdateSummary(body),
+      actionPath: isTech ? `/booking?id=${booking.id}` : `/jobs/${booking.id}`,
+      actionLabel: "View visit",
+    });
+  }
 
   return Response.json({ ...booking, home: booking.home ? decryptHomeAccess(booking.home) : null });
 }

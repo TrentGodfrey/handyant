@@ -21,6 +21,7 @@ import {
 } from "lucide-react";
 import { useDemoMode } from "@/lib/useDemoMode";
 import { demoCustomerBy } from "@/lib/demoData";
+import { countsAsBooked, sumBookedMinutes } from "@/lib/booking-stats";
 
 const demoWeekDays = [
   { day: "Mon", date: 30, month: "Mar", jobs: 4, hours: 7.5 },
@@ -233,9 +234,10 @@ export default function SchedulePage() {
       const d = new Date(weekStart);
       d.setDate(weekStart.getDate() + i);
       const iso = isoDate(d);
-      const dayBookings = bookings.filter((b) => b.scheduledDate.slice(0, 10) === iso);
-      const hours =
-        dayBookings.reduce((sum, b) => sum + (b.durationMinutes ?? 105), 0) / 60;
+      const dayBookings = bookings.filter(
+        (booking) => booking.scheduledDate.slice(0, 10) === iso && countsAsBooked(booking.status),
+      );
+      const hours = sumBookedMinutes(dayBookings) / 60;
       return {
         day: d.toLocaleDateString("en-US", { weekday: "short" }),
         date: d.getDate(),
