@@ -14,12 +14,34 @@ const ERROR_MESSAGES: Record<string, string> = {
 function VerifyEmailContent() {
   const searchParams = useSearchParams();
   const error = searchParams.get("error");
+  const sent = searchParams.get("sent");
+  const email = searchParams.get("email");
 
   // The /api/auth/verify-email GET endpoint redirects on success directly to
   // /account?verified=1 - so this page only renders when something went wrong.
   // If a token is present without an error, the user landed here from a
   // direct link and we let them know we're verifying.
   const token = searchParams.get("token");
+
+  if (sent) {
+    return (
+      <div className={`space-y-4 rounded-xl p-4 text-sm ${
+        sent === "1" ? "bg-success-light text-green-800" : "bg-warning-light text-amber-900"
+      }`}>
+        <p className="font-semibold">
+          {sent === "1" ? "Check your email" : "Your account was created"}
+        </p>
+        <p>
+          {sent === "1"
+            ? `We sent a verification link${email ? ` to ${email}` : ""}. Verify your address before sending messages, uploading photos, or booking a visit.`
+            : "We could not send the verification email. Sign in, open Account, and tap Resend verification."}
+        </p>
+        <Link href="/login" className="block min-h-11 rounded-xl bg-primary px-4 py-3 text-center font-semibold text-white">
+          Continue to sign in
+        </Link>
+      </div>
+    );
+  }
 
   if (!error && token) {
     // Bounce them through the API endpoint so the actual verification runs.
@@ -61,8 +83,8 @@ export default function VerifyEmailPage() {
     <div className="min-h-screen flex items-center justify-center bg-background px-4">
       <div className="w-full max-w-sm space-y-6">
         <div className="text-center">
-          <div className="inline-flex items-center justify-center w-14 h-14 rounded-2xl bg-primary text-white text-2xl font-bold mb-3">
-            HA
+          <div className="inline-flex items-center justify-center w-14 h-14 rounded-2xl bg-primary text-white text-base font-black tracking-[-0.06em] mb-3">
+            MCQ
           </div>
           <h1 className="text-2xl font-bold text-foreground">Email verification</h1>
         </div>

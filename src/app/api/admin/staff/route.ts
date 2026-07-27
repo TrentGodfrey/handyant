@@ -2,11 +2,11 @@ import { NextRequest } from "next/server";
 import { hash } from "bcryptjs";
 import { randomBytes } from "node:crypto";
 import { prisma } from "@/lib/prisma";
-import { requireTech, unauthorized, badRequest, forbidden } from "@/lib/session";
+import { requireAdmin, unauthorized, badRequest, forbidden } from "@/lib/session";
 
 export async function GET() {
-  const tech = await requireTech();
-  if (!tech) return unauthorized();
+  const admin = await requireAdmin();
+  if (!admin) return unauthorized();
 
   const staff = await prisma.user.findMany({
     where: { role: "tech" },
@@ -17,6 +17,7 @@ export async function GET() {
       phone: true,
       avatarUrl: true,
       createdAt: true,
+      isAdmin: true,
     },
     orderBy: { createdAt: "desc" },
   });
@@ -25,8 +26,8 @@ export async function GET() {
 }
 
 export async function POST(req: NextRequest) {
-  const tech = await requireTech();
-  if (!tech) return unauthorized();
+  const admin = await requireAdmin();
+  if (!admin) return unauthorized();
 
   const body = await req.json().catch(() => null);
   if (!body || typeof body !== "object") return badRequest("Invalid body");
@@ -43,13 +44,34 @@ export async function POST(req: NextRequest) {
   if (existing) {
     // If they exist as a customer already, promote - preserve history.
     if (existing.role !== "tech") {
+      const needsTemporaryPassword = !existing.passwordHash && !existing.googleId;
+      const promotedTempPassword = needsTemporaryPassword
+        ? generateTempPassword(12)
+        : null;
       const updated = await prisma.user.update({
         where: { id: existing.id },
-        data: { role: "tech", name, phone },
+        data: {
+          role: "tech",
+          isAdmin: false,
+          sessionVersion: { increment: 1 },
+          ...(promotedTempPassword
+            ? {
+                passwordHash: await hash(promotedTempPassword, 12),
+                mustChangePassword: true,
+              }
+            : {}),
+          name,
+          phone,
+        },
       });
-      // No new password issued for existing accounts.
       return Response.json(
-        { id: updated.id, email: updated.email, tempPassword: null, promoted: true },
+        {
+          id: updated.id,
+          email: updated.email,
+          isAdmin: false,
+          tempPassword: promotedTempPassword,
+          promoted: true,
+        },
         { status: 200 }
       );
     }
@@ -69,40 +91,48 @@ export async function POST(req: NextRequest) {
       passwordHash,
       role: "tech",
       emailVerified: false,
+      mustChangePassword: true,
     },
-    select: { id: true, email: true },
+    select: { id: true, email: true, isAdmin: true },
   });
 
   return Response.json(
-    { id: created.id, email: created.email, tempPassword },
+    { id: created.id, email: created.email, isAdmin: created.isAdmin, tempPassword },
     { status: 201 }
   );
 }
 
 export async function DELETE(req: NextRequest) {
-  const tech = await requireTech();
-  if (!tech) return unauthorized();
+  const admin = await requireAdmin();
+  if (!admin) return unauthorized();
 
   const userId = req.nextUrl.searchParams.get("userId");
   if (!userId) return badRequest("userId is required");
 
-  if (userId === tech.id) {
+  if (userId === admin.id) {
     return forbidden();
   }
 
   const target = await prisma.user.findUnique({
     where: { id: userId },
-    select: { id: true, role: true },
+    select: { id: true, role: true, isAdmin: true },
   });
   if (!target) return badRequest("User not found");
   if (target.role !== "tech") {
     return badRequest("User is not a staff member");
   }
+  if (target.isAdmin) {
+    return forbidden();
+  }
 
   // Demote rather than delete - preserves bookings, reviews, etc.
   await prisma.user.update({
     where: { id: userId },
-    data: { role: "customer" },
+    data: {
+      role: "customer",
+      isAdmin: false,
+      sessionVersion: { increment: 1 },
+    },
   });
 
   return Response.json({ ok: true });

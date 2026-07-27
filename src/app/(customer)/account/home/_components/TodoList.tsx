@@ -58,7 +58,7 @@ export default function TodoList(props: TodoListProps) {
           <p className="text-sm font-semibold uppercase tracking-wider text-text-secondary">To-Do List</p>
           <p className="text-[11px] text-text-tertiary mt-0.5">{todos.length} items · {highCount} urgent</p>
         </div>
-        <button onClick={() => setShowAddTask(!showAddTask)} className="flex items-center gap-1.5 rounded-xl bg-primary px-3.5 py-2 text-[12px] font-semibold text-white shadow-sm active:opacity-90 transition-opacity">
+        <button onClick={() => setShowAddTask(!showAddTask)} className="flex min-h-11 items-center gap-1.5 rounded-xl bg-primary px-3.5 py-2 text-[12px] font-semibold text-white shadow-sm active:opacity-90 transition-opacity">
           <Plus size={14} />
           Add Task
         </button>
@@ -99,7 +99,7 @@ export default function TodoList(props: TodoListProps) {
                   <div className={`mt-1.5 shrink-0 flex h-2.5 w-2.5 items-center justify-center rounded-full ring-4 ${pCfg.dot} ${pCfg.ring}`} />
                   <div className="flex-1 min-w-0">
                     <div className="flex items-start justify-between gap-2">
-                      <Link href={`/task/${item.id}`} onClick={(event) => event.stopPropagation()} className="text-[14px] font-semibold text-text-primary leading-snug hover:text-primary">{item.task}</Link>
+                      <Link href={`/task/${item.id}`} onClick={(event) => event.stopPropagation()} className="inline-flex min-h-11 items-center text-[14px] font-semibold leading-snug text-text-primary hover:text-primary">{item.task}</Link>
                       <div className="flex items-center gap-1 shrink-0">
                         {item.specialist && (
                           <span className="rounded-full bg-[#FFF7ED] px-2 py-0.5 text-[10px] font-semibold text-accent-coral">Specialist</span>
@@ -143,14 +143,14 @@ export default function TodoList(props: TodoListProps) {
                         <button
                           onClick={(e) => { e.stopPropagation(); triggerPhotoUpload(item.id); }}
                           disabled={photoUploadingId === item.id}
-                          className="flex items-center gap-1 rounded-lg bg-primary-50 px-3 py-1.5 text-[11px] font-semibold text-primary hover:bg-primary-100 transition-colors disabled:opacity-50"
+                          className="flex min-h-11 items-center gap-1 rounded-lg bg-primary-50 px-3 py-1.5 text-[11px] font-semibold text-primary hover:bg-primary-100 transition-colors disabled:opacity-50"
                         >
                           {photoUploadingId === item.id ? <Loader2 size={11} className="animate-spin" /> : <Camera size={11} />}
                           {photoUploadingId === item.id ? "Uploading…" : "Add Photo"}
                         </button>
                         <button
                           onClick={(e) => { e.stopPropagation(); removeTodo(item.id); }}
-                          className="flex items-center gap-1 rounded-lg bg-error-light px-3 py-1.5 text-[11px] font-semibold text-error hover:bg-red-100 transition-colors"
+                          className="flex min-h-11 items-center gap-1 rounded-lg bg-error-light px-3 py-1.5 text-[11px] font-semibold text-error hover:bg-red-100 transition-colors"
                         >
                           <X size={11} />
                           Remove

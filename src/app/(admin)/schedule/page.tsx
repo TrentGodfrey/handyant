@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import Card from "@/components/Card";
 import StatusBadge from "@/components/StatusBadge";
 import Button from "@/components/Button";
@@ -22,6 +22,8 @@ import {
 import { useDemoMode } from "@/lib/useDemoMode";
 import { demoCustomerBy } from "@/lib/demoData";
 import { countsAsBooked, sumBookedMinutes } from "@/lib/booking-stats";
+import { formatBookingTime, bookingDateToLocalDate } from "@/lib/booking-time";
+import { BUSINESS_TIME_ZONE, businessDateString } from "@/lib/booking-policy";
 
 const demoWeekDays = [
   { day: "Mon", date: 30, month: "Mar", jobs: 4, hours: 7.5 },
@@ -51,35 +53,30 @@ interface ScheduleItem {
 
 const demoScheduleByDay: Record<number, ScheduleItem[]> = {
   30: [
-    { time: "8:00 AM", label: "Part Shopping", type: "block", duration: "45 min", details: "Home Depot - Broan fan motor, caulk" },
-    { time: "9:00 AM", label: demoCustomerBy("1")!.name, type: "job", duration: "2h", address: "4821 Oak Hollow Dr, Plano", status: "confirmed", tasks: 2, homeId: 1 },
-    { time: "11:30 AM", label: demoCustomerBy("2")!.name, type: "job", duration: "1.5h", address: "1205 Elm Creek Ct, Frisco", status: "confirmed", tasks: 3, homeId: 2 },
+    { time: "8:00 AM", label: demoCustomerBy("1")!.name, type: "job", duration: "1h 45m", address: "4821 Oak Hollow Dr, Plano", status: "confirmed", tasks: 2, homeId: 1 },
+    { time: "10:00 AM", label: demoCustomerBy("2")!.name, type: "job", duration: "1h 45m", address: "1205 Elm Creek Ct, Frisco", status: "confirmed", tasks: 3, homeId: 2 },
     { time: "1:00 PM", label: "Lunch Break", type: "block", duration: "1h", details: "" },
-    { time: "2:00 PM", label: demoCustomerBy("3")!.name, type: "job", duration: "2h", address: "890 Sunset Ridge, Roanoke", status: "pending", tasks: 2, homeId: 3 },
-    { time: "4:30 PM", label: "Team Meeting", type: "block", duration: "30 min", details: "Weekly sync - Zoom" },
+    { time: "2:00 PM", label: demoCustomerBy("3")!.name, type: "job", duration: "1h 45m", address: "890 Sunset Ridge, Roanoke", status: "pending", tasks: 2, homeId: 3 },
   ],
   31: [
-    { time: "9:00 AM", label: "Tom Brady", type: "job", duration: "1.5h", address: "102 Birchwood Ln, Allen", status: "confirmed", tasks: 2, homeId: 4 },
-    { time: "11:00 AM", label: "Drive Time", type: "block", duration: "30 min", details: "" },
-    { time: "11:30 AM", label: "Carol White", type: "job", duration: "2h", address: "552 Maple Ave, Prosper", status: "scheduled", tasks: 4, homeId: 5 },
-    { time: "2:30 PM", label: "Kevin Nguyen", type: "job", duration: "1h", address: "87 Pine Ct, McKinney", status: "confirmed", tasks: 1, homeId: 6 },
+    { time: "8:00 AM", label: "Tom Brady", type: "job", duration: "1h 45m", address: "102 Birchwood Ln, Allen", status: "confirmed", tasks: 2, homeId: 4 },
+    { time: "10:00 AM", label: "Carol White", type: "job", duration: "1h 45m", address: "552 Maple Ave, Prosper", status: "scheduled", tasks: 4, homeId: 5 },
+    { time: "2:00 PM", label: "Kevin Nguyen", type: "job", duration: "1h 45m", address: "87 Pine Ct, McKinney", status: "confirmed", tasks: 1, homeId: 6 },
   ],
   1: [
-    { time: "8:30 AM", label: "Supply Run", type: "block", duration: "1h", details: "Lowe's - drywall, screws, paint" },
-    { time: "9:30 AM", label: "Diana Ross", type: "job", duration: "2.5h", address: "310 Lakeview Dr, Frisco", status: "confirmed", tasks: 3, homeId: 7 },
+    { time: "8:00 AM", label: "Diana Ross", type: "job", duration: "1h 45m", address: "310 Lakeview Dr, Frisco", status: "confirmed", tasks: 3, homeId: 7 },
+    { time: "10:00 AM", label: "Marcus Lee", type: "job", duration: "1h 45m", address: "720 Elm St, Plano", status: "needs-parts", tasks: 2, homeId: 8 },
     { time: "12:00 PM", label: "Lunch", type: "block", duration: "45 min", details: "" },
-    { time: "1:00 PM", label: "Marcus Lee", type: "job", duration: "1h", address: "720 Elm St, Plano", status: "needs-parts", tasks: 2, homeId: 8 },
-    { time: "2:30 PM", label: "Sandra Kim", type: "job", duration: "2h", address: "450 Redwood Blvd, Frisco", status: "confirmed", tasks: 3, homeId: 9 },
-    { time: "5:00 PM", label: "End-of-day debrief", type: "block", duration: "20 min", details: "Notes + photos upload" },
+    { time: "2:00 PM", label: "Sandra Kim", type: "job", duration: "1h 45m", address: "450 Redwood Blvd, Frisco", status: "confirmed", tasks: 3, homeId: 9 },
   ],
   2: [
-    { time: "10:00 AM", label: "Greg Holt", type: "job", duration: "2h", address: "1800 River Rd, Denton", status: "confirmed", tasks: 3, homeId: 10 },
-    { time: "1:00 PM", label: "Jake Turner", type: "job", duration: "2h", address: "99 Cedar Ln, Celina", status: "pending", tasks: 2, homeId: 11 },
+    { time: "8:00 AM", label: "Greg Holt", type: "job", duration: "1h 45m", address: "1800 River Rd, Denton", status: "confirmed", tasks: 3, homeId: 10 },
+    { time: "12:00 PM", label: "Jake Turner", type: "job", duration: "1h 45m", address: "99 Cedar Ln, Celina", status: "pending", tasks: 2, homeId: 11 },
   ],
   3: [
-    { time: "9:00 AM", label: "Amy Foster", type: "job", duration: "1.5h", address: "215 Sundown Ave, Plano", status: "confirmed", tasks: 2, homeId: 12 },
-    { time: "11:00 AM", label: "Peter Hall", type: "job", duration: "2h", address: "640 Willow Ct, Allen", status: "confirmed", tasks: 4, homeId: 13 },
-    { time: "2:00 PM", label: "Rita Patel", type: "job", duration: "1h", address: "803 Birch Loop, Frisco", status: "scheduled", tasks: 1, homeId: 14 },
+    { time: "8:00 AM", label: "Amy Foster", type: "job", duration: "1h 45m", address: "215 Sundown Ave, Plano", status: "confirmed", tasks: 2, homeId: 12 },
+    { time: "10:00 AM", label: "Peter Hall", type: "job", duration: "1h 45m", address: "640 Willow Ct, Allen", status: "confirmed", tasks: 4, homeId: 13 },
+    { time: "2:00 PM", label: "Rita Patel", type: "job", duration: "1h 45m", address: "803 Birch Loop, Frisco", status: "scheduled", tasks: 1, homeId: 14 },
   ],
 };
 
@@ -139,20 +136,15 @@ function formatRange(weekStart: Date): string {
 }
 
 function formatTime(scheduledTime: string): string {
-  // API returns ISO datetime like "1970-01-01T09:00:00.000Z" - extract HH:mm
-  const d = new Date(scheduledTime);
-  const h = d.getUTCHours();
-  const m = d.getUTCMinutes();
-  const ampm = h >= 12 ? "PM" : "AM";
-  const h12 = h % 12 === 0 ? 12 : h % 12;
-  return m === 0 ? `${h12}:00 ${ampm}` : `${h12}:${String(m).padStart(2, "0")} ${ampm}`;
+  return formatBookingTime(scheduledTime);
 }
 
 function formatDuration(mins: number | null): string {
   const m = mins ?? 105;
   if (m < 60) return `${m} min`;
-  const h = m / 60;
-  return Number.isInteger(h) ? `${h}h` : `${h}h`;
+  const hours = Math.floor(m / 60);
+  const minutes = m % 60;
+  return minutes === 0 ? `${hours}h` : `${hours}h ${minutes}m`;
 }
 
 function parseTimeToMinutes(label: string): number {
@@ -185,7 +177,7 @@ function DayEmptyState({ dayLabel }: { dayLabel: string }) {
         </div>
         {!isWeekend && (
           <Link href="/schedule/new">
-            <div className="absolute -bottom-1.5 -right-1.5 flex h-8 w-8 items-center justify-center rounded-full bg-primary shadow-[0_2px_8px_rgba(79,149,152,0.30)] active:bg-primary-dark transition-colors">
+            <div className="absolute -bottom-2 -right-2 flex h-11 w-11 items-center justify-center rounded-full bg-primary shadow-[0_2px_8px_rgba(79,149,152,0.30)] active:bg-primary-dark transition-colors">
               <Plus size={16} className="text-white" />
             </div>
           </Link>
@@ -203,7 +195,7 @@ function DayEmptyState({ dayLabel }: { dayLabel: string }) {
 
       {!isWeekend && (
         <Link href="/schedule/new" className="mt-4">
-          <button className="flex items-center gap-2 rounded-xl border border-border bg-surface px-5 py-2.5 text-[13px] font-semibold text-text-primary shadow-[0_1px_4px_rgba(0,0,0,0.06)] active:bg-surface-secondary transition-colors">
+          <button className="flex min-h-11 items-center gap-2 rounded-xl border border-border bg-surface px-5 py-2.5 text-[13px] font-semibold text-text-primary shadow-[0_1px_4px_rgba(0,0,0,0.06)] active:bg-surface-secondary transition-colors">
             <CalendarPlus size={15} className="text-primary" />
             Add Appointment
           </button>
@@ -219,7 +211,9 @@ export default function SchedulePage() {
   const { isDemo, mounted } = useDemoMode();
 
   // In demo mode, anchor to Mar 30, 2026 to keep mock alignment.
-  const initialAnchor = isDemo ? new Date(2026, 2, 30) : new Date();
+  const initialAnchor = isDemo
+    ? new Date(2026, 2, 30)
+    : bookingDateToLocalDate(businessDateString());
   const [weekStart, setWeekStart] = useState<Date>(() => startOfWeekMonday(initialAnchor));
   const [bookings, setBookings] = useState<ApiBooking[]>([]);
   const [blocks, setBlocks] = useState<ApiAvailabilityBlock[]>([]);
@@ -250,8 +244,19 @@ export default function SchedulePage() {
 
   // Track which weekday is selected by index (0..6) so that switching weeks
   // keeps the UI on the same day-of-week without needing an effect to reset.
-  const [selectedIndex, setSelectedIndex] = useState<number>(0);
+  const [selectedIndex, setSelectedIndex] = useState<number>(() =>
+    isDemo ? 0 : (initialAnchor.getDay() + 6) % 7,
+  );
+  const selectedDayRef = useRef<HTMLButtonElement>(null);
   const selectedDay = weekDays[selectedIndex]?.date ?? weekDays[0].date;
+
+  useEffect(() => {
+    selectedDayRef.current?.scrollIntoView({
+      behavior: "smooth",
+      block: "nearest",
+      inline: "center",
+    });
+  }, [selectedIndex, weekStart]);
 
   // Fetch bookings + availability blocks for the visible week (skip in demo mode).
   useEffect(() => {
@@ -304,21 +309,17 @@ export default function SchedulePage() {
 
     const blockItems: ScheduleItem[] = blocks
       .filter((blk) => {
-        const d = new Date(blk.startAt);
-        const y = d.getFullYear();
-        const m = String(d.getMonth() + 1).padStart(2, "0");
-        const day = String(d.getDate()).padStart(2, "0");
-        return `${y}-${m}-${day}` === targetIso;
+        return businessDateString(new Date(blk.startAt)) === targetIso;
       })
       .map((blk) => {
         const start = new Date(blk.startAt);
         const end = new Date(blk.endAt);
         const mins = Math.max(0, Math.round((end.getTime() - start.getTime()) / 60000));
-        const h = start.getHours();
-        const m = start.getMinutes();
-        const ampm = h >= 12 ? "PM" : "AM";
-        const h12 = h % 12 === 0 ? 12 : h % 12;
-        const timeLabel = m === 0 ? `${h12}:00 ${ampm}` : `${h12}:${String(m).padStart(2, "0")} ${ampm}`;
+        const timeLabel = new Intl.DateTimeFormat("en-US", {
+          timeZone: BUSINESS_TIME_ZONE,
+          hour: "numeric",
+          minute: "2-digit",
+        }).format(start);
         return {
           time: timeLabel,
           label: blk.reason || "Blocked",
@@ -362,22 +363,22 @@ export default function SchedulePage() {
   const headerLabel = isDemo ? "March 30 – April 5, 2026" : formatRange(weekStart);
 
   return (
-    <div className="px-5 pt-14 lg:pt-8 pb-24">
+    <div className="min-w-0 overflow-x-hidden px-5 pt-14 pb-24 lg:pt-8">
 
       {/* ── Header ── */}
-      <div className="mb-6 flex items-center justify-between">
+      <div className="mb-6 flex flex-col gap-3 min-[380px]:flex-row min-[380px]:items-center min-[380px]:justify-between">
         <div>
           <p className="text-[11px] font-semibold uppercase tracking-[1.6px] text-text-tertiary">Week View</p>
           <h1 className="mt-0.5 text-[26px] font-bold text-text-primary leading-tight">Schedule</h1>
         </div>
-        <div className="flex gap-2">
-          <Link href="/schedule/new?mode=block">
-            <Button variant="outline" size="sm" icon={<Lock size={13} />}>
+        <div className="flex w-full gap-2 min-[380px]:w-auto">
+          <Link href="/schedule/new?mode=block" className="min-w-0 flex-1 min-[380px]:flex-none">
+            <Button className="w-full min-[380px]:w-auto" variant="outline" size="sm" icon={<Lock size={13} />}>
               Block Time
             </Button>
           </Link>
-          <Link href="/schedule/new">
-            <Button variant="primary" size="sm" icon={<Plus size={13} />}>
+          <Link href="/schedule/new" className="min-w-0 flex-1 min-[380px]:flex-none">
+            <Button className="w-full min-[380px]:w-auto" variant="primary" size="sm" icon={<Plus size={13} />}>
               Add Job
             </Button>
           </Link>
@@ -388,67 +389,77 @@ export default function SchedulePage() {
       <div className="mb-3 flex items-center justify-between">
         <button
           onClick={() => shiftWeek(-7)}
-          className="flex h-8 w-8 items-center justify-center rounded-full bg-surface border border-border shadow-[0_1px_2px_rgba(0,0,0,0.06)] active:bg-surface-secondary transition-colors"
+          aria-label="Previous week"
+          className="flex h-11 w-11 items-center justify-center rounded-full bg-surface border border-border shadow-[0_1px_2px_rgba(0,0,0,0.06)] active:bg-surface-secondary transition-colors"
         >
           <ChevronLeft size={16} className="text-text-secondary" />
         </button>
-        <div className="flex items-center gap-1.5">
-          <CalendarDays size={13} className="text-text-tertiary" />
-          <span className="text-[13px] font-semibold text-text-primary">{headerLabel}</span>
+        <div className="mx-2 flex min-w-0 flex-1 items-center justify-center gap-1.5">
+          <CalendarDays size={13} className="shrink-0 text-text-tertiary" />
+          <span className="truncate text-center text-[13px] font-semibold text-text-primary" title={headerLabel}>
+            {headerLabel}
+          </span>
         </div>
         <button
           onClick={() => shiftWeek(7)}
-          className="flex h-8 w-8 items-center justify-center rounded-full bg-surface border border-border shadow-[0_1px_2px_rgba(0,0,0,0.06)] active:bg-surface-secondary transition-colors"
+          aria-label="Next week"
+          className="flex h-11 w-11 items-center justify-center rounded-full bg-surface border border-border shadow-[0_1px_2px_rgba(0,0,0,0.06)] active:bg-surface-secondary transition-colors"
         >
           <ChevronRight size={16} className="text-text-secondary" />
         </button>
       </div>
 
       {/* ── Week Strip ── */}
-      <div className="mb-5 flex gap-1.5">
-        {weekDays.map((d, idx) => {
-          const isSelected = selectedIndex === idx;
-          const hasJobs = d.jobs > 0;
-          return (
-            <button
-              key={`${d.month}-${d.date}`}
-              onClick={() => setSelectedIndex(idx)}
-              className={`flex flex-1 flex-col items-center gap-0.5 rounded-xl py-2.5 transition-all duration-150 ${
-                isSelected
-                  ? "bg-primary shadow-[0_2px_8px_rgba(79,149,152,0.30)]"
-                  : hasJobs
-                  ? "bg-surface border border-border shadow-[0_1px_4px_rgba(0,0,0,0.06)] active:bg-surface-secondary"
-                  : "bg-surface-secondary active:bg-surface"
-              }`}
-            >
-              <span
-                className={`text-[9px] font-semibold uppercase tracking-wider ${
-                  isSelected ? "text-white/70" : "text-text-tertiary"
+      <div className="mb-5 w-full max-w-full overflow-x-auto overscroll-x-contain pb-1 no-scrollbar">
+        <div className="flex min-w-max gap-1.5" role="group" aria-label="Select schedule day">
+          {weekDays.map((d, idx) => {
+            const isSelected = selectedIndex === idx;
+            const hasJobs = d.jobs > 0;
+            return (
+              <button
+                ref={isSelected ? selectedDayRef : undefined}
+                type="button"
+                aria-pressed={isSelected}
+                aria-label={`${d.day}, ${d.month} ${d.date}`}
+                key={`${d.month}-${d.date}`}
+                onClick={() => setSelectedIndex(idx)}
+                className={`flex min-h-11 w-11 shrink-0 flex-col items-center justify-center gap-0.5 rounded-xl py-2 transition-all duration-150 ${
+                  isSelected
+                    ? "bg-primary shadow-[0_2px_8px_rgba(79,149,152,0.30)]"
+                    : hasJobs
+                    ? "bg-surface border border-border shadow-[0_1px_4px_rgba(0,0,0,0.06)] active:bg-surface-secondary"
+                    : "bg-surface-secondary active:bg-surface"
                 }`}
               >
-                {d.day}
-              </span>
-              <span
-                className={`text-[16px] font-bold leading-none ${
-                  isSelected ? "text-white" : hasJobs ? "text-text-primary" : "text-text-tertiary"
-                }`}
-              >
-                {d.date}
-              </span>
-              {hasJobs ? (
                 <span
-                  className={`mt-0.5 text-[8px] font-semibold ${
-                    isSelected ? "text-white/60" : "text-text-tertiary"
+                  className={`text-[9px] font-semibold uppercase tracking-wider ${
+                    isSelected ? "text-white/70" : "text-text-tertiary"
                   }`}
                 >
-                  {d.jobs} job{d.jobs !== 1 ? "s" : ""}
+                  {d.day}
                 </span>
-              ) : (
-                <span className="mt-0.5 text-[8px] text-text-tertiary/40">-</span>
-              )}
-            </button>
-          );
-        })}
+                <span
+                  className={`text-[16px] font-bold leading-none ${
+                    isSelected ? "text-white" : hasJobs ? "text-text-primary" : "text-text-tertiary"
+                  }`}
+                >
+                  {d.date}
+                </span>
+                {hasJobs ? (
+                  <span
+                    className={`mt-0.5 text-[8px] font-semibold ${
+                      isSelected ? "text-white/60" : "text-text-tertiary"
+                    }`}
+                  >
+                    {d.jobs} job{d.jobs !== 1 ? "s" : ""}
+                  </span>
+                ) : (
+                  <span className="mt-0.5 text-[8px] text-text-tertiary/40">-</span>
+                )}
+              </button>
+            );
+          })}
+        </div>
       </div>
 
       {/* ── Day Summary (only when jobs exist) ── */}
@@ -491,9 +502,9 @@ export default function SchedulePage() {
 
       {/* ── Timeline ── */}
       {!loading && items.length > 0 && (
-        <div className="space-y-0">
+        <div className="min-w-0 space-y-0">
           {items.map((item, i) => (
-            <div key={i} className="flex gap-3">
+            <div key={i} className="flex min-w-0 gap-3">
 
               {/* Time column */}
               <div className="w-[60px] shrink-0 pt-4 text-right">
@@ -501,7 +512,7 @@ export default function SchedulePage() {
               </div>
 
               {/* Spine + dot */}
-              <div className="flex flex-col items-center">
+              <div className="flex shrink-0 flex-col items-center">
                 {/* Top connector (hidden for first item) */}
                 <div
                   className={`w-px ${i === 0 ? "h-4 opacity-0" : "h-4"} bg-border`}
@@ -521,17 +532,20 @@ export default function SchedulePage() {
               </div>
 
               {/* Card */}
-              <div className="flex-1 pb-2 pt-2.5">
+              <div className="min-w-0 flex-1 pb-2 pt-2.5">
                 {item.type === "job" && (item.bookingId || item.homeId) ? (
-                  <Link href={item.bookingId ? `/jobs/${item.bookingId}` : `/homes/${item.homeId}`}>
+                  <Link
+                    href={item.bookingId ? `/jobs/${item.bookingId}` : `/homes/${item.homeId}`}
+                    className="block min-w-0 max-w-full"
+                  >
                     <Card
                       padding="sm"
-                      className="transition-all active:scale-[0.985] hover:shadow-[0_4px_12px_rgba(0,0,0,0.10)]"
+                      className="min-w-0 max-w-full overflow-hidden transition-all active:scale-[0.985] hover:shadow-[0_4px_12px_rgba(0,0,0,0.10)]"
                     >
-                      <div className="flex items-start justify-between gap-2">
+                      <div className="flex min-w-0 items-start justify-between gap-2">
                         <div className="flex-1 min-w-0">
-                          <div className="flex items-center gap-2 flex-wrap">
-                            <span className="text-[14px] font-semibold text-text-primary">{item.label}</span>
+                          <div className="flex min-w-0 flex-wrap items-center gap-2">
+                            <span className="min-w-0 break-words text-[14px] font-semibold text-text-primary">{item.label}</span>
                             <StatusBadge status={item.status!} />
                           </div>
                           {item.address && (
@@ -558,13 +572,13 @@ export default function SchedulePage() {
                 ) : (
                   // Block card - dashed border, flat style
                   <div
-                    className={`rounded-xl border border-dashed px-3.5 py-3 ${
+                    className={`min-w-0 max-w-full overflow-hidden rounded-xl border border-dashed px-3.5 py-3 ${
                       item.label === "Lunch Break" || item.label === "Lunch"
                         ? "border-border bg-surface-secondary"
                         : "border-border bg-surface"
                     } shadow-[0_1px_4px_rgba(0,0,0,0.04)]`}
                   >
-                    <div className="flex items-center justify-between gap-2">
+                    <div className="flex min-w-0 items-center justify-between gap-2">
                       <div className="flex-1 min-w-0">
                         <span className="text-[13px] font-semibold text-text-secondary">{item.label}</span>
                         {item.details ? (
@@ -579,7 +593,7 @@ export default function SchedulePage() {
                             onClick={() => deleteBlock(item.blockId!)}
                             disabled={deletingBlockId === item.blockId}
                             aria-label={`Remove ${item.label} block`}
-                            className="flex h-8 w-8 items-center justify-center rounded-lg text-text-tertiary hover:bg-error-light hover:text-error disabled:opacity-50"
+                            className="flex h-11 w-11 items-center justify-center rounded-lg text-text-tertiary hover:bg-error-light hover:text-error disabled:opacity-50"
                           >
                             <Trash2 size={13} />
                           </button>

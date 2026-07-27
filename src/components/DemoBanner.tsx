@@ -43,7 +43,7 @@ export default function DemoBanner() {
   }
 
   return (
-    <div className="sticky top-0 z-50 w-full bg-primary text-white shadow-md">
+    <div className="sticky top-0 z-50 w-full bg-primary pt-[env(safe-area-inset-top)] text-white shadow-md">
       <div className="mx-auto flex max-w-7xl items-center justify-between gap-3 px-4 py-2">
         <div className="flex items-center gap-2 text-[13px] font-medium min-w-0">
           <Eye size={15} className="shrink-0" />
@@ -55,13 +55,13 @@ export default function DemoBanner() {
         <div className="flex items-center gap-2 shrink-0">
           <button
             onClick={() => router.push("/demo")}
-            className="hidden sm:inline-block rounded-md px-2.5 py-1 text-[12px] font-semibold text-white/90 hover:text-white hover:bg-white/10 transition"
+            className="hidden min-h-11 rounded-md px-2.5 py-1 text-[12px] font-semibold text-white/90 hover:text-white hover:bg-white/10 transition sm:inline-block"
           >
             Switch view
           </button>
           <button
             onClick={exitDemo}
-            className="flex items-center gap-1.5 rounded-md bg-white/15 hover:bg-white/25 px-3 py-1 text-[12px] font-semibold transition"
+            className="flex min-h-11 items-center gap-1.5 rounded-md bg-white/15 hover:bg-white/25 px-3 py-1 text-[12px] font-semibold transition"
           >
             <X size={13} />
             Exit demo

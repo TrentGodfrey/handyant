@@ -23,6 +23,11 @@ import {
 import { useDemoMode } from "@/lib/useDemoMode";
 import { BOOKING_SLOT_STARTS, VISIT_BLOCK_OPTIONS, visitDurationMinutes } from "@/lib/booking-slots";
 import { DEMO_CUSTOMERS } from "@/lib/demoData";
+import {
+  businessDateString,
+  businessDateTimeToInstant,
+} from "@/lib/booking-policy";
+import { bookingDateToLocalDate } from "@/lib/booking-time";
 
 type Mode = "job" | "block";
 
@@ -32,6 +37,7 @@ interface Client {
   email: string | null;
   phone: string | null;
   primaryHome: { id: string; address: string; city: string | null } | null;
+  homes: { id: string; address: string; city: string | null; state?: string | null; zip?: string | null }[];
 }
 
 interface ClientView extends Client {
@@ -45,6 +51,7 @@ const DEMO_CLIENTS: ClientView[] = DEMO_CUSTOMERS.map((c) => ({
   email: c.email,
   phone: c.phone,
   primaryHome: null,
+  homes: [],
   address: `${c.address}, ${c.city}`,
   initials: c.initials,
 }));
@@ -96,8 +103,8 @@ function startOfWeekSunday(d: Date): Date {
   return out;
 }
 
-function buildLiveCalendar(): CalendarDay[] {
-  const start = startOfWeekSunday(new Date());
+function buildLiveCalendar(today: Date): CalendarDay[] {
+  const start = startOfWeekSunday(today);
   const result: CalendarDay[] = [];
   for (let i = 0; i < 35; i++) {
     const d = new Date(start);
@@ -165,17 +172,19 @@ function ScheduleNewPageInner() {
   const [submitError, setSubmitError] = useState<string | null>(null);
 
   // Calendar: demo mode uses fixed March 2026 grid; live mode anchors to today.
-  // Build inside the component so date math uses the current `new Date()`.
-  const calendarDays: CalendarDay[] = isDemo ? DEMO_CALENDAR : buildLiveCalendar();
-  const calendarAnchor: Date = isDemo ? DEMO_ANCHOR : startOfWeekSunday(new Date());
+  // Build inside the component so "today" follows MCQ's Chicago business day,
+  // even when the browser happens to be in another timezone.
+  const businessToday = bookingDateToLocalDate(businessDateString());
+  const calendarDays: CalendarDay[] = isDemo ? DEMO_CALENDAR : buildLiveCalendar(businessToday);
+  const calendarAnchor: Date = isDemo ? DEMO_ANCHOR : startOfWeekSunday(businessToday);
   const calendarOffset: number = calendarAnchor.getDay();
-  const todayMidnight = new Date();
-  todayMidnight.setHours(0, 0, 0, 0);
+  const todayMidnight = businessToday;
 
   // Job mode
   const [clients, setClients] = useState<ClientView[]>([]);
   const [clientSearch, setClientSearch] = useState("");
   const [selectedClient, setSelectedClient] = useState<ClientView | null>(null);
+  const [selectedHomeId, setSelectedHomeId] = useState<string | null>(null);
   const [showClientDropdown, setShowClientDropdown] = useState(false);
   const [selectedDate, setSelectedDate] = useState<Date | null>(null);
   const [timeSlot, setTimeSlot] = useState("8:00 AM");
@@ -242,12 +251,12 @@ function ScheduleNewPageInner() {
 
   useEffect(() => {
     setSelectedTodoIds([]);
-    if (!selectedClient?.primaryHome?.id || isDemo) {
+    if (!selectedHomeId || isDemo) {
       setAvailableTodos([]);
       return;
     }
     let cancelled = false;
-    fetch(`/api/homes/${selectedClient.primaryHome.id}/todos`)
+    fetch(`/api/homes/${selectedHomeId}/todos`)
       .then((response) => (response.ok ? response.json() : []))
       .then((todos) => {
         if (cancelled) return;
@@ -273,7 +282,12 @@ function ScheduleNewPageInner() {
       })
       .catch(() => !cancelled && setAvailableTodos([]));
     return () => { cancelled = true; };
-  }, [selectedClient, isDemo]);
+  }, [selectedHomeId, isDemo]);
+
+  const selectedHome =
+    selectedClient?.homes.find((home) => home.id === selectedHomeId) ??
+    selectedClient?.primaryHome ??
+    null;
 
   useEffect(() => {
     if (!selectedDate || isDemo) {
@@ -336,14 +350,12 @@ function ScheduleNewPageInner() {
     setSubmitError(null);
     try {
       const dateIso = dateToISODate(blockDate);
-      const startIso = `${dateIso}T${timeToHHMM(blockStart)}:00`;
-      const endIso = `${dateIso}T${timeToHHMM(blockEnd)}:00`;
-      const startMs = new Date(startIso).getTime();
-      const endMs = new Date(endIso).getTime();
-      if (Number.isNaN(startMs) || Number.isNaN(endMs)) {
+      const startAt = businessDateTimeToInstant(dateIso, timeToHHMM(blockStart));
+      const endAt = businessDateTimeToInstant(dateIso, timeToHHMM(blockEnd));
+      if (!startAt || !endAt) {
         throw new Error("Invalid time selection.");
       }
-      if (endMs <= startMs) {
+      if (endAt.getTime() <= startAt.getTime()) {
         throw new Error("End time must be after start time.");
       }
       const reasonParts = [blockReason ?? "", blockNotes].filter(Boolean);
@@ -351,8 +363,8 @@ function ScheduleNewPageInner() {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          startAt: new Date(startIso).toISOString(),
-          endAt: new Date(endIso).toISOString(),
+          startAt: startAt.toISOString(),
+          endAt: endAt.toISOString(),
           reason: reasonParts.join(" - ") || null,
         }),
       });
@@ -369,8 +381,8 @@ function ScheduleNewPageInner() {
   }
 
   async function handleSubmitJob() {
-    if (!selectedClient || !selectedDate || !timeSlot) {
-      setSubmitError("Please pick a client, date, and available time.");
+    if (!selectedClient || !selectedDate || !timeSlot || (!isDemo && !selectedHome)) {
+      setSubmitError("Please pick a client, home, date, and available time.");
       return;
     }
     if (isDemo) {
@@ -394,7 +406,7 @@ function ScheduleNewPageInner() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           customerId: selectedClient.id,
-          homeId: selectedClient.primaryHome?.id ?? null,
+          homeId: selectedHome?.id ?? null,
           scheduledDate: dateToISODate(selectedDate),
           scheduledTime: timeToHHMM(timeSlot),
           description: description || null,
@@ -454,7 +466,7 @@ function ScheduleNewPageInner() {
       <div className="bg-surface border-b border-border px-5 pt-14 pb-5">
         <Link
           href="/schedule"
-          className="mb-4 inline-flex items-center gap-1.5 text-[13px] font-medium text-text-secondary hover:text-text-primary transition-colors"
+          className="mb-4 inline-flex min-h-11 items-center gap-1.5 text-[13px] font-medium text-text-secondary hover:text-text-primary transition-colors"
         >
           <ChevronLeft size={16} />
           Schedule
@@ -467,7 +479,7 @@ function ScheduleNewPageInner() {
         <div className="flex rounded-xl bg-surface-secondary p-1 gap-1">
           <button
             onClick={() => setMode("job")}
-            className={`flex flex-1 items-center justify-center gap-2 rounded-lg py-2.5 text-[13px] font-semibold transition-all duration-150 ${
+            className={`flex min-h-11 flex-1 items-center justify-center gap-2 rounded-lg py-2.5 text-[13px] font-semibold transition-all duration-150 ${
               mode === "job"
                 ? "bg-primary text-white shadow-[0_2px_8px_rgba(79,149,152,0.25)]"
                 : "text-text-secondary hover:text-text-primary"
@@ -478,7 +490,7 @@ function ScheduleNewPageInner() {
           </button>
           <button
             onClick={() => setMode("block")}
-            className={`flex flex-1 items-center justify-center gap-2 rounded-lg py-2.5 text-[13px] font-semibold transition-all duration-150 ${
+            className={`flex min-h-11 flex-1 items-center justify-center gap-2 rounded-lg py-2.5 text-[13px] font-semibold transition-all duration-150 ${
               mode === "block"
                 ? "bg-text-primary text-white shadow-sm"
                 : "text-text-secondary hover:text-text-primary"
@@ -506,7 +518,7 @@ function ScheduleNewPageInner() {
               <div className="relative">
                 {selectedClient ? (
                   <button
-                    onClick={() => { setSelectedClient(null); setClientSearch(""); }}
+                    onClick={() => { setSelectedClient(null); setSelectedHomeId(null); setClientSearch(""); }}
                     className="w-full flex items-center gap-3 rounded-xl border border-primary bg-primary-50 px-4 py-3 text-left"
                   >
                     <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-primary">
@@ -542,7 +554,12 @@ function ScheduleNewPageInner() {
                         <button
                           key={c.id}
                           className="flex w-full items-center gap-3 px-4 py-3 text-left hover:bg-surface-secondary transition-colors border-b border-border last:border-0"
-                          onMouseDown={() => { setSelectedClient(c); setShowClientDropdown(false); setClientSearch(""); }}
+                          onMouseDown={() => {
+                            setSelectedClient(c);
+                            setSelectedHomeId(c.homes[0]?.id ?? c.primaryHome?.id ?? null);
+                            setShowClientDropdown(false);
+                            setClientSearch("");
+                          }}
                         >
                           <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-primary-50">
                             <span className="text-[12px] font-bold text-primary">{c.initials}</span>
@@ -557,7 +574,7 @@ function ScheduleNewPageInner() {
                     </div>
                     <Link
                       href="/homes/new"
-                      className="flex items-center gap-2 px-4 py-3 border-t border-border bg-primary-50 text-[13px] font-semibold text-primary hover:bg-primary-100 transition-colors"
+                      className="flex min-h-11 items-center gap-2 border-t border-border bg-primary-50 px-4 py-3 text-[13px] font-semibold text-primary hover:bg-primary-100 transition-colors"
                     >
                       <UserPlus size={15} />
                       Add New Client
@@ -566,6 +583,35 @@ function ScheduleNewPageInner() {
                 )}
               </div>
             </div>
+
+            {selectedClient && !isDemo && (
+              <div>
+                <label className={labelCls}>Home</label>
+                {selectedClient.homes.length > 0 ? (
+                  <select
+                    value={selectedHomeId ?? ""}
+                    onChange={(event) => {
+                      setSelectedHomeId(event.target.value || null);
+                      setSelectedTodoIds([]);
+                    }}
+                    className={inputCls}
+                  >
+                    {selectedClient.homes.map((home) => (
+                      <option key={home.id} value={home.id}>
+                        {[home.address, home.city, home.state, home.zip].filter(Boolean).join(", ")}
+                      </option>
+                    ))}
+                  </select>
+                ) : (
+                  <div className="rounded-xl border border-warning/30 bg-warning-light px-4 py-3">
+                    <p className="text-[13px] font-semibold text-text-primary">This customer has no home on file.</p>
+                    <Link href="/homes/new" className="mt-1 inline-flex min-h-11 items-center text-[12px] font-semibold text-primary">
+                      Add their home before scheduling
+                    </Link>
+                  </div>
+                )}
+              </div>
+            )}
 
             {/* Calendar */}
             <div>
@@ -599,7 +645,7 @@ function ScheduleNewPageInner() {
                         key={day.date.toDateString()}
                         onClick={() => !isPast && setSelectedDate(day.date)}
                         disabled={isPast}
-                        className={`aspect-square rounded-xl text-[13px] font-semibold transition-all duration-150 flex flex-col items-center justify-center ${
+                        className={`aspect-square min-h-11 rounded-xl text-[13px] font-semibold transition-all duration-150 flex flex-col items-center justify-center ${
                           isPast
                             ? "text-text-tertiary/40 cursor-not-allowed"
                             : isSelected
@@ -649,7 +695,7 @@ function ScheduleNewPageInner() {
                         <button
                           key={t}
                           disabled={!availableTimes.has(t)}
-                          className={`flex w-full items-center justify-between px-4 py-2.5 text-[14px] transition-colors border-b border-border last:border-0 ${
+                          className={`flex min-h-11 w-full items-center justify-between px-4 py-2.5 text-[14px] transition-colors border-b border-border last:border-0 ${
                             timeSlot === t
                               ? "bg-primary-50 text-primary font-semibold"
                               : availableTimes.has(t)
@@ -716,7 +762,7 @@ function ScheduleNewPageInner() {
                         onClick={() => setSelectedTodoIds((current) =>
                           selected ? current.filter((id) => id !== todo.id) : [...current, todo.id]
                         )}
-                        className={`flex w-full items-center gap-3 rounded-lg border px-3 py-2.5 text-left ${
+                        className={`flex min-h-11 w-full items-center gap-3 rounded-lg border px-3 py-2.5 text-left ${
                           selected ? "border-primary/30 bg-primary-50" : "border-transparent bg-surface-secondary"
                         } ${atLimit ? "opacity-50" : ""}`}
                       >
@@ -767,16 +813,23 @@ function ScheduleNewPageInner() {
                   </span>
                 </label>
                 <button
+                  type="button"
+                  aria-label={hasParts ? "Parts are needed" : "No parts needed"}
+                  aria-pressed={hasParts}
                   onClick={() => setHasParts((v) => !v)}
-                  className={`relative h-6 w-11 rounded-full transition-colors duration-200 ${
-                    hasParts ? "bg-primary" : "bg-border"
-                  }`}
+                  className="flex h-11 w-11 items-center"
                 >
                   <span
-                    className={`absolute top-0.5 h-5 w-5 rounded-full bg-white shadow-sm transition-transform duration-200 ${
-                      hasParts ? "translate-x-5" : "translate-x-0.5"
+                    className={`relative h-6 w-11 rounded-full transition-colors duration-200 ${
+                      hasParts ? "bg-primary" : "bg-border"
                     }`}
-                  />
+                  >
+                    <span
+                      className={`absolute top-0.5 h-5 w-5 rounded-full bg-white shadow-sm transition-transform duration-200 ${
+                        hasParts ? "translate-x-5" : "translate-x-0.5"
+                      }`}
+                    />
+                  </span>
                 </button>
               </div>
               {hasParts && (
@@ -859,7 +912,7 @@ function ScheduleNewPageInner() {
                         key={day.date.toDateString()}
                         onClick={() => !isPast && setBlockDate(day.date)}
                         disabled={isPast}
-                        className={`aspect-square rounded-xl text-[13px] font-semibold transition-all duration-150 flex flex-col items-center justify-center ${
+                        className={`aspect-square min-h-11 rounded-xl text-[13px] font-semibold transition-all duration-150 flex flex-col items-center justify-center ${
                           isPast
                             ? "text-text-tertiary/40 cursor-not-allowed"
                             : isSelected
@@ -910,7 +963,7 @@ function ScheduleNewPageInner() {
                         {TIME_SLOTS.map((t) => (
                           <button
                             key={t}
-                            className={`flex w-full items-center justify-between px-3 py-2.5 text-[13px] border-b border-border last:border-0 ${
+                            className={`flex min-h-11 w-full items-center justify-between px-3 py-2.5 text-[13px] border-b border-border last:border-0 ${
                               blockStart === t ? "bg-primary-50 text-primary font-semibold" : "text-text-primary hover:bg-surface-secondary"
                             }`}
                             onClick={() => { setBlockStart(t); setBlockShowStartDropdown(false); }}
@@ -940,7 +993,7 @@ function ScheduleNewPageInner() {
                         {TIME_SLOTS.map((t) => (
                           <button
                             key={t}
-                            className={`flex w-full items-center justify-between px-3 py-2.5 text-[13px] border-b border-border last:border-0 ${
+                            className={`flex min-h-11 w-full items-center justify-between px-3 py-2.5 text-[13px] border-b border-border last:border-0 ${
                               blockEnd === t ? "bg-primary-50 text-primary font-semibold" : "text-text-primary hover:bg-surface-secondary"
                             }`}
                             onClick={() => { setBlockEnd(t); setBlockShowEndDropdown(false); }}
@@ -964,7 +1017,7 @@ function ScheduleNewPageInner() {
                   <button
                     key={r}
                     onClick={() => setBlockReason(blockReason === r ? null : r)}
-                    className={`rounded-full border-2 px-4 py-1.5 text-[13px] font-semibold transition-all duration-150 ${
+                    className={`min-h-11 rounded-full border-2 px-4 py-1.5 text-[13px] font-semibold transition-all duration-150 ${
                       blockReason === r
                         ? "border-text-primary bg-text-primary text-white"
                         : "border-border bg-surface text-text-secondary hover:border-text-secondary/30"

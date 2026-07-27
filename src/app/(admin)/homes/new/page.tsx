@@ -375,8 +375,10 @@ export default function AddNewClientPage() {
                   <label className={labelCls}>{label}</label>
                   <div className="flex items-center gap-2 rounded-xl border border-border bg-surface px-3 py-2.5">
                     <button
+                      type="button"
                       onClick={() => set(key, Math.max(1, (form[key] as number) - 1))}
-                      className="flex h-7 w-7 items-center justify-center rounded-lg bg-surface-secondary active:bg-border transition-colors"
+                      className="flex h-11 w-11 items-center justify-center rounded-lg bg-surface-secondary active:bg-border transition-colors"
+                      aria-label={`Decrease ${label.toLowerCase()}`}
                     >
                       <Minus size={14} className="text-text-secondary" />
                     </button>
@@ -384,8 +386,10 @@ export default function AddNewClientPage() {
                       {form[key]}
                     </span>
                     <button
+                      type="button"
                       onClick={() => set(key, (form[key] as number) + 1)}
-                      className="flex h-7 w-7 items-center justify-center rounded-lg bg-surface-secondary active:bg-border transition-colors"
+                      className="flex h-11 w-11 items-center justify-center rounded-lg bg-surface-secondary active:bg-border transition-colors"
+                      aria-label={`Increase ${label.toLowerCase()}`}
                     >
                       <Plus size={14} className="text-text-secondary" />
                     </button>

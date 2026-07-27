@@ -41,7 +41,7 @@ export default function Photos({
         <button
           type="button"
           onClick={showAddPhoto ? onCancelAddPhoto : onOpenAddPhoto}
-          className="flex items-center gap-1 text-[12px] font-semibold text-primary active:opacity-70 transition-opacity"
+          className="flex min-h-11 items-center gap-1 px-2 text-[12px] font-semibold text-primary active:opacity-70 transition-opacity"
         >
           {showAddPhoto ? <X size={13} /> : <Plus size={13} />}
           {showAddPhoto ? "Cancel" : "Add Photo"}
@@ -60,7 +60,7 @@ export default function Photos({
               />
               <div className="min-w-0 flex-1">
                 <p className="truncate text-[12px] font-semibold text-text-primary">{newPhotoFileName}</p>
-                <label className="mt-1 inline-flex min-h-9 cursor-pointer items-center text-[12px] font-semibold text-primary">
+                <label className="mt-1 inline-flex min-h-11 cursor-pointer items-center text-[12px] font-semibold text-primary">
                   Choose a different photo
                   <input type="file" accept="image/*" className="sr-only" onChange={selectPhoto} />
                 </label>
@@ -129,7 +129,7 @@ export default function Photos({
                 onClick={() => deletePhoto(photo.id)}
                 disabled={deletingPhotoId === photo.id}
                 aria-label={`Delete ${photo.label || "home photo"}`}
-                className="absolute right-1.5 top-1.5 flex h-9 w-9 items-center justify-center rounded-full bg-black/70 text-white shadow-sm active:bg-black/85 disabled:opacity-60"
+                className="absolute right-1.5 top-1.5 flex h-11 w-11 items-center justify-center rounded-full bg-black/70 text-white shadow-sm active:bg-black/85 disabled:opacity-60"
               >
                 {deletingPhotoId === photo.id
                   ? <Loader2 size={15} className="animate-spin" />

@@ -202,7 +202,7 @@ export function HandymanNotes({
         </h2>
         <button
           onClick={() => setShowAddNote((v) => !v)}
-          className="flex items-center gap-1 text-[12px] font-semibold text-primary active:opacity-70 transition-opacity"
+          className="flex min-h-11 items-center gap-1 px-2 text-[12px] font-semibold text-primary active:opacity-70 transition-opacity"
         >
           {showAddNote ? <X size={13} /> : <Plus size={13} />}
           {showAddNote ? "Cancel" : "Add Note"}
@@ -252,8 +252,10 @@ export function HandymanNotes({
                   </p>
                 </div>
                 <button
+                  type="button"
                   onClick={() => deleteNote(note.id)}
-                  className="shrink-0 flex h-6 w-6 items-center justify-center rounded-full text-text-tertiary active:bg-error-light active:text-error transition-colors"
+                  className="shrink-0 flex h-11 w-11 items-center justify-center rounded-full text-text-tertiary active:bg-error-light active:text-error transition-colors"
+                  aria-label={`Delete note: ${note.title}`}
                   title="Delete note"
                 >
                   <Trash2 size={11} />
@@ -266,4 +268,3 @@ export function HandymanNotes({
     </section>
   );
 }
-

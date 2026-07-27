@@ -10,6 +10,8 @@ export interface SendEmailParams {
   bcc?: string | string[];
   /** Never copy password resets, verification links, or invitations. */
   sensitive?: boolean;
+  /** Stable provider-level key used to make scheduled sends retry-safe. */
+  idempotencyKey?: string;
 }
 
 export interface SendEmailResult {
@@ -18,7 +20,7 @@ export interface SendEmailResult {
   error?: string;
 }
 
-const DEFAULT_FROM = "MCQ Property Care <onboarding@resend.dev>";
+const DEFAULT_FROM = "Anthony at MCQ <anthony@mcqpropertycare.com>";
 
 let cachedClient: Resend | null = null;
 
@@ -48,15 +50,18 @@ export async function sendEmail(params: SendEmailParams): Promise<SendEmailResul
   const bcc = params.sensitive ? undefined : (params.bcc ?? process.env.EMAIL_BCC);
 
   try {
-    const result = await client.emails.send({
-      from,
-      to: params.to,
-      bcc,
-      replyTo,
-      subject: params.subject,
-      html: params.html,
-      text: params.text,
-    });
+    const result = await client.emails.send(
+      {
+        from,
+        to: params.to,
+        bcc,
+        replyTo,
+        subject: params.subject,
+        html: params.html,
+        text: params.text,
+      },
+      params.idempotencyKey ? { idempotencyKey: params.idempotencyKey } : undefined,
+    );
 
     if (result.error) {
       console.error("[email] Resend error", result.error);

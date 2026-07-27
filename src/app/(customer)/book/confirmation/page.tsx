@@ -4,7 +4,7 @@ import { useState, useEffect, Suspense } from "react";
 import Link from "next/link";
 import { useSearchParams } from "next/navigation";
 import {
-  Check, Calendar, MapPin, DollarSign, MessageCircle,
+  Check, XCircle, Calendar, MapPin, MessageCircle,
   Home, ChevronRight, CalendarPlus, Bell, Package, Star,
 } from "lucide-react";
 import Button from "@/components/Button";
@@ -12,6 +12,7 @@ import Card from "@/components/Card";
 import Spinner from "@/components/Spinner";
 import { useDemoMode } from "@/lib/useDemoMode";
 import { bookingDateToLocalDate, bookingTimeParts } from "@/lib/booking-time";
+import { bookingDateAndTimeToInstant } from "@/lib/booking-policy";
 
 const steps = [
   {
@@ -19,8 +20,8 @@ const steps = [
     iconBg: "bg-primary-50",
     iconColor: "text-primary",
     step: "1",
-    title: "Reminder sent 24 hrs before",
-    desc: "You'll get a text and email the morning of your appointment.",
+    title: "Email reminder before your visit",
+    desc: "We'll email you about 24 hours before your appointment.",
   },
   {
     icon: Package,
@@ -46,7 +47,6 @@ interface ApiBooking {
   scheduledDate: string;
   scheduledTime: string;
   description: string | null;
-  estimatedCost: string | number | null;
   durationMinutes: number | null;
   serviceType?: string | null;
   tech: { id: string; name: string; phone: string | null; avatarUrl?: string | null } | null;
@@ -92,9 +92,11 @@ function formatTimeRange(scheduledTime: string, durationMinutes: number | null):
 
 // Build an ICS string for the booking
 function buildIcs(booking: ApiBooking): string {
-  const date = bookingDateToLocalDate(booking.scheduledDate);
-  const { h, m } = parseTimeParts(booking.scheduledTime);
-  const start = new Date(date.getFullYear(), date.getMonth(), date.getDate(), h, m);
+  const start = bookingDateAndTimeToInstant(
+    booking.scheduledDate,
+    booking.scheduledTime,
+  );
+  if (!start) return "";
   const end = new Date(start.getTime() + (booking.durationMinutes ?? 105) * 60 * 1000);
   const fmt = (d: Date) =>
     d.getUTCFullYear().toString().padStart(4, "0") +
@@ -131,6 +133,7 @@ function buildIcs(booking: ApiBooking): string {
 
 function downloadIcs(booking: ApiBooking) {
   const ics = buildIcs(booking);
+  if (!ics) return;
   const blob = new Blob([ics], { type: "text/calendar" });
   const url = URL.createObjectURL(blob);
   const a = document.createElement("a");
@@ -152,7 +155,7 @@ function DemoConfirmation() {
   }
 
   return (
-    <div className="min-h-screen bg-background">
+    <div className="min-h-screen bg-background pb-24 lg:pb-0">
       {/* Animated success hero */}
       <div className="px-5 pt-14 pb-8 flex flex-col items-center">
         <div className="relative mb-6">
@@ -209,18 +212,6 @@ function DemoConfirmation() {
                 <p className="text-[12px] text-text-secondary">Plano, TX 75024</p>
               </div>
             </div>
-            <div className="h-px bg-border" />
-            <div className="flex items-center gap-3">
-              <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-success-light shrink-0"><DollarSign size={16} className="text-success" /></div>
-              <div className="flex-1">
-                <p className="text-[11px] text-text-tertiary">Estimated Cost</p>
-                <div className="flex items-center gap-2">
-                  <p className="text-[14px] font-semibold text-text-primary">$0.00</p>
-                  <span className="rounded-full bg-success/10 px-2 py-0.5 text-[10px] font-semibold text-success">Covered by Pro Plan</span>
-                </div>
-                <p className="text-[12px] text-text-secondary">Parts billed separately if needed</p>
-              </div>
-            </div>
           </div>
         </Card>
 
@@ -232,7 +223,7 @@ function DemoConfirmation() {
             </div>
             <div className="flex-1 min-w-0">
               <p className="text-[15px] font-bold text-text-primary">Anthony will be there</p>
-              <p className="text-[12px] text-text-secondary mt-0.5">Your dedicated tech · 4.9 ★ · 47 jobs</p>
+              <p className="text-[12px] text-text-secondary mt-0.5">Your dedicated MCQ technician</p>
             </div>
             <span className="shrink-0 flex items-center gap-1 rounded-full bg-success px-2.5 py-1 text-[11px] font-bold text-white">
               <Check size={10} strokeWidth={3} />Confirmed
@@ -266,6 +257,7 @@ function DemoConfirmation() {
         </div>
 
         <button
+          type="button"
           onClick={handleAddToCalendar}
           className={`w-full flex items-center justify-between px-5 py-4 rounded-2xl border transition-all active:scale-[0.98] ${
             calendarAdded ? "border-success/30 bg-success-light" : "border-border bg-surface hover:border-primary/30 hover:bg-primary-50/40"
@@ -288,7 +280,15 @@ function DemoConfirmation() {
           <Link href="/home"><Button variant="primary" fullWidth icon={<Home size={16} />}>Back Home</Button></Link>
         </div>
 
-        <p className="text-center text-[11px] text-text-tertiary pb-2">Need to reschedule? Message Anthony or call (972) 555-0100</p>
+        <div className="pb-2 text-center text-[11px] text-text-tertiary">
+          <p>Need to reschedule? Message Anthony or</p>
+          <a
+            href="tel:+12144697795"
+            className="inline-flex min-h-11 items-center rounded-lg px-3 font-semibold text-primary"
+          >
+            (214) 469-7795
+          </a>
+        </div>
       </div>
     </div>
   );
@@ -298,6 +298,7 @@ function DemoConfirmation() {
 function RealConfirmation() {
   const searchParams = useSearchParams();
   const id = searchParams.get("id");
+  const photoUploadFailed = searchParams.get("photoUpload") === "failed";
 
   const [booking, setBooking] = useState<ApiBooking | null>(null);
   const [loading, setLoading] = useState(true);
@@ -369,7 +370,8 @@ function RealConfirmation() {
     booking.home?.zip,
   ].filter(Boolean).join(" ");
   const categoryLabel = booking.categories?.[0]?.category?.name ?? "Service Visit";
-  const cost = booking.estimatedCost == null ? null : Number(booking.estimatedCost);
+  const isPending = booking.status === "pending";
+  const isCancelled = booking.status === "cancelled";
 
   function handleAddToCalendar() {
     if (!booking) return;
@@ -379,20 +381,32 @@ function RealConfirmation() {
   }
 
   return (
-    <div className="min-h-screen bg-background">
+    <div className="min-h-screen bg-background pb-24 lg:pb-0">
       <div className="px-5 pt-14 pb-8 flex flex-col items-center">
         <div className="relative mb-6">
           <div
-            className="flex h-24 w-24 items-center justify-center rounded-full bg-success shadow-[0_4px_24px_rgba(22,163,74,0.3)]"
+            className={`flex h-24 w-24 items-center justify-center rounded-full ${
+              isCancelled
+                ? "bg-error shadow-[0_4px_24px_rgba(220,38,38,0.24)]"
+                : "bg-success shadow-[0_4px_24px_rgba(22,163,74,0.3)]"
+            }`}
             style={{ animation: "scale-in 0.5s cubic-bezier(0.175, 0.885, 0.32, 1.275) forwards" }}
           >
-            <Check size={42} className="text-white" strokeWidth={3} />
+            {isCancelled
+              ? <XCircle size={42} className="text-white" strokeWidth={2.5} />
+              : <Check size={42} className="text-white" strokeWidth={3} />}
           </div>
         </div>
 
-        <h1 className="text-[28px] font-bold text-text-primary text-center">You&apos;re all set!</h1>
+        <h1 className="text-[28px] font-bold text-text-primary text-center">
+          {isCancelled ? "Visit cancelled" : isPending ? "Request received!" : "You’re all set!"}
+        </h1>
         <p className="text-[15px] text-text-secondary text-center mt-2 leading-relaxed max-w-[280px]">
-          Your booking is confirmed. We&apos;ll take it from here.
+          {isCancelled
+            ? "This visit is no longer scheduled. Message Anthony if you need help booking another time."
+            : isPending
+            ? "Anthony will review your requested time and email you when it’s confirmed."
+            : "Your booking is confirmed. We’ll take it from here."}
         </p>
 
         <div className="mt-4 flex items-center gap-2 rounded-full bg-surface border border-border px-4 py-2">
@@ -406,6 +420,14 @@ function RealConfirmation() {
       `}</style>
 
       <div className="px-5 py-5 space-y-5">
+        {photoUploadFailed && (
+          <div className="rounded-xl border border-warning/30 bg-warning-light px-4 py-3">
+            <p className="text-[13px] font-semibold text-text-primary">Your visit was created, but one photo did not upload.</p>
+            <p className="mt-1 text-[12px] text-text-secondary">
+              You can add it to the task or home after returning to the app.
+            </p>
+          </div>
+        )}
         <Card padding="lg">
           <p className="text-[11px] font-semibold uppercase tracking-wider text-text-secondary mb-4">Booking Summary</p>
           <div className="space-y-3.5">
@@ -437,23 +459,27 @@ function RealConfirmation() {
                 {cityLine && <p className="text-[12px] text-text-secondary">{cityLine}</p>}
               </div>
             </div>
-            <div className="h-px bg-border" />
-            <div className="flex items-center gap-3">
-              <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-success-light shrink-0"><DollarSign size={16} className="text-success" /></div>
-              <div className="flex-1">
-                <p className="text-[11px] text-text-tertiary">Estimated Cost</p>
-                <div className="flex items-center gap-2">
-                  <p className="text-[14px] font-semibold text-text-primary">
-                    {cost == null ? "TBD" : `$${cost.toFixed(2)}`}
-                  </p>
-                </div>
-                <p className="text-[12px] text-text-secondary">Parts billed separately if needed</p>
-              </div>
-            </div>
           </div>
         </Card>
 
-        {booking.tech && (
+        {isPending ? (
+          <Card padding="md" className="border border-warning/30 bg-warning-light">
+            <div className="flex items-center gap-3.5">
+              <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-full bg-warning/15">
+                <Calendar size={20} className="text-warning" />
+              </div>
+              <div className="min-w-0 flex-1">
+                <p className="text-[15px] font-bold text-text-primary">Awaiting confirmation</p>
+                <p className="mt-0.5 text-[12px] text-text-secondary">
+                  We&apos;ll email you when Anthony confirms the visit.
+                </p>
+              </div>
+              <span className="shrink-0 rounded-full bg-warning px-2.5 py-1 text-[11px] font-bold text-white">
+                Pending
+              </span>
+            </div>
+          </Card>
+        ) : !isCancelled && booking.tech ? (
           <Card padding="md" className="border border-success/20 bg-success-light">
             <div className="flex items-center gap-3.5">
               <div className="relative shrink-0">
@@ -473,9 +499,9 @@ function RealConfirmation() {
               </span>
             </div>
           </Card>
-        )}
+        ) : null}
 
-        <div>
+        {!isCancelled && <div>
           <p className="text-[11px] font-semibold uppercase tracking-wider text-text-secondary mb-3 px-1">What happens next</p>
           <Card padding="md">
             <div className="space-y-4">
@@ -498,9 +524,10 @@ function RealConfirmation() {
               })}
             </div>
           </Card>
-        </div>
+        </div>}
 
-        <button
+        {!isCancelled && <button
+          type="button"
           onClick={handleAddToCalendar}
           className={`w-full flex items-center justify-between px-5 py-4 rounded-2xl border transition-all active:scale-[0.98] ${
             calendarAdded ? "border-success/30 bg-success-light" : "border-border bg-surface hover:border-primary/30 hover:bg-primary-50/40"
@@ -511,26 +538,46 @@ function RealConfirmation() {
               <CalendarPlus size={18} className={calendarAdded ? "text-success" : "text-primary"} />
             </div>
             <span className={`text-[14px] font-semibold ${calendarAdded ? "text-success" : "text-text-primary"}`}>
-              {calendarAdded ? "Calendar file downloaded" : "Add to Calendar"}
+              {calendarAdded
+                ? "Calendar file downloaded"
+                : isPending
+                  ? "Add Requested Time"
+                  : "Add to Calendar"}
             </span>
           </div>
           {!calendarAdded && <ChevronRight size={16} className="text-text-tertiary" />}
           {calendarAdded && <Check size={16} className="text-success" strokeWidth={2.5} />}
-        </button>
+        </button>}
 
         <div className="grid grid-cols-2 gap-3 pt-1">
           <Link href="/messages"><Button variant="outline" fullWidth icon={<MessageCircle size={16} />}>Messages</Button></Link>
           <Link href="/home"><Button variant="primary" fullWidth icon={<Home size={16} />}>Back Home</Button></Link>
         </div>
 
-        <p className="text-center text-[11px] text-text-tertiary pb-2">
-          Need to reschedule?{" "}
+        <div className="pb-2 text-center text-[11px] text-text-tertiary">
+          <p>
+            {isCancelled
+              ? "Questions about this cancellation?"
+              : isPending
+                ? "Need to change your request?"
+                : "Need to reschedule?"}
+          </p>
           {techPhone ? (
-            <a href={`tel:${techPhone}`} className="underline">Call {techName.split(" ")[0]} at {techPhone}</a>
+            <a
+              href={`tel:${techPhone}`}
+              className="inline-flex min-h-11 items-center rounded-lg px-3 underline"
+            >
+              Call {techName.split(" ")[0]} at {techPhone}
+            </a>
           ) : (
-            <Link href="/messages" className="underline">Message your tech</Link>
+            <Link
+              href="/messages"
+              className="inline-flex min-h-11 items-center rounded-lg px-3 underline"
+            >
+              Message Anthony
+            </Link>
           )}
-        </p>
+        </div>
       </div>
     </div>
   );

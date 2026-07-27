@@ -116,7 +116,7 @@ export const DEMO_TECH: DemoTech = {
   name: "Anthony Bell",
   initials: "AB",
   phone: "(972) 555-0100",
-  email: "anthony@handyant.com",
+  email: "anthony@mcqpropertycare.com",
 };
 
 // Some legacy screens (rate flow) display a different surname for the tech.
@@ -130,7 +130,7 @@ export const DEMO_BOOKINGS: DemoBooking[] = [
     id: "1",
     customerId: "1",
     date: "Today",
-    time: "9:00 AM",
+    time: "8:00 AM",
     durationMinutes: 105,
     status: "confirmed",
     tasks: ["Replace kitchen faucet", "Fix garage door sensor"],
@@ -140,7 +140,7 @@ export const DEMO_BOOKINGS: DemoBooking[] = [
     id: "2",
     customerId: "2",
     date: "Today",
-    time: "11:30 AM",
+    time: "10:00 AM",
     durationMinutes: 105,
     status: "confirmed",
     tasks: ["Install smart thermostat", "Replace 3 outlets"],

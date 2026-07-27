@@ -1,6 +1,6 @@
 import { NextRequest } from "next/server";
 import { prisma } from "@/lib/prisma";
-import { requireTech, unauthorized, notFound, badRequest } from "@/lib/session";
+import { requireAdmin, unauthorized, notFound, badRequest } from "@/lib/session";
 import {
   createHomeInviteToken,
   hashHomeInviteToken,
@@ -13,7 +13,7 @@ export async function POST(
   _req: NextRequest,
   ctx: { params: Promise<{ id: string }> },
 ) {
-  const tech = await requireTech();
+  const tech = await requireAdmin();
   if (!tech) return unauthorized();
   const { id } = await ctx.params;
 

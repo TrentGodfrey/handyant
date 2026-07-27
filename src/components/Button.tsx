@@ -7,13 +7,14 @@ interface ButtonProps {
   fullWidth?: boolean;
   disabled?: boolean;
   onClick?: () => void;
+  type?: "button" | "submit" | "reset";
   className?: string;
   icon?: ReactNode;
 }
 
 export default function Button({
   children, variant = "primary", size = "md", fullWidth = false,
-  disabled = false, onClick, className = "", icon,
+  disabled = false, onClick, type, className = "", icon,
 }: ButtonProps) {
   const variants = {
     primary: "bg-primary text-white hover:bg-primary-dark active:bg-primary-dark shadow-sm",
@@ -23,13 +24,14 @@ export default function Button({
     danger: "bg-error text-white hover:bg-red-700 active:bg-red-800 shadow-sm",
   };
   const sizes = {
-    sm: "px-3.5 py-2 text-[13px] rounded-lg gap-1.5",
-    md: "px-5 py-2.5 text-[14px] rounded-xl gap-2",
-    lg: "px-6 py-3.5 text-[15px] rounded-xl gap-2",
+    sm: "min-h-11 px-3.5 py-2 text-[13px] rounded-lg gap-1.5",
+    md: "min-h-11 px-5 py-2.5 text-[14px] rounded-xl gap-2",
+    lg: "min-h-12 px-6 py-3.5 text-[15px] rounded-xl gap-2",
   };
 
   return (
     <button
+      type={type}
       onClick={onClick}
       disabled={disabled}
       className={`inline-flex items-center justify-center font-semibold transition-all duration-150 ${variants[variant]} ${sizes[size]} ${

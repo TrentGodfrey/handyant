@@ -46,6 +46,8 @@ export default function HomeProfilePage() {
 function RealHomeProfile() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [homes, setHomes] = useState<Array<{ id: string; address: string; city?: string | null }>>([]);
+  const [selectedHomeId, setSelectedHomeId] = useState<string | null>(null);
   const [home, setHome] = useState<HomeFull | null>(null);
   const [hasNoHome, setHasNoHome] = useState(false);
 
@@ -101,14 +103,20 @@ function RealHomeProfile() {
     try {
       const homesRes = await fetch("/api/homes");
       if (!homesRes.ok) throw new Error("Failed to load homes");
-      const homes = (await homesRes.json()) as { id: string }[];
-      if (!Array.isArray(homes) || homes.length === 0) {
+      const nextHomes = (await homesRes.json()) as Array<{ id: string; address: string; city?: string | null }>;
+      if (!Array.isArray(nextHomes) || nextHomes.length === 0) {
+        setHomes([]);
+        setSelectedHomeId(null);
         setHome(null);
         setHasNoHome(true);
         return;
       }
+      setHomes(nextHomes);
       setHasNoHome(false);
-      const homeId = homes[0].id;
+      const homeId = nextHomes.some((item) => item.id === selectedHomeId)
+        ? selectedHomeId!
+        : nextHomes[0].id;
+      if (homeId !== selectedHomeId) setSelectedHomeId(homeId);
       const detailRes = await fetch(`/api/homes/${homeId}`);
       if (!detailRes.ok) throw new Error("Failed to load home detail");
       const detail = (await detailRes.json()) as HomeFull;
@@ -129,7 +137,7 @@ function RealHomeProfile() {
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [selectedHomeId]);
 
   useEffect(() => {
     refresh();
@@ -360,7 +368,7 @@ function RealHomeProfile() {
   if (error) {
     return (
       <div className="min-h-screen bg-background pb-28 px-5 pt-14">
-        <Link href="/account" className="mb-4 inline-flex items-center gap-1.5 text-[13px] font-medium text-text-secondary">
+        <Link href="/account" className="mb-4 inline-flex min-h-11 items-center gap-1.5 text-[13px] font-medium text-text-secondary">
           <ChevronLeft size={16} />
           Account
         </Link>
@@ -405,6 +413,26 @@ function RealHomeProfile() {
   return (
     <div className="min-h-screen bg-background pb-[calc(7rem+env(safe-area-inset-bottom))]">
       <input ref={photoInputRef} type="file" accept="image/*" className="hidden" onChange={handlePhotoFile} />
+
+      {homes.length > 1 && (
+        <div className="border-b border-border bg-surface px-4 pb-3 pt-[calc(0.75rem+env(safe-area-inset-top))] sm:px-6">
+          <label htmlFor="home-profile-selector" className="mb-1.5 block text-[12px] font-semibold text-text-secondary">
+            Home
+          </label>
+          <select
+            id="home-profile-selector"
+            value={selectedHomeId ?? ""}
+            onChange={(event) => setSelectedHomeId(event.target.value)}
+            className="min-h-11 w-full rounded-xl border border-border bg-surface px-3 text-[14px] font-semibold text-text-primary"
+          >
+            {homes.map((item) => (
+              <option key={item.id} value={item.id}>
+                {item.address}{item.city ? `, ${item.city}` : ""}
+              </option>
+            ))}
+          </select>
+        </div>
+      )}
 
       <HomeHeader
         home={home}

@@ -1,7 +1,7 @@
 import { NextRequest } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { clampVisitsUsed, isMembershipPlan } from "@/lib/subscription-usage";
-import { badRequest, notFound, requireTech, unauthorized } from "@/lib/session";
+import { badRequest, notFound, requireAdmin, unauthorized } from "@/lib/session";
 import { sendActivityEmail } from "@/lib/activity-email";
 import { planMeta } from "@/lib/plans";
 
@@ -12,7 +12,7 @@ function oneYearFromNow() {
 }
 
 export async function PUT(req: NextRequest, ctx: { params: Promise<{ id: string }> }) {
-  const tech = await requireTech();
+  const tech = await requireAdmin();
   if (!tech) return unauthorized();
 
   const { id: homeId } = await ctx.params;
@@ -65,7 +65,7 @@ export async function PUT(req: NextRequest, ctx: { params: Promise<{ id: string 
 }
 
 export async function DELETE(_req: NextRequest, ctx: { params: Promise<{ id: string }> }) {
-  const tech = await requireTech();
+  const tech = await requireAdmin();
   if (!tech) return unauthorized();
 
   const { id: homeId } = await ctx.params;

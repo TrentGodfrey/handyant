@@ -3,12 +3,13 @@
 import { useState, useEffect } from "react";
 import Link from "next/link";
 import { useParams, useRouter } from "next/navigation";
-import { ChevronLeft, Star, Camera, ThumbsUp, ThumbsDown, Check, X, Loader2, AlertTriangle } from "lucide-react";
+import { ChevronLeft, Star, Check, Loader2, AlertTriangle } from "lucide-react";
 import Card from "@/components/Card";
 import Button from "@/components/Button";
 import { useDemoMode } from "@/lib/useDemoMode";
 import { initialsOf } from "@/lib/initials";
 import { DEMO_TECH_LEGACY_NAME } from "@/lib/demoData";
+import { formatBookingDate as formatDateOnly } from "@/lib/booking-time";
 
 const DEMO_JOB = {
   id: "1",
@@ -32,6 +33,16 @@ const CONFETTI_COLORS = [
   "bg-accent-purple", "bg-info",
 ];
 
+const CONFETTI_PARTICLES = Array.from({ length: 24 }, (_, i) => {
+  const angle = (i / 24) * 360;
+  const distance = 50 + ((i * 17) % 41);
+  return {
+    color: CONFETTI_COLORS[i % CONFETTI_COLORS.length],
+    x: Math.cos((angle * Math.PI) / 180) * distance,
+    y: Math.sin((angle * Math.PI) / 180) * distance,
+  };
+});
+
 const STAR_LABELS = ["", "Poor", "Fair", "Good", "Great", "Amazing!"];
 
 interface BookingTask { id: string; label: string; done: boolean | null }
@@ -49,9 +60,11 @@ interface BookingRecord {
 }
 
 function formatBookingDate(iso: string): string {
-  const d = new Date(iso);
-  if (Number.isNaN(d.getTime())) return iso;
-  return d.toLocaleDateString("en-US", { year: "numeric", month: "long", day: "numeric" });
+  return formatDateOnly(iso, {
+    year: "numeric",
+    month: "long",
+    day: "numeric",
+  });
 }
 
 function formatHours(minutes: number | null): string {
@@ -77,13 +90,16 @@ function StarRow({
         return (
           <button
             key={i}
+            type="button"
             onClick={() => onChange(i + 1)}
             onMouseEnter={() => onHover(i + 1)}
             onMouseLeave={() => onHover(0)}
             onTouchStart={() => onHover(i + 1)}
             onTouchEnd={() => onHover(0)}
-            className="transition-transform active:scale-110"
+            className="flex min-h-11 min-w-11 items-center justify-center transition-transform active:scale-110"
             style={{ fontSize: size }}
+            aria-label={`Rate ${i + 1} out of ${count} stars`}
+            aria-pressed={value === i + 1}
           >
             <Star
               size={size}
@@ -117,8 +133,6 @@ export default function RateJobPage() {
   const [categoryRatings, setCategoryRatings] = useState<Record<string, number>>({});
   const [categoryHovered, setCategoryHovered] = useState<Record<string, number>>({});
   const [review, setReview] = useState("");
-  const [recommend, setRecommend] = useState<boolean | null>(null);
-  const [photos, setPhotos] = useState<string[]>([]);
   const [submitting, setSubmitting] = useState(false);
   const [submitError, setSubmitError] = useState<string | null>(null);
   const [submitted, setSubmitted] = useState(false);
@@ -163,11 +177,6 @@ export default function RateJobPage() {
   }
   function setCatHovered(id: string, value: number) {
     setCategoryHovered((prev) => ({ ...prev, [id]: value }));
-  }
-
-  function handlePhotoAdd() {
-    const id = Math.random().toString(36).slice(2);
-    setPhotos((prev) => [...prev, id]);
   }
 
   async function handleSubmit() {
@@ -298,12 +307,7 @@ export default function RateJobPage() {
     return (
       <div className="min-h-screen bg-background flex flex-col items-center justify-center px-8 pt-14 pb-28">
         <div className="relative mb-6">
-          {Array.from({ length: 24 }).map((_, i) => {
-            const color = CONFETTI_COLORS[i % CONFETTI_COLORS.length];
-            const angle = (i / 24) * 360;
-            const distance = 50 + Math.random() * 40;
-            const x = Math.cos((angle * Math.PI) / 180) * distance;
-            const y = Math.sin((angle * Math.PI) / 180) * distance;
+          {CONFETTI_PARTICLES.map(({ color, x, y }, i) => {
             return (
               <div
                 key={i}
@@ -322,7 +326,7 @@ export default function RateJobPage() {
             @keyframes confetti-burst {
               0% { transform: translate(-50%, -50%) scale(0); opacity: 1; }
               60% { opacity: 1; }
-              100% { transform: translate(calc(-50% + var(--tx)), calc(-50% + var(--ty))) scale(1) rotate(${Math.random() * 180}deg); opacity: 0; }
+              100% { transform: translate(calc(-50% + var(--tx)), calc(-50% + var(--ty))) scale(1) rotate(135deg); opacity: 0; }
             }
           `}</style>
 
@@ -490,79 +494,6 @@ export default function RateJobPage() {
             <p className="text-[11px] text-text-tertiary mt-2 text-right">
               {review.length}/500
             </p>
-          </Card>
-        )}
-
-        {/* Photo upload (local-only stub for now) */}
-        {showCategories && (
-          <Card padding="md">
-            <div className="flex items-center justify-between mb-3">
-              <p className="text-[13px] font-bold text-text-primary">Add Photos</p>
-              <span className="text-[11px] text-text-tertiary">Optional</span>
-            </div>
-
-            <div className="flex gap-2 flex-wrap">
-              {photos.map((id, i) => (
-                <div
-                  key={id}
-                  className="relative h-20 w-20 rounded-xl bg-surface-secondary border border-border overflow-hidden flex items-center justify-center"
-                >
-                  <Camera size={22} className="text-text-tertiary" />
-                  <span className="absolute bottom-1 left-0 right-0 text-center text-[9px] text-text-tertiary font-medium">
-                    Photo {i + 1}
-                  </span>
-                  <button
-                    onClick={() => setPhotos((prev) => prev.filter((p) => p !== id))}
-                    className="absolute top-1 right-1 flex h-5 w-5 items-center justify-center rounded-full bg-text-primary/70"
-                  >
-                    <X size={10} className="text-white" />
-                  </button>
-                </div>
-              ))}
-
-              {photos.length < 6 && (
-                <button
-                  onClick={handlePhotoAdd}
-                  className="h-20 w-20 rounded-xl border-2 border-dashed border-border bg-surface-secondary flex flex-col items-center justify-center gap-1 hover:border-primary/40 hover:bg-primary-50/40 transition-colors active:scale-[0.97]"
-                >
-                  <Camera size={20} className="text-text-tertiary" />
-                  <span className="text-[10px] font-medium text-text-tertiary">Add Photo</span>
-                </button>
-              )}
-            </div>
-          </Card>
-        )}
-
-        {/* Recommend toggle */}
-        {showCategories && (
-          <Card padding="md">
-            <p className="text-[13px] font-bold text-text-primary mb-3">
-              Would you recommend MCQ Property Care to a friend?
-            </p>
-            <div className="flex gap-3">
-              <button
-                onClick={() => setRecommend(true)}
-                className={`flex-1 flex items-center justify-center gap-2 rounded-xl border py-3 text-[13px] font-semibold transition-all active:scale-[0.98] ${
-                  recommend === true
-                    ? "border-success bg-success-light text-success"
-                    : "border-border bg-surface-secondary text-text-secondary"
-                }`}
-              >
-                <ThumbsUp size={16} />
-                Yes, definitely
-              </button>
-              <button
-                onClick={() => setRecommend(false)}
-                className={`flex-1 flex items-center justify-center gap-2 rounded-xl border py-3 text-[13px] font-semibold transition-all active:scale-[0.98] ${
-                  recommend === false
-                    ? "border-error bg-error-light text-error"
-                    : "border-border bg-surface-secondary text-text-secondary"
-                }`}
-              >
-                <ThumbsDown size={16} />
-                Not really
-              </button>
-            </div>
           </Card>
         )}
 

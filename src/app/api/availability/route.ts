@@ -3,10 +3,16 @@ import { prisma } from "@/lib/prisma";
 import {
   BOOKING_SLOT_STARTS,
   VISIT_DURATION_MINUTES,
-  canStartVisitBlocks,
   isVisitBlockCount,
-  visitDurationMinutes,
 } from "@/lib/booking-slots";
+import {
+  addDaysToDateString,
+  businessDateTimeToInstant,
+  intervalsOverlap,
+  validateBookingWindow,
+} from "@/lib/booking-policy";
+import { bookingDateToDatabaseDate } from "@/lib/booking-time";
+import { rateLimited, requestIp, takeRateLimit } from "@/lib/rate-limit";
 
 // Public endpoint - unauthenticated visitors can pick a time before signing up.
 // Returns the four fixed daily booking windows for the default tech (Anthony).
@@ -14,47 +20,13 @@ import {
 // GET /api/availability?date=YYYY-MM-DD
 // → { slots: [{ time: "08:00", available: true }, ...] }
 
-const DEFAULT_HOURS: Record<string, { start: string; end: string; enabled: boolean }> = {
-  mon: { start: "08:00", end: "17:00", enabled: true },
-  tue: { start: "08:00", end: "17:00", enabled: true },
-  wed: { start: "08:00", end: "17:00", enabled: true },
-  thu: { start: "08:00", end: "17:00", enabled: true },
-  fri: { start: "08:00", end: "17:00", enabled: true },
-  sat: { start: "09:00", end: "13:00", enabled: false },
-  sun: { start: "09:00", end: "13:00", enabled: false },
-};
-
-const DAY_KEYS = ["sun", "mon", "tue", "wed", "thu", "fri", "sat"];
-
-interface DayHours {
-  start: string;
-  end: string;
-  enabled: boolean;
-}
-
-interface LunchHours {
-  start: string;
-  end: string;
-  enabled?: boolean;
-}
-
-function parseHHMM(s: string): number {
-  // Returns minutes since midnight, or NaN if malformed.
-  const m = /^(\d{1,2}):(\d{2})$/.exec(s);
-  if (!m) return NaN;
-  const h = Number(m[1]);
-  const min = Number(m[2]);
-  if (h < 0 || h > 23 || min < 0 || min > 59) return NaN;
-  return h * 60 + min;
-}
-
-function fmtHHMM(totalMinutes: number): string {
-  const h = Math.floor(totalMinutes / 60);
-  const m = totalMinutes % 60;
-  return `${String(h).padStart(2, "0")}:${String(m).padStart(2, "0")}`;
-}
-
 export async function GET(req: NextRequest) {
+  const limit = takeRateLimit(
+    `availability:${requestIp(req)}`,
+    120,
+    15 * 60 * 1000,
+  );
+  if (!limit.allowed) return rateLimited(limit.retryAfterSeconds);
   const { searchParams } = new URL(req.url);
   const dateStr = searchParams.get("date");
   const visitCount = Number(searchParams.get("visits") ?? "1");
@@ -69,12 +41,10 @@ export async function GET(req: NextRequest) {
     return Response.json({ error: "visits must be between 1 and 4" }, { status: 400 });
   }
 
-  // Parse the date in UTC to avoid timezone surprises when computing day-of-week.
-  const date = new Date(`${dateStr}T00:00:00Z`);
-  if (Number.isNaN(date.getTime())) {
+  const date = bookingDateToDatabaseDate(dateStr);
+  if (!date) {
     return Response.json({ error: "Invalid date" }, { status: 400 });
   }
-  const dayKey = DAY_KEYS[date.getUTCDay()];
 
   // Find the default tech (Anthony - only one tech for now).
   const tech = await prisma.user.findFirst({
@@ -94,18 +64,17 @@ export async function GET(req: NextRequest) {
     select: { workingHours: true },
   });
 
-  const hours = (profile?.workingHours ?? DEFAULT_HOURS) as Record<string, unknown> & {
-    lunch?: LunchHours;
-  };
-  const dayHours = (hours[dayKey] ?? DEFAULT_HOURS[dayKey]) as DayHours | undefined;
-
-  if (!dayHours || !dayHours.enabled) {
-    return Response.json({ slots: [] });
-  }
-
-  const startMin = parseHHMM(dayHours.start);
-  const endMin = parseHHMM(dayHours.end);
-  if (Number.isNaN(startMin) || Number.isNaN(endMin) || endMin <= startMin) {
+  const workingHours = profile?.workingHours;
+  const policyResults = BOOKING_SLOT_STARTS.map((time) => ({
+    time,
+    result: validateBookingWindow({
+      date: dateStr,
+      time,
+      visitCount,
+      workingHours,
+    }),
+  }));
+  if (policyResults.every(({ result }) => !result.ok && result.message === "MCQ is closed on that day")) {
     return Response.json({ slots: [] });
   }
 
@@ -118,54 +87,53 @@ export async function GET(req: NextRequest) {
   // Slots are only shown if they fall within the tech's working hours for
   // the day. Booked slots remain in the response as unavailable so the UI
   // consistently presents the day's four-window schedule.
-  const SLOT_STARTS = BOOKING_SLOT_STARTS.map(parseHHMM);
+  const nextDate = addDaysToDateString(dateStr, 1);
+  const dayStart = businessDateTimeToInstant(dateStr, "00:00");
+  const dayEnd = nextDate ? businessDateTimeToInstant(nextDate, "00:00") : null;
+  if (!dayStart || !dayEnd) return Response.json({ error: "Invalid date" }, { status: 400 });
 
-  // Pull bookings for that tech on that date.
-  const bookings = await prisma.booking.findMany({
-    where: {
-      techId: tech.id,
-      scheduledDate: date,
-      status: { in: ["pending", "confirmed", "in_progress"] },
-    },
-    select: { scheduledTime: true, durationMinutes: true },
+  const [bookings, blocks] = await Promise.all([
+    prisma.booking.findMany({
+      where: {
+        techId: tech.id,
+        scheduledDate: date,
+        status: { in: ["pending", "confirmed", "in_progress"] },
+      },
+      select: { scheduledTime: true, durationMinutes: true },
+    }),
+    prisma.availabilityBlock.findMany({
+      where: {
+        techId: tech.id,
+        startAt: { lt: dayEnd },
+        endAt: { gt: dayStart },
+      },
+      select: { startAt: true, endAt: true },
+    }),
+  ]);
+
+  const bookingIntervals = bookings.flatMap((booking) => {
+    const time = `${String(booking.scheduledTime.getUTCHours()).padStart(2, "0")}:${String(
+      booking.scheduledTime.getUTCMinutes(),
+    ).padStart(2, "0")}`;
+    const startAt = businessDateTimeToInstant(dateStr, time);
+    if (!startAt) return [];
+    return [{
+      startAt,
+      endAt: new Date(startAt.getTime() + (booking.durationMinutes ?? VISIT_DURATION_MINUTES) * 60_000),
+    }];
   });
 
-  // Mark slot starts that overlap any existing booking.
-  const blockedStarts = new Set<number>();
-  for (const b of bookings) {
-    if (!b.scheduledTime) continue;
-    const t = new Date(b.scheduledTime);
-    if (Number.isNaN(t.getTime())) continue;
-    const bookingStart = t.getUTCHours() * 60 + t.getUTCMinutes();
-    const bookingEnd = bookingStart + (b.durationMinutes ?? VISIT_DURATION_MINUTES);
-    for (const slotStart of SLOT_STARTS) {
-      const slotEnd = slotStart + VISIT_DURATION_MINUTES;
-      // Overlap if intervals intersect at all.
-      if (slotStart < bookingEnd && bookingStart < slotEnd) {
-        blockedStarts.add(slotStart);
-      }
-    }
-  }
-
-  // Build the slot list. Skip slots outside working hours and mark overlaps booked.
-  const requestedDuration = visitDurationMinutes(visitCount);
-  const slots: { time: string; available: boolean }[] = SLOT_STARTS
-    .filter((m) => m >= startMin && m + VISIT_DURATION_MINUTES <= endMin)
-    .map((m) => {
-      const time = fmtHHMM(m);
-      const fitsDay = canStartVisitBlocks(time, visitCount) && m + requestedDuration <= endMin;
-      if (!fitsDay) return { time, available: false };
-      const requestedEnd = m + requestedDuration;
-      const overlapsBooking = bookings.some((booking) => {
-        if (!booking.scheduledTime) return false;
-        const value = new Date(booking.scheduledTime);
-        if (Number.isNaN(value.getTime())) return false;
-        const start = value.getUTCHours() * 60 + value.getUTCMinutes();
-        const end = start + (booking.durationMinutes ?? VISIT_DURATION_MINUTES);
-        return m < end && start < requestedEnd;
-      });
-      return { time, available: !overlapsBooking && !blockedStarts.has(m) };
-    });
+  const slots = policyResults.map(({ time, result }) => {
+    if (!result.ok) return { time, available: false };
+    const { startAt, endAt } = result.window;
+    const overlapsBooking = bookingIntervals.some((booking) =>
+      intervalsOverlap(startAt, endAt, booking.startAt, booking.endAt),
+    );
+    const overlapsBlock = blocks.some((block) =>
+      intervalsOverlap(startAt, endAt, block.startAt, block.endAt),
+    );
+    return { time, available: !overlapsBooking && !overlapsBlock };
+  });
 
   return Response.json({ slots });
 }

@@ -1,0 +1,25 @@
+[Unit]
+Description=PM2 process manager for webapps
+Documentation=https://pm2.keymetrics.io/
+Wants=network-online.target
+After=network-online.target postgresql.service
+
+[Service]
+Type=forking
+User=webapps
+Environment=PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
+Environment=PM2_HOME=/home/webapps/.pm2
+PIDFile=/home/webapps/.pm2/pm2.pid
+LimitNOFILE=infinity
+LimitNPROC=infinity
+LimitCORE=infinity
+ExecStart=/usr/lib/node_modules/pm2/bin/pm2 resurrect
+ExecReload=/usr/lib/node_modules/pm2/bin/pm2 reload all
+ExecStop=/usr/lib/node_modules/pm2/bin/pm2 kill
+Restart=on-failure
+RestartSec=5s
+TimeoutStartSec=60s
+TimeoutStopSec=60s
+
+[Install]
+WantedBy=multi-user.target

@@ -88,40 +88,47 @@ enum UserRole {
 }
 
 model User {
-  id                       String            @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
-  email                    String?           @unique
-  passwordHash             String?           @map("password_hash")
+  id                       String              @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  email                    String?             @unique
+  passwordHash             String?             @map("password_hash")
   name                     String
   phone                    String?
-  avatarUrl                String?           @map("avatar_url")
-  role                     UserRole          @default(customer)
-  googleId                 String?           @unique @map("google_id")
-  emailVerified            Boolean?          @default(false) @map("email_verified")
-  passwordResetToken       String?           @map("password_reset_token")
-  passwordResetExpires     DateTime?         @map("password_reset_expires") @db.Timestamptz(6)
-  emailVerificationToken   String?           @map("email_verification_token")
-  emailVerificationExpires DateTime?         @map("email_verification_expires") @db.Timestamptz(6)
-  pendingEmail             String?           @map("pending_email")
-  lastSeenAt               DateTime?         @map("last_seen_at") @db.Timestamptz(6)
-  createdAt                DateTime?         @default(now()) @map("created_at") @db.Timestamptz(6)
-  updatedAt                DateTime?         @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(6)
-  bookingsAsCustomer       Booking[]         @relation("CustomerBookings")
-  bookingsAsTech           Booking[]         @relation("TechBookings")
-  convosAsCustomer         Conversation[]    @relation("CustomerConversations")
-  convosAsTech             Conversation[]    @relation("TechConversations")
+  avatarUrl                String?             @map("avatar_url")
+  role                     UserRole            @default(customer)
+  isAdmin                  Boolean             @default(false) @map("is_admin")
+  sessionVersion           Int                 @default(0) @map("session_version")
+  mustChangePassword       Boolean             @default(false) @map("must_change_password")
+  googleId                 String?             @unique @map("google_id")
+  emailVerified            Boolean?            @default(false) @map("email_verified")
+  passwordResetToken       String?             @map("password_reset_token")
+  passwordResetExpires     DateTime?           @map("password_reset_expires") @db.Timestamptz(6)
+  emailVerificationToken   String?             @map("email_verification_token")
+  emailVerificationExpires DateTime?           @map("email_verification_expires") @db.Timestamptz(6)
+  pendingEmail             String?             @map("pending_email")
+  lastSeenAt               DateTime?           @map("last_seen_at") @db.Timestamptz(6)
+  createdAt                DateTime?           @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt                DateTime?           @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(6)
+  bookingsAsCustomer       Booking[]           @relation("CustomerBookings")
+  bookingsAsTech           Booking[]           @relation("TechBookings")
+  convosAsCustomer         Conversation[]      @relation("CustomerConversations")
+  convosAsTech             Conversation[]      @relation("TechConversations")
   homes                    Home[]
   invoices                 Invoice[]
   sentMessages             Message[]
   notifications            Notification[]
-  reviewsGiven             Review[]          @relation("CustomerReviews")
-  reviewsReceived          Review[]          @relation("TechReviews")
+  reviewsGiven             Review[]            @relation("CustomerReviews")
+  reviewsReceived          Review[]            @relation("TechReviews")
   serviceAreas             ServiceArea[]
   subscriptions            Subscription[]
-  bookingNotes             BookingNote[]     @relation("AuthoredBookingNotes")
-  notifyPrefs              Json?             @map("notify_prefs")
-  appointmentReminders     Json?             @map("appointment_reminders")
-  createdHomeInvitations   HomeInvitation[]  @relation("CreatedHomeInvitations")
+  bookingNotes             BookingNote[]       @relation("AuthoredBookingNotes")
+  notifyPrefs              Json?               @map("notify_prefs")
+  appointmentReminders     Json?               @map("appointment_reminders")
+  createdHomeInvitations   HomeInvitation[]    @relation("CreatedHomeInvitations")
   paymentCheckouts         PaymentCheckout[]
+  businessProfile          BusinessProfile?
+  availabilityBlocks       AvailabilityBlock[]
+  reminderDeliveries       ReminderDelivery[]
+  bookingDeclines          BookingDecline[]
 
   @@index([passwordResetToken], map: "idx_users_password_reset_token")
   @@index([emailVerificationToken], map: "idx_users_email_verification_token")
@@ -147,7 +154,7 @@ model Home {
   waterHeaterYear  Int?              @map("water_heater_year")
   panelAmps        Int?              @map("panel_amps")
   createdAt        DateTime?         @default(now()) @map("created_at") @db.Timestamptz(6)
-  bookings         Booking[]
+  bookings         Booking[]         @relation("BookingHomeCustomer")
   customer         User              @relation(fields: [customerId], references: [id], onDelete: Cascade, onUpdate: NoAction)
   photos           Photo[]
   householdMembers HouseholdMember[]
@@ -158,6 +165,7 @@ model Home {
   invitations      HomeInvitation[]
   paymentCheckouts PaymentCheckout[]
 
+  @@unique([id, customerId], map: "homes_id_customer_id_key")
   @@index([customerId], map: "idx_homes_customer")
   @@map("homes")
 }
@@ -243,38 +251,52 @@ model ServiceCategory {
 }
 
 model Booking {
-  id              String            @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
-  customerId      String            @map("customer_id") @db.Uuid
-  homeId          String?           @map("home_id") @db.Uuid
-  techId          String?           @map("tech_id") @db.Uuid
-  status          BookingStatus     @default(pending)
-  scheduledDate   DateTime          @map("scheduled_date") @db.Date
-  scheduledTime   DateTime          @map("scheduled_time") @db.Time(6)
-  durationMinutes Int?              @default(120) @map("duration_minutes")
-  serviceType     String?           @default("one_time") @map("service_type")
-  description     String?
-  customerNotes   String?           @map("customer_notes")
-  techNotes       String?           @map("tech_notes")
-  estimatedCost   Decimal?          @map("estimated_cost") @db.Decimal(10, 2)
-  finalCost       Decimal?          @map("final_cost") @db.Decimal(10, 2)
-  createdAt       DateTime?         @default(now()) @map("created_at") @db.Timestamptz(6)
-  updatedAt       DateTime?         @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(6)
-  categories      BookingCategory[]
-  customer        User              @relation("CustomerBookings", fields: [customerId], references: [id], onDelete: NoAction, onUpdate: NoAction)
-  home            Home?             @relation(fields: [homeId], references: [id], onDelete: NoAction, onUpdate: NoAction)
-  tech            User?             @relation("TechBookings", fields: [techId], references: [id], onDelete: NoAction, onUpdate: NoAction)
-  invoices        Invoice[]
-  parts           Part[]
-  photos          Photo[]
-  reviews         Review[]
-  tasks           Task[]
-  bookingNotes    BookingNote[]
+  id                 String             @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  customerId         String             @map("customer_id") @db.Uuid
+  homeId             String?            @map("home_id") @db.Uuid
+  techId             String?            @map("tech_id") @db.Uuid
+  status             BookingStatus      @default(pending)
+  scheduledDate      DateTime           @map("scheduled_date") @db.Date
+  scheduledTime      DateTime           @map("scheduled_time") @db.Time(6)
+  durationMinutes    Int?               @default(120) @map("duration_minutes")
+  serviceType        String?            @default("one_time") @map("service_type")
+  description        String?
+  customerNotes      String?            @map("customer_notes")
+  techNotes          String?            @map("tech_notes")
+  estimatedCost      Decimal?           @map("estimated_cost") @db.Decimal(10, 2)
+  finalCost          Decimal?           @map("final_cost") @db.Decimal(10, 2)
+  createdAt          DateTime?          @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt          DateTime?          @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(6)
+  categories         BookingCategory[]
+  customer           User               @relation("CustomerBookings", fields: [customerId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  home               Home?              @relation("BookingHomeCustomer", fields: [homeId, customerId], references: [id, customerId], onDelete: NoAction, onUpdate: NoAction)
+  tech               User?              @relation("TechBookings", fields: [techId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  invoices           Invoice[]
+  parts              Part[]
+  photos             Photo[]
+  reviews            Review[]
+  tasks              Task[]
+  bookingNotes       BookingNote[]
+  reminderDeliveries ReminderDelivery[]
+  declines           BookingDecline[]
 
   @@index([customerId], map: "idx_bookings_customer")
   @@index([techId], map: "idx_bookings_tech")
   @@index([scheduledDate], map: "idx_bookings_date")
   @@index([status], map: "idx_bookings_status")
   @@map("bookings")
+}
+
+model BookingDecline {
+  bookingId  String   @map("booking_id") @db.Uuid
+  techId     String   @map("tech_id") @db.Uuid
+  declinedAt DateTime @default(now()) @map("declined_at") @db.Timestamptz(6)
+  booking    Booking  @relation(fields: [bookingId], references: [id], onDelete: Cascade, onUpdate: NoAction)
+  tech       User     @relation(fields: [techId], references: [id], onDelete: Cascade, onUpdate: NoAction)
+
+  @@id([bookingId, techId])
+  @@index([techId, declinedAt], map: "idx_booking_declines_tech")
+  @@map("booking_declines")
 }
 
 model BookingCategory {
@@ -340,6 +362,7 @@ model Conversation {
   tech          User      @relation("TechConversations", fields: [techId], references: [id], onDelete: NoAction, onUpdate: NoAction)
   messages      Message[]
 
+  @@unique([customerId, techId], map: "conversations_customer_id_tech_id_key")
   @@index([customerId], map: "idx_conversations_customer")
   @@index([techId], map: "idx_conversations_tech")
   @@map("conversations")
@@ -373,6 +396,7 @@ model Review {
   customer   User      @relation("CustomerReviews", fields: [customerId], references: [id], onDelete: NoAction, onUpdate: NoAction)
   tech       User      @relation("TechReviews", fields: [techId], references: [id], onDelete: NoAction, onUpdate: NoAction)
 
+  @@unique([bookingId, customerId], map: "reviews_booking_id_customer_id_key")
   @@index([techId], map: "idx_reviews_tech")
   @@index([bookingId], map: "idx_reviews_booking")
   @@map("reviews")
@@ -425,6 +449,28 @@ model Notification {
 
   @@index([userId, createdAt], map: "idx_notifications_user_created")
   @@map("notifications")
+}
+
+model ReminderDelivery {
+  id                String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  bookingId         String    @map("booking_id") @db.Uuid
+  userId            String    @map("user_id") @db.Uuid
+  leadTimeMinutes   Int       @map("lead_time_minutes")
+  channel           String    @default("email")
+  appointmentAt     DateTime  @map("appointment_at") @db.Timestamptz(6)
+  claimedAt         DateTime  @default(now()) @map("claimed_at") @db.Timestamptz(6)
+  attemptCount      Int       @default(1) @map("attempt_count")
+  sentAt            DateTime? @map("sent_at") @db.Timestamptz(6)
+  failedAt          DateTime? @map("failed_at") @db.Timestamptz(6)
+  providerMessageId String?   @map("provider_message_id")
+  error             String?
+  booking           Booking   @relation(fields: [bookingId], references: [id], onDelete: Cascade, onUpdate: NoAction)
+  user              User      @relation(fields: [userId], references: [id], onDelete: Cascade, onUpdate: NoAction)
+
+  @@unique([bookingId, userId, leadTimeMinutes, channel, appointmentAt], map: "reminder_deliveries_booking_user_lead_channel_appointment_key")
+  @@index([claimedAt], map: "idx_reminder_deliveries_claimed")
+  @@index([userId, sentAt], map: "idx_reminder_deliveries_user_sent")
+  @@map("reminder_deliveries")
 }
 
 model Subscription {
@@ -513,6 +559,7 @@ model BusinessProfile {
   paypalEmail          String?  @map("paypal_email")
   appointmentReminders Json?    @map("appointment_reminders")
   updatedAt            DateTime @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(6)
+  tech                 User     @relation(fields: [techId], references: [id], onDelete: Cascade, onUpdate: NoAction)
 
   @@map("business_profiles")
 }
@@ -524,6 +571,7 @@ model AvailabilityBlock {
   endAt     DateTime @map("end_at") @db.Timestamptz(6)
   reason    String?
   createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+  tech      User     @relation(fields: [techId], references: [id], onDelete: Cascade, onUpdate: NoAction)
 
   @@index([techId, startAt], map: "idx_availability_tech")
   @@map("availability_blocks")

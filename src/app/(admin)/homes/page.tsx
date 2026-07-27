@@ -7,6 +7,8 @@ import Link from "next/link";
 import { Search, MapPin, Calendar, Wrench, Plus, Home, UserPlus, Building2, AlertTriangle, RotateCw } from "lucide-react";
 import { useDemoMode } from "@/lib/useDemoMode";
 import { demoCustomerBy } from "@/lib/demoData";
+import { formatBookingDate } from "@/lib/booking-time";
+import { planMeta } from "@/lib/plans";
 
 interface ApiHome {
   id: string;
@@ -35,6 +37,7 @@ interface HomeRow {
   name: string;
   address: string;
   type: "Subscription" | "One-Time";
+  subscriptionType: string | null;
   lastVisit: string;
   openTasks: number;
   totalVisits: number;
@@ -47,6 +50,7 @@ const DEMO_HOMES: HomeRow[] = [
     name: demoCustomerBy("1")!.name,
     address: "4821 Oak Hollow Dr, Plano",
     type: "Subscription",
+    subscriptionType: "pro",
     lastVisit: "Mar 15",
     openTasks: 4,
     totalVisits: 12,
@@ -57,6 +61,7 @@ const DEMO_HOMES: HomeRow[] = [
     name: demoCustomerBy("2")!.name,
     address: "1205 Elm Creek Ct, Frisco",
     type: "Subscription",
+    subscriptionType: "essential",
     lastVisit: "Mar 20",
     openTasks: 2,
     totalVisits: 8,
@@ -67,6 +72,7 @@ const DEMO_HOMES: HomeRow[] = [
     name: demoCustomerBy("3")!.name,
     address: "890 Sunset Ridge, Roanoke",
     type: "One-Time",
+    subscriptionType: null,
     lastVisit: "Mar 10",
     openTasks: 2,
     totalVisits: 3,
@@ -77,6 +83,7 @@ const DEMO_HOMES: HomeRow[] = [
     name: demoCustomerBy("4")!.name,
     address: "2200 Heritage Trail, McKinney",
     type: "One-Time",
+    subscriptionType: null,
     lastVisit: "Feb 22",
     openTasks: 1,
     totalVisits: 1,
@@ -87,6 +94,7 @@ const DEMO_HOMES: HomeRow[] = [
     name: demoCustomerBy("5")!.name,
     address: "1100 Prairie Creek, Waxahachie",
     type: "Subscription",
+    subscriptionType: "elite",
     lastVisit: "Mar 25",
     openTasks: 6,
     totalVisits: 15,
@@ -97,6 +105,7 @@ const DEMO_HOMES: HomeRow[] = [
     name: "Derek Nguyen",
     address: "350 Creekside Blvd, Allen",
     type: "Subscription",
+    subscriptionType: "essential",
     lastVisit: "Mar 28",
     openTasks: 3,
     totalVisits: 9,
@@ -113,12 +122,7 @@ function initialsFor(name: string): string {
 
 function formatDateShort(iso: string | null): string {
   if (!iso) return "-";
-  try {
-    const d = new Date(iso);
-    return d.toLocaleDateString("en-US", { month: "short", day: "numeric" });
-  } catch {
-    return "-";
-  }
+  return formatBookingDate(iso, { month: "short", day: "numeric" });
 }
 
 function apiHomeToRow(h: ApiHome): HomeRow {
@@ -128,6 +132,7 @@ function apiHomeToRow(h: ApiHome): HomeRow {
     name: h.customer.name,
     address: `${h.address}${cityPart}`,
     type: h.subscriptionType ? "Subscription" : "One-Time",
+    subscriptionType: h.subscriptionType,
     lastVisit: formatDateShort(h.lastVisit),
     openTasks: h.openTasks,
     totalVisits: h.totalVisits,
@@ -215,12 +220,13 @@ export default function HomesPage() {
           value={search}
           onChange={(e) => setSearch(e.target.value)}
           placeholder="Search clients or addresses..."
-          className="flex-1 bg-transparent text-[14px] text-text-primary placeholder:text-text-tertiary focus:outline-none"
+          className="min-w-0 flex-1 bg-transparent text-[14px] text-text-primary placeholder:text-text-tertiary focus:outline-none"
         />
         {search.trim() && (
           <button
+            type="button"
             onClick={() => setSearch("")}
-            className="text-[11px] font-semibold text-text-tertiary active:text-text-primary transition-colors"
+            className="-my-2 -mr-2 flex min-h-11 items-center rounded-lg px-2 text-[11px] font-semibold text-text-tertiary transition-colors active:bg-surface-secondary active:text-text-primary"
           >
             Clear
           </button>
@@ -348,7 +354,9 @@ export default function HomesPage() {
                           : "bg-surface-secondary text-text-tertiary"
                       }`}
                     >
-                      {home.type === "Subscription" ? "Sub" : "One-Time"}
+                      {home.subscriptionType
+                        ? planMeta(home.subscriptionType).label
+                        : "One-Time"}
                     </span>
                   </div>
                   <div className="mt-0.5 flex items-center gap-1">

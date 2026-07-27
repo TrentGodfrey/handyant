@@ -2,6 +2,7 @@ import { readFile } from "node:fs/promises";
 import path from "node:path";
 import { prisma } from "@/lib/prisma";
 import { requireUser, unauthorized, notFound, forbidden } from "@/lib/session";
+import { canAccessBooking, canAccessHome } from "@/lib/resource-access";
 
 const MIME_TYPES: Record<string, string> = {
   jpg: "image/jpeg",
@@ -21,27 +22,56 @@ export async function GET(
   if (!/^[a-zA-Z0-9-]+\.(?:jpe?g|png|webp|gif)$/.test(filename)) return notFound("Image not found");
 
   const candidateUrls = [`/api/uploads/${filename}`, `/uploads/${filename}`];
-  const [photo, avatarOwner] = await Promise.all([
+  const [photo, avatarOwner, messagePhoto] = await Promise.all([
     prisma.photo.findFirst({ where: { url: { in: candidateUrls } } }),
     prisma.user.findFirst({
       where: { OR: candidateUrls.map((url) => ({ avatarUrl: { startsWith: url } })) },
       select: { id: true },
     }),
+    prisma.message.findFirst({
+      where: { type: "photo", text: { in: candidateUrls } },
+      select: {
+        conversation: {
+          select: { customerId: true, techId: true },
+        },
+      },
+    }),
   ]);
 
-  if (!photo && !avatarOwner) return notFound("Image not found");
+  if (!photo && !avatarOwner && !messagePhoto) return notFound("Image not found");
   if (photo?.homeId) {
     const home = await prisma.home.findUnique({ where: { id: photo.homeId }, select: { customerId: true } });
     if (!home) return notFound("Image not found");
-    if (home.customerId !== user.id && user.role !== "tech") return forbidden();
+    if (!(await canAccessHome(user, { ...home, id: photo.homeId }))) return forbidden();
+    if (photo.bookingId) {
+      const booking = await prisma.booking.findUnique({
+        where: { id: photo.bookingId },
+        select: { customerId: true, techId: true, homeId: true },
+      });
+      if (
+        !booking ||
+        booking.homeId !== photo.homeId ||
+        booking.customerId !== home.customerId
+      ) {
+        return notFound("Image not found");
+      }
+      if (!canAccessBooking(user, booking)) return forbidden();
+    }
   } else if (photo?.bookingId) {
     const booking = await prisma.booking.findUnique({
       where: { id: photo.bookingId },
       select: { customerId: true, techId: true },
     });
     if (!booking) return notFound("Image not found");
-    if (booking.customerId !== user.id && booking.techId !== user.id && user.role !== "tech") return forbidden();
-  } else if (photo && user.role !== "tech") {
+    if (!canAccessBooking(user, booking)) return forbidden();
+  } else if (photo && !user.isAdmin) {
+    return forbidden();
+  }
+  if (
+    messagePhoto &&
+    messagePhoto.conversation.customerId !== user.id &&
+    messagePhoto.conversation.techId !== user.id
+  ) {
     return forbidden();
   }
 

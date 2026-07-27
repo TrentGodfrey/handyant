@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useEffect, useId, useState } from "react";
 import Link from "next/link";
 import { signIn, useSession } from "next-auth/react";
 import { useRouter } from "next/navigation";
@@ -38,10 +38,13 @@ type Screen =
 
 type HomeType = "Single Family" | "Townhouse" | "Condo" | "Other";
 type PlanId = "essential" | "pro" | "elite";
+type AreaStatus = "idle" | "checking" | "in-area" | "out-area" | "unavailable";
 
 // ─── DFW Map ─────────────────────────────────────────────────────────────────
 
-const dfwCities = [
+// Illustrative map coordinates only. Eligibility and the displayed city list
+// always come from /api/service-areas.
+const dfwMapPoints = [
   { name: "Denton",      x: 72,  y: 38 },
   { name: "Frisco",      x: 160, y: 44 },
   { name: "McKinney",    x: 230, y: 38 },
@@ -59,16 +62,41 @@ const dfwCities = [
   { name: "Waxahachie",  x: 170, y: 212 },
 ];
 
-const dfwCityNames = new Set(dfwCities.map((c) => c.name.toLowerCase()));
+function normalizeCity(value: string) {
+  return value.trim().replace(/\s+/g, " ").toLocaleLowerCase("en-US");
+}
 
-function DFWMap() {
+async function fetchActiveServiceCities(signal?: AbortSignal) {
+  const response = await fetch("/api/service-areas", {
+    cache: "no-store",
+    signal,
+  });
+  if (!response.ok) {
+    throw new Error("Could not load service areas.");
+  }
+
+  const payload: unknown = await response.json();
+  if (!Array.isArray(payload)) {
+    throw new Error("Service-area data is unavailable.");
+  }
+
+  const cities = payload
+    .filter((value): value is string => typeof value === "string")
+    .map((value) => value.trim())
+    .filter(Boolean);
+  return [...new Map(cities.map((value) => [normalizeCity(value), value])).values()];
+}
+
+function DFWMap({ serviceCities }: { serviceCities: string[] }) {
+  const activeCities = new Set(serviceCities.map(normalizeCity));
+  const mappedCities = dfwMapPoints.filter((city) => activeCities.has(normalizeCity(city.name)));
+
   return (
     <svg
       viewBox="0 0 340 260"
-      width="340"
-      height="260"
-      className="mx-auto"
-      aria-label="DFW Metro service area map"
+      className="mx-auto block h-auto w-full max-w-[340px]"
+      role="img"
+      aria-label="Active MCQ service cities in the DFW Metro area"
     >
       {/* Background metro blob */}
       <ellipse cx="170" cy="130" rx="148" ry="108" fill="#EAF4F4" opacity="0.9" />
@@ -79,7 +107,7 @@ function DFWMap() {
       <line x1="170" y1="22" x2="170" y2="238" stroke="#D4E8E9" strokeWidth="0.5" strokeDasharray="4 4" />
 
       {/* City nodes */}
-      {dfwCities.map((city) => (
+      {mappedCities.map((city) => (
         <g key={city.name}>
           {/* Outer glow ring */}
           <circle cx={city.x} cy={city.y} r="10" fill="#4F9598" opacity="0.12" />
@@ -157,7 +185,9 @@ function Stepper({
         <button
           type="button"
           onClick={() => onChange(Math.max(min, value - 1))}
-          className="flex h-8 w-8 items-center justify-center rounded-full border border-border bg-surface active:bg-surface-secondary transition-colors"
+          disabled={value <= min}
+          aria-label={`Decrease ${label.toLowerCase()}`}
+          className="flex h-11 w-11 items-center justify-center rounded-full border border-border bg-surface transition-colors active:bg-surface-secondary disabled:cursor-not-allowed disabled:opacity-40"
         >
           <Minus size={14} className="text-text-primary" />
         </button>
@@ -165,7 +195,9 @@ function Stepper({
         <button
           type="button"
           onClick={() => onChange(Math.min(max, value + 1))}
-          className="flex h-8 w-8 items-center justify-center rounded-full border border-border bg-surface active:bg-surface-secondary transition-colors"
+          disabled={value >= max}
+          aria-label={`Increase ${label.toLowerCase()}`}
+          className="flex h-11 w-11 items-center justify-center rounded-full border border-border bg-surface transition-colors active:bg-surface-secondary disabled:cursor-not-allowed disabled:opacity-40"
         >
           <Plus size={14} className="text-text-primary" />
         </button>
@@ -195,14 +227,20 @@ function Field({
   inputMode?: React.HTMLAttributes<HTMLInputElement>["inputMode"];
   autoComplete?: string;
 }) {
+  const inputId = useId();
+
   return (
     <div>
-      <label className="mb-1.5 block text-[12px] font-semibold uppercase tracking-wider text-text-tertiary">
+      <label
+        htmlFor={inputId}
+        className="mb-1.5 block text-[12px] font-semibold uppercase tracking-wider text-text-tertiary"
+      >
         {label}
       </label>
       <div className="flex items-center gap-2.5 rounded-xl border border-border bg-surface px-3.5 py-3 focus-within:border-primary focus-within:ring-2 focus-within:ring-primary/10 transition-all">
         <Icon size={16} className="shrink-0 text-text-tertiary" />
         <input
+          id={inputId}
           type={type}
           inputMode={inputMode}
           autoComplete={autoComplete}
@@ -243,22 +281,49 @@ export default function OnboardingPage() {
   const [bathrooms, setBathrooms] = useState(2);
   const [step2Error, setStep2Error] = useState("");
 
-  // Step 3 - service area check (real lookup against city list)
-  const [areaStatus, setAreaStatus] = useState<"checking" | "in-area" | "out-area">("checking");
+  // Step 3 - service area check
+  const [areaStatus, setAreaStatus] = useState<AreaStatus>("idle");
+  const [serviceCities, setServiceCities] = useState<string[]>([]);
+  const [areaCheckAttempt, setAreaCheckAttempt] = useState(0);
+  const [step3Error, setStep3Error] = useState("");
+  const [savedHomeId, setSavedHomeId] = useState<string | null>(null);
 
   // Step 4 - plan
   const [selectedPlan, setSelectedPlan] = useState<PlanId>("essential");
 
-  // Service area check on entering step 3
+  // The public endpoint is the source of truth. A failed or empty response is
+  // never interpreted as approval, and no home is saved until step 3 continues.
   useEffect(() => {
     if (screen !== "step-3") return;
+
+    const controller = new AbortController();
     setAreaStatus("checking");
-    const t = setTimeout(() => {
-      const isServed = dfwCityNames.has(city.trim().toLowerCase());
-      setAreaStatus(isServed ? "in-area" : "out-area");
-    }, 600);
-    return () => clearTimeout(t);
-  }, [screen, city]);
+    setStep3Error("");
+
+    void fetchActiveServiceCities(controller.signal)
+      .then((cities) => {
+        if (cities.length === 0) {
+          setServiceCities([]);
+          setAreaStatus("unavailable");
+          setStep3Error("Our service-area list is temporarily unavailable. No home has been saved.");
+          return;
+        }
+
+        setServiceCities(cities);
+        const isServed = cities.some(
+          (serviceCity) => normalizeCity(serviceCity) === normalizeCity(city),
+        );
+        setAreaStatus(isServed ? "in-area" : "out-area");
+      })
+      .catch((error: unknown) => {
+        if (error instanceof DOMException && error.name === "AbortError") return;
+        setServiceCities([]);
+        setAreaStatus("unavailable");
+        setStep3Error("We could not check your address right now. No home has been saved.");
+      });
+
+    return () => controller.abort();
+  }, [screen, city, areaCheckAttempt]);
 
   const homeTypes: HomeType[] = ["Single Family", "Townhouse", "Condo", "Other"];
 
@@ -300,7 +365,16 @@ export default function OnboardingPage() {
       const registration = (await res.json()) as {
         claimedExisting?: boolean;
         linkedHomeCount?: number;
+        verificationRequired?: boolean;
+        verificationSent?: boolean;
       };
+
+      if (registration.verificationRequired) {
+        router.push(
+          `/verify-email?sent=${registration.verificationSent ? "1" : "0"}&email=${encodeURIComponent(email.trim())}`,
+        );
+        return;
+      }
 
       const signInRes = await signIn("credentials", {
         email: email.trim(),
@@ -332,95 +406,121 @@ export default function OnboardingPage() {
     }
   }
 
-  async function handleStep2Continue() {
+  function handleStep2Continue() {
     setStep2Error("");
     if (!street.trim() || !city.trim() || !zip.trim()) {
       setStep2Error("Address, city, and ZIP are required.");
       return;
     }
 
+    setScreen("step-3");
+  }
+
+  function homePayload() {
+    // Stash extras (homeType, sqft, beds, baths) in notes since the schema
+    // doesn't have dedicated columns. yearBuilt has its own column.
+    const noteParts = [
+      `Type: ${homeType}`,
+      sqft.trim() && `Sqft: ${sqft.trim()}`,
+      `Bedrooms: ${bedrooms}`,
+      `Bathrooms: ${bathrooms}`,
+    ].filter(Boolean);
+    const yearBuiltNum = yearBuilt.trim()
+      ? Number.parseInt(yearBuilt.trim(), 10)
+      : undefined;
+
+    return {
+      address: street.trim(),
+      city: city.trim(),
+      zip: zip.trim(),
+      state: "TX",
+      notes: noteParts.join(" • "),
+      ...(yearBuiltNum && !Number.isNaN(yearBuiltNum) ? { yearBuilt: yearBuiltNum } : {}),
+    };
+  }
+
+  async function handleStep3Continue() {
+    if (areaStatus !== "in-area" || submitting) return;
+
     setSubmitting(true);
+    setStep3Error("");
     try {
-      // Stash extras (homeType, sqft, beds, baths) in notes since the schema
-      // doesn't have dedicated columns. yearBuilt has its own column.
-      const noteParts = [
-        `Type: ${homeType}`,
-        sqft.trim() && `Sqft: ${sqft.trim()}`,
-        `Bedrooms: ${bedrooms}`,
-        `Bathrooms: ${bathrooms}`,
-      ].filter(Boolean);
+      // Re-check immediately before writing so a stale browser result cannot
+      // save an address after the active service-area list changes.
+      let activeCities: string[];
+      try {
+        activeCities = await fetchActiveServiceCities();
+      } catch {
+        setServiceCities([]);
+        setAreaStatus("unavailable");
+        setStep3Error("We could not check your address right now. No home has been saved.");
+        return;
+      }
+      setServiceCities(activeCities);
 
-      const yearBuiltNum = yearBuilt.trim() ? Number.parseInt(yearBuilt.trim(), 10) : undefined;
-
-      const res = await fetch("/api/homes", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          address: street.trim(),
-          city: city.trim(),
-          zip: zip.trim(),
-          state: "TX",
-          notes: noteParts.join(" • "),
-          ...(yearBuiltNum && !Number.isNaN(yearBuiltNum) ? { yearBuilt: yearBuiltNum } : {}),
-        }),
-      });
-
-      if (!res.ok) {
-        const data = (await res.json().catch(() => ({}))) as { error?: string };
-        const msg = data.error || "Could not save your home.";
-        setStep2Error(msg);
-        toast.error(msg);
+      if (activeCities.length === 0) {
+        setAreaStatus("unavailable");
+        setStep3Error("Our service-area list is temporarily unavailable. No home has been saved.");
         return;
       }
 
-      setScreen("step-3");
-    } catch (err) {
-      const msg = err instanceof Error ? err.message : "Network error. Please try again.";
-      setStep2Error(msg);
-      toast.error(msg);
+      const isServed = activeCities.some(
+        (serviceCity) => normalizeCity(serviceCity) === normalizeCity(city),
+      );
+      if (!isServed) {
+        setAreaStatus("out-area");
+        setStep3Error("This city is not currently in our active service area. No home has been saved.");
+        return;
+      }
+
+      const response = await fetch(savedHomeId ? `/api/homes/${savedHomeId}` : "/api/homes", {
+        method: savedHomeId ? "PATCH" : "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(homePayload()),
+      });
+      const result = (await response.json().catch(() => ({}))) as {
+        id?: string;
+        error?: string;
+        code?: string;
+      };
+
+      if (!response.ok) {
+        if (result.code === "EMAIL_VERIFICATION_REQUIRED") {
+          router.push("/account/manage?verify=1");
+          return;
+        }
+        if (result.code === "OUTSIDE_SERVICE_AREA" || result.code === "CITY_REQUIRED") {
+          setAreaStatus("out-area");
+          setStep3Error(result.error || "This address is not in the active service area.");
+          return;
+        }
+        throw new Error(result.error || "Could not save your home.");
+      }
+
+      if (!savedHomeId && result.id) setSavedHomeId(result.id);
+      setScreen("step-4");
+    } catch (error: unknown) {
+      const message = error instanceof Error
+        ? error.message
+        : "We could not save your home. Please try again.";
+      setStep3Error(message);
+      toast.error(message);
     } finally {
       setSubmitting(false);
     }
   }
 
-  async function handleStartPlan() {
-    setSubmitting(true);
-    try {
-      // Customers can only self-select the entry-level Essential plan today
-      // (Stripe pending for upgrades). We always POST "essential" and record the
-      // user's preferred upgrade tier in toast/UI so they remember to upgrade.
-      const res = await fetch("/api/subscriptions", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ plan: "essential" }),
-      });
-
-      if (!res.ok) {
-        const data = (await res.json().catch(() => ({}))) as { error?: string };
-        const msg = data.error || "Could not start your plan.";
-        toast.error(msg);
-        return;
-      }
-
-      if (selectedPlan !== "essential") {
-        toast.info(`We'll let you know when ${plans.find((p) => p.id === selectedPlan)?.name} is available to upgrade.`);
-      } else {
-        toast.success("Welcome to MCQ Property Care!");
-      }
-      setScreen("success");
-    } catch (err) {
-      const msg = err instanceof Error ? err.message : "Network error. Please try again.";
-      toast.error(msg);
-    } finally {
-      setSubmitting(false);
-    }
+  function handleStartPlan() {
+    const planName = plans.find((plan) => plan.id === selectedPlan)?.name ?? "membership";
+    toast.info(`Message Anthony to activate the ${planName} plan for your home.`);
+    router.push(`/messages?topic=membership&plan=${encodeURIComponent(selectedPlan)}`);
   }
 
   // ── Screen renderers ────────────────────────────────────────────────────────
 
   function renderWelcome() {
     return (
-      <div className="flex min-h-screen flex-col items-center justify-center bg-background px-6 text-center">
+      <div className="flex min-h-dvh flex-col items-center justify-center bg-background px-5 pb-[max(1.5rem,env(safe-area-inset-bottom))] pt-[max(1.5rem,env(safe-area-inset-top))] text-center">
         {/* Logo */}
         <div className="mb-8 flex flex-col items-center gap-3">
           <div className="relative flex h-20 w-20 items-center justify-center rounded-3xl bg-primary shadow-[0_8px_32px_rgba(79,149,152,0.30)]">
@@ -465,22 +565,27 @@ export default function OnboardingPage() {
           </Link>
         </div>
 
-        <p className="mt-8 text-[11px] text-text-tertiary">
-          By continuing you agree to our <Link href="/terms" className="font-semibold text-primary">Terms</Link> &amp; <Link href="/privacy" className="font-semibold text-primary">Privacy Policy</Link>.
-        </p>
+        <div className="mt-5 text-[11px] text-text-tertiary">
+          <p>By continuing you agree to our</p>
+          <div className="flex items-center justify-center gap-1">
+            <Link href="/terms" className="inline-flex min-h-11 items-center px-1 font-semibold text-primary">Terms</Link>
+            <span>&amp;</span>
+            <Link href="/privacy" className="inline-flex min-h-11 items-center px-1 font-semibold text-primary">Privacy Policy</Link>
+          </div>
+        </div>
       </div>
     );
   }
 
   function renderStep1() {
     return (
-      <div className="flex min-h-screen flex-col bg-background">
+      <div className="flex min-h-dvh flex-col bg-background">
         {/* Top bar */}
-        <div className="sticky top-0 z-10 bg-background px-5 pt-14 pb-4">
+        <div className="sticky top-0 z-10 bg-background px-5 pb-4 pt-[max(1rem,env(safe-area-inset-top))]">
           <button
             type="button"
             onClick={() => setScreen("welcome")}
-            className="mb-4 flex items-center gap-1 text-[13px] font-semibold text-text-secondary"
+            className="-ml-2 mb-2 flex min-h-11 items-center gap-1 rounded-xl px-2 text-[13px] font-semibold text-text-secondary"
           >
             <ChevronLeft size={18} /> Back
           </button>
@@ -499,10 +604,11 @@ export default function OnboardingPage() {
           <div className="space-y-4">
             <div className="grid grid-cols-2 gap-3">
               <div>
-                <label className="mb-1.5 block text-[12px] font-semibold uppercase tracking-wider text-text-tertiary">First Name</label>
+                <label htmlFor="onboarding-first-name" className="mb-1.5 block text-[12px] font-semibold uppercase tracking-wider text-text-tertiary">First Name</label>
                 <div className="flex items-center gap-2.5 rounded-xl border border-border bg-surface px-3.5 py-3 focus-within:border-primary focus-within:ring-2 focus-within:ring-primary/10 transition-all">
                   <User size={15} className="shrink-0 text-text-tertiary" />
                   <input
+                    id="onboarding-first-name"
                     type="text"
                     autoComplete="given-name"
                     placeholder="Sarah"
@@ -513,10 +619,11 @@ export default function OnboardingPage() {
                 </div>
               </div>
               <div>
-                <label className="mb-1.5 block text-[12px] font-semibold uppercase tracking-wider text-text-tertiary">Last Name</label>
+                <label htmlFor="onboarding-last-name" className="mb-1.5 block text-[12px] font-semibold uppercase tracking-wider text-text-tertiary">Last Name</label>
                 <div className="flex items-center gap-2.5 rounded-xl border border-border bg-surface px-3.5 py-3 focus-within:border-primary focus-within:ring-2 focus-within:ring-primary/10 transition-all">
                   <User size={15} className="shrink-0 text-text-tertiary" />
                   <input
+                    id="onboarding-last-name"
                     type="text"
                     autoComplete="family-name"
                     placeholder="Mitchell"
@@ -567,7 +674,7 @@ export default function OnboardingPage() {
         </div>
 
         {/* Sticky CTA */}
-        <div className="fixed bottom-0 left-0 right-0 border-t border-border bg-background px-5 pb-8 pt-4">
+        <div className="fixed inset-x-0 bottom-0 z-20 border-t border-border bg-background px-5 pb-[max(2rem,env(safe-area-inset-bottom))] pt-4 lg:absolute lg:pb-4">
           <button
             type="button"
             onClick={handleStep1Continue}
@@ -587,13 +694,13 @@ export default function OnboardingPage() {
 
   function renderStep2() {
     return (
-      <div className="flex min-h-screen flex-col bg-background">
+      <div className="flex min-h-dvh flex-col bg-background">
         {/* Top bar */}
-        <div className="sticky top-0 z-10 bg-background px-5 pt-14 pb-4">
+        <div className="sticky top-0 z-10 bg-background px-5 pb-4 pt-[max(1rem,env(safe-area-inset-top))]">
           <button
             type="button"
             onClick={() => setScreen(sessionStatus === "authenticated" ? "welcome" : "step-1")}
-            className="mb-4 flex items-center gap-1 text-[13px] font-semibold text-text-secondary"
+            className="-ml-2 mb-2 flex min-h-11 items-center gap-1 rounded-xl px-2 text-[13px] font-semibold text-text-secondary"
           >
             <ChevronLeft size={18} /> Back
           </button>
@@ -635,7 +742,8 @@ export default function OnboardingPage() {
                     type="button"
                     key={t}
                     onClick={() => setHomeType(t)}
-                    className={`rounded-full px-4 py-2 text-[13px] font-semibold transition-all ${
+                    aria-pressed={homeType === t}
+                    className={`min-h-11 rounded-full px-4 py-2 text-[13px] font-semibold transition-all ${
                       homeType === t
                         ? "bg-primary text-white shadow-[0_2px_8px_rgba(79,149,152,0.25)]"
                         : "border border-border bg-surface text-text-secondary"
@@ -683,18 +791,13 @@ export default function OnboardingPage() {
         </div>
 
         {/* Sticky CTA */}
-        <div className="fixed bottom-0 left-0 right-0 border-t border-border bg-background px-5 pb-8 pt-4">
+        <div className="fixed inset-x-0 bottom-0 z-20 border-t border-border bg-background px-5 pb-[max(2rem,env(safe-area-inset-bottom))] pt-4 lg:absolute lg:pb-4">
           <button
             type="button"
             onClick={handleStep2Continue}
-            disabled={submitting}
-            className={`w-full rounded-2xl py-4 text-[16px] font-bold text-white transition-all ${
-              submitting
-                ? "bg-primary/40 cursor-not-allowed"
-                : "bg-primary shadow-[0_4px_16px_rgba(79,149,152,0.30)] active:bg-primary-dark"
-            }`}
+            className="w-full rounded-2xl bg-primary py-4 text-[16px] font-bold text-white shadow-[0_4px_16px_rgba(79,149,152,0.30)] transition-all active:bg-primary-dark"
           >
-            {submitting ? "Saving…" : "Continue"}
+            Continue
           </button>
         </div>
       </div>
@@ -703,13 +806,13 @@ export default function OnboardingPage() {
 
   function renderStep3() {
     return (
-      <div className="flex min-h-screen flex-col bg-background">
+      <div className="flex min-h-dvh flex-col bg-background">
         {/* Top bar */}
-        <div className="sticky top-0 z-10 bg-background px-5 pt-14 pb-4">
+        <div className="sticky top-0 z-10 bg-background px-5 pb-4 pt-[max(1rem,env(safe-area-inset-top))]">
           <button
             type="button"
             onClick={() => setScreen("step-2")}
-            className="mb-4 flex items-center gap-1 text-[13px] font-semibold text-text-secondary"
+            className="-ml-2 mb-2 flex min-h-11 items-center gap-1 rounded-xl px-2 text-[13px] font-semibold text-text-secondary"
           >
             <ChevronLeft size={18} /> Back
           </button>
@@ -722,29 +825,39 @@ export default function OnboardingPage() {
         <div className="flex-1 overflow-y-auto px-5 pb-36">
           <div className="mb-5 mt-2">
             <h2 className="text-[24px] font-black text-text-primary">Are you in our service area?</h2>
-            <p className="mt-1 text-[13px] text-text-secondary">We currently serve the DFW Metro Area.</p>
+            <p className="mt-1 text-[13px] text-text-secondary">
+              We&apos;ll verify your city before saving your home.
+            </p>
           </div>
 
           {/* Map */}
-          <div className="mb-5 overflow-hidden rounded-2xl border border-border bg-[#F0F8F8] p-2 shadow-[0_1px_4px_rgba(0,0,0,0.06)]">
-            <DFWMap />
+          <div className="mb-5 min-w-0 overflow-hidden rounded-2xl border border-border bg-[#F0F8F8] p-2 shadow-[0_1px_4px_rgba(0,0,0,0.06)]">
+            <DFWMap serviceCities={serviceCities} />
           </div>
 
           {/* City list */}
           <div className="mb-5">
             <p className="mb-2 text-[11px] font-semibold uppercase tracking-wider text-text-tertiary">
-              Service Cities
+              Active Service Cities
             </p>
-            <div className="flex flex-wrap gap-1.5">
-              {dfwCities.map((c) => (
-                <span
-                  key={c.name}
-                  className="rounded-full bg-primary-50 px-3 py-1 text-[12px] font-semibold text-primary"
-                >
-                  {c.name}
-                </span>
-              ))}
-            </div>
+            {serviceCities.length > 0 ? (
+              <div className="flex flex-wrap gap-1.5">
+                {serviceCities.map((serviceCity) => (
+                  <span
+                    key={normalizeCity(serviceCity)}
+                    className="rounded-full bg-primary-50 px-3 py-1.5 text-[12px] font-semibold text-primary"
+                  >
+                    {serviceCity}
+                  </span>
+                ))}
+              </div>
+            ) : (
+              <p className="text-[13px] text-text-secondary">
+                {areaStatus === "checking"
+                  ? "Loading the current service-area list…"
+                  : "The current service-area list could not be displayed."}
+              </p>
+            )}
           </div>
 
           {/* Service area check */}
@@ -753,6 +866,8 @@ export default function OnboardingPage() {
               ? "border-[#BBF7D0] bg-[#F0FFF4]"
               : areaStatus === "out-area"
               ? "border-error/30 bg-error/5"
+              : areaStatus === "unavailable"
+              ? "border-amber-300 bg-amber-50"
               : "border-border bg-surface"
           }`}>
             {areaStatus === "checking" && (
@@ -780,27 +895,56 @@ export default function OnboardingPage() {
                 <div>
                   <p className="text-[14px] font-bold text-error">Not yet available</p>
                   <p className="text-[13px] text-text-secondary">
-                    We don&apos;t serve {city || "your city"} yet - but we&apos;re expanding fast.
+                    {city || "Your city"} is not in the current service-area list. No home has been saved.
                   </p>
                 </div>
               </div>
             )}
+            {areaStatus === "unavailable" && (
+              <div>
+                <div className="flex items-start gap-3">
+                  <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-amber-500">
+                    <AlertCircle size={16} className="text-white" />
+                  </div>
+                  <div>
+                    <p className="text-[14px] font-bold text-amber-900">We couldn&apos;t check just now</p>
+                    <p className="text-[13px] text-amber-900/80">
+                      {step3Error || "No home has been saved. Please try the check again."}
+                    </p>
+                  </div>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setAreaCheckAttempt((attempt) => attempt + 1)}
+                  className="mt-3 inline-flex min-h-11 w-full items-center justify-center rounded-xl border border-amber-300 bg-white px-4 text-[13px] font-bold text-amber-900"
+                >
+                  Try Again
+                </button>
+              </div>
+            )}
           </div>
+
+          {step3Error && areaStatus !== "unavailable" && (
+            <div className="mt-3 flex items-start gap-2 rounded-xl border border-error/30 bg-error/5 p-3 text-[13px] font-medium text-error">
+              <AlertCircle size={16} className="mt-0.5 shrink-0" />
+              <span>{step3Error}</span>
+            </div>
+          )}
         </div>
 
         {/* Sticky CTA */}
-        <div className="fixed bottom-0 left-0 right-0 border-t border-border bg-background px-5 pb-8 pt-4">
+        <div className="fixed inset-x-0 bottom-0 z-20 border-t border-border bg-background px-5 pb-[max(2rem,env(safe-area-inset-bottom))] pt-4 lg:absolute lg:pb-4">
           <button
             type="button"
-            onClick={() => areaStatus === "in-area" && setScreen("step-4")}
-            disabled={areaStatus !== "in-area"}
+            onClick={handleStep3Continue}
+            disabled={areaStatus !== "in-area" || submitting}
             className={`w-full rounded-2xl py-4 text-[16px] font-bold text-white transition-all ${
-              areaStatus === "in-area"
+              areaStatus === "in-area" && !submitting
                 ? "bg-primary shadow-[0_4px_16px_rgba(79,149,152,0.30)] active:bg-primary-dark"
                 : "bg-primary/40 cursor-not-allowed"
             }`}
           >
-            Continue
+            {submitting ? "Saving Home…" : "Continue"}
           </button>
         </div>
       </div>
@@ -809,13 +953,13 @@ export default function OnboardingPage() {
 
   function renderStep4() {
     return (
-      <div className="flex min-h-screen flex-col bg-background">
+      <div className="flex min-h-dvh flex-col bg-background">
         {/* Top bar */}
-        <div className="sticky top-0 z-10 bg-background px-5 pt-14 pb-4">
+        <div className="sticky top-0 z-10 bg-background px-5 pb-4 pt-[max(1rem,env(safe-area-inset-top))]">
           <button
             type="button"
             onClick={() => setScreen("step-3")}
-            className="mb-4 flex items-center gap-1 text-[13px] font-semibold text-text-secondary"
+            className="-ml-2 mb-2 flex min-h-11 items-center gap-1 rounded-xl px-2 text-[13px] font-semibold text-text-secondary"
           >
             <ChevronLeft size={18} /> Back
           </button>
@@ -827,16 +971,16 @@ export default function OnboardingPage() {
 
         <div className="flex-1 overflow-y-auto px-5 pb-44">
           <div className="mb-4 mt-2">
-            <h2 className="text-[24px] font-black text-text-primary">Choose Your Plan</h2>
-            <p className="mt-1 text-[13px] text-text-secondary">All plans include fully insured, reliable service.</p>
+            <h2 className="text-[24px] font-black text-text-primary">Choose a Plan to Discuss</h2>
+            <p className="mt-1 text-[13px] text-text-secondary">Every plan includes the same visit length and in-app service tracking.</p>
           </div>
 
-          {/* Stripe-pending notice */}
+          {/* Activation notice */}
           <div className="mb-5 rounded-2xl border border-primary/20 bg-primary-50 px-4 py-3">
             <div className="flex items-start gap-2.5">
               <Sparkles size={16} className="mt-0.5 shrink-0 text-primary" />
               <p className="text-[12px] leading-relaxed text-primary">
-                Paid upgrades launch soon. We&apos;ll start you on the Essential plan today and notify you when Pro and Elite are ready to activate.
+                Choose the plan you&apos;re interested in. Anthony will confirm service availability, plan details, and activation with you.
               </p>
             </div>
           </div>
@@ -865,6 +1009,7 @@ export default function OnboardingPage() {
                   type="button"
                   key={plan.id}
                   onClick={() => setSelectedPlan(plan.id)}
+                  aria-pressed={isSelected}
                   className={`relative w-full overflow-hidden rounded-2xl border-2 p-5 text-left transition-all duration-200 ${
                     isSelected
                       ? "border-primary bg-primary-50"
@@ -889,7 +1034,7 @@ export default function OnboardingPage() {
                     </p>
                   </div>
 
-                  <div className="space-y-1.5">
+                  <div className={`space-y-1.5 ${isSelected ? "pr-8" : ""}`}>
                     {plan.features.map((f) => (
                       <div key={f} className="flex items-center gap-2">
                         <CheckCircle2
@@ -914,21 +1059,16 @@ export default function OnboardingPage() {
         </div>
 
         {/* Sticky CTAs */}
-        <div className="fixed bottom-0 left-0 right-0 border-t border-border bg-background px-5 pb-8 pt-4">
+        <div className="fixed inset-x-0 bottom-0 z-20 border-t border-border bg-background px-5 pb-[max(2rem,env(safe-area-inset-bottom))] pt-4 lg:absolute lg:pb-4">
           <button
             type="button"
             onClick={handleStartPlan}
-            disabled={submitting}
-            className={`w-full rounded-2xl py-4 text-[16px] font-bold text-white transition-colors ${
-              submitting
-                ? "bg-primary/40 cursor-not-allowed"
-                : "bg-primary shadow-[0_4px_16px_rgba(79,149,152,0.30)] active:bg-primary-dark"
-            }`}
+            className="w-full rounded-2xl bg-primary py-4 text-[16px] font-bold text-white shadow-[0_4px_16px_rgba(79,149,152,0.30)] transition-colors active:bg-primary-dark"
           >
-            {submitting ? "Setting up…" : "Start with Essential Plan"}
+            Message Anthony to Activate
           </button>
           <p className="mt-3 text-center text-[12px] text-text-tertiary">
-            You can upgrade to Pro or Elite anytime.
+            Anthony will confirm your plan and visit allowance with you.
           </p>
         </div>
       </div>
@@ -937,7 +1077,7 @@ export default function OnboardingPage() {
 
   function renderSuccess() {
     return (
-      <div className="flex min-h-screen flex-col items-center justify-center bg-background px-6 text-center">
+      <div className="flex min-h-dvh flex-col items-center justify-center bg-background px-5 pb-[max(1.5rem,env(safe-area-inset-bottom))] pt-[max(1.5rem,env(safe-area-inset-top))] text-center">
         {/* Animated checkmark */}
         <div className="mb-8 relative">
           <div className="flex h-24 w-24 items-center justify-center rounded-full bg-[#DCFCE7] animate-[scale-in_0.4s_ease-out]">
@@ -954,7 +1094,7 @@ export default function OnboardingPage() {
           Welcome to MCQ Property Care!
         </h2>
         <p className="mb-2 max-w-[280px] text-[15px] leading-relaxed text-text-secondary">
-          Your home is set up. We&apos;ll be in touch within 24 hours to schedule your first visit.
+          Your home is set up. Anthony will follow up to schedule your first visit.
         </p>
 
         <div className="mb-10 mt-4 w-full max-w-[300px] rounded-2xl bg-surface p-5 shadow-[0_1px_4px_rgba(0,0,0,0.08),0_4px_16px_rgba(0,0,0,0.04)]">
@@ -970,9 +1110,7 @@ export default function OnboardingPage() {
           <div className="mt-3 flex items-center gap-1.5 rounded-xl bg-surface-secondary px-3 py-2.5">
             <CheckCircle2 size={14} className="text-[#22C55E]" />
             <span className="text-[12px] font-semibold text-text-secondary">
-              {selectedPlan === "essential"
-                ? "Essential Plan active"
-                : `Essential Plan - upgrade to ${plans.find((p) => p.id === selectedPlan)?.name} when available`}
+              {plans.find((plan) => plan.id === selectedPlan)?.name ?? "Selected"} plan interest shared
             </span>
           </div>
         </div>
@@ -1007,8 +1145,8 @@ export default function OnboardingPage() {
   }
 
   return (
-    <div className="min-h-screen bg-background lg:flex lg:items-center lg:justify-center">
-      <div className="w-full lg:max-w-md lg:rounded-3xl lg:shadow-xl lg:overflow-hidden lg:my-8 [&>div]:lg:min-h-0">
+    <div className="min-h-dvh overflow-x-hidden bg-background lg:flex lg:items-center lg:justify-center">
+      <div className="w-full min-w-0 lg:relative lg:my-8 lg:max-w-md lg:overflow-hidden lg:rounded-3xl lg:shadow-xl [&>div]:lg:min-h-0">
         {renderScreen()}
       </div>
     </div>

@@ -88,7 +88,18 @@ export default function SignupPage() {
       return;
     }
 
-    const registration = (await res.json()) as { claimedExisting?: boolean; linkedHomeCount?: number };
+    const registration = (await res.json()) as {
+      claimedExisting?: boolean;
+      linkedHomeCount?: number;
+      verificationRequired?: boolean;
+      verificationSent?: boolean;
+    };
+
+    if (registration.verificationRequired) {
+      setLoading(false);
+      router.push(`/verify-email?sent=${registration.verificationSent ? "1" : "0"}&email=${encodeURIComponent(email.trim())}`);
+      return;
+    }
 
     // Auto sign in
     const signInRes = await signIn("credentials", {

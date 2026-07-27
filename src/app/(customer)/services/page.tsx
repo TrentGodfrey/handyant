@@ -143,17 +143,6 @@ const demoCategories = [
   },
 ];
 
-const serviceAreas = [
-  { name: "Justin / Roanoke", primary: true },
-  { name: "Plano", primary: true },
-  { name: "Frisco", primary: true },
-  { name: "Waxahachie", primary: true },
-  { name: "McKinney", primary: false },
-  { name: "Allen", primary: true },
-  { name: "Flower Mound", primary: true },
-  { name: "Southlake", primary: true },
-];
-
 // =====================================================================
 // Real-mode helpers
 // =====================================================================
@@ -220,12 +209,14 @@ export default function ServicesPage() {
 
   // Real-mode categories
   const [realCats, setRealCats] = useState<ServiceCategoryRecord[]>([]);
+  const [serviceAreas, setServiceAreas] = useState<string[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
     if (!mounted) return;
     if (isDemo) {
+      setServiceAreas(["DFW Metroplex"]);
       setLoading(false);
       return;
     }
@@ -234,10 +225,17 @@ export default function ServicesPage() {
       setLoading(true);
       setError(null);
       try {
-        const res = await fetch("/api/services");
-        if (!res.ok) throw new Error("Failed to load services");
-        const data = (await res.json()) as ServiceCategoryRecord[];
-        if (!cancelled) setRealCats(Array.isArray(data) ? data : []);
+        const [servicesRes, areasRes] = await Promise.all([
+          fetch("/api/services"),
+          fetch("/api/service-areas"),
+        ]);
+        if (!servicesRes.ok) throw new Error("Failed to load services");
+        const data = (await servicesRes.json()) as ServiceCategoryRecord[];
+        const areaData = areasRes.ok ? await areasRes.json() : [];
+        if (!cancelled) {
+          setRealCats(Array.isArray(data) ? data : []);
+          setServiceAreas(Array.isArray(areaData) ? areaData.filter((area): area is string => typeof area === "string") : []);
+        }
       } catch (e: unknown) {
         if (!cancelled) setError(e instanceof Error ? e.message : "Failed to load services");
       } finally {
@@ -312,10 +310,15 @@ export default function ServicesPage() {
               if (e.target.value.trim()) setExpanded(null);
             }}
             placeholder="Search services…"
-            className="flex-1 bg-transparent text-[14px] text-text-primary placeholder:text-text-tertiary outline-none"
+            className="min-w-0 flex-1 bg-transparent text-[14px] text-text-primary placeholder:text-text-tertiary outline-none"
           />
           {query && (
-            <button onClick={() => setQuery("")}>
+            <button
+              type="button"
+              onClick={() => setQuery("")}
+              aria-label="Clear service search"
+              className="-my-2 -mr-3 flex h-11 w-11 shrink-0 items-center justify-center rounded-lg active:bg-border"
+            >
               <X size={16} className="text-text-tertiary" />
             </button>
           )}
@@ -480,24 +483,24 @@ export default function ServicesPage() {
             <div className="flex flex-wrap gap-2">
               {serviceAreas.map((area) => (
                 <span
-                  key={area.name}
-                  className={`inline-flex items-center gap-1.5 rounded-full px-3.5 py-1.5 text-[12px] font-medium ${
-                    area.primary
-                      ? "bg-primary-50 text-primary border border-primary-100"
-                      : "bg-warning-light text-accent-amber border border-warning/20"
-                  }`}
+                  key={area}
+                  className="inline-flex items-center gap-1.5 rounded-full border border-primary-100 bg-primary-50 px-3.5 py-1.5 text-[12px] font-medium text-primary"
                 >
-                  {!area.primary && <span className="text-[10px]">+fee</span>}
-                  {area.name}
+                  {area}
                 </span>
               ))}
+              {serviceAreas.length === 0 && (
+                <span className="text-[12px] text-text-secondary">
+                  Enter your address during booking and MCQ will confirm availability.
+                </span>
+              )}
             </div>
             <div className="mt-3.5 flex items-start gap-2 rounded-lg bg-surface-secondary p-3">
               <CheckCircle2 size={14} className="text-success mt-0.5 shrink-0" />
               <div>
-                <p className="text-[12px] font-medium text-text-primary">Free Estimates</p>
+                <p className="text-[12px] font-medium text-text-primary">Service-area confirmation</p>
                 <p className="text-[11px] text-text-tertiary mt-0.5">
-                  Available throughout DFW. Travel surcharge may apply for McKinney and outlying areas.
+                  MCQ will confirm that your address is inside the current service area before the visit.
                 </p>
               </div>
             </div>
@@ -509,10 +512,10 @@ export default function ServicesPage() {
           <Card className="border border-border">
             <p className="text-[16px] font-bold text-text-primary mb-1">Not sure what you need?</p>
             <p className="text-[13px] text-text-secondary mb-4 leading-relaxed">
-              Describe the problem and we&apos;ll give you a free estimate within a few hours.
+              Describe the problem and share a photo so MCQ can follow up with the right next step.
             </p>
             <Link href="/book" className="w-full flex items-center justify-center gap-2 rounded-xl bg-primary py-3 text-[14px] font-bold text-white active:bg-primary-dark transition-colors">
-              Book a Free Estimate
+              Request a Visit
               <ArrowRight size={16} />
             </Link>
           </Card>

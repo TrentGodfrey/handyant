@@ -3,6 +3,7 @@
 import { useState, useEffect, use, type ChangeEvent } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
+import { useSession } from "next-auth/react";
 import { ChevronLeft, AlertTriangle, Trash2 } from "lucide-react";
 import { useDemoMode } from "@/lib/useDemoMode";
 import { prepareImageForUpload } from "@/lib/client-image-upload";
@@ -30,6 +31,7 @@ import {
 export default function HomeDetailPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = use(params);
   const router = useRouter();
+  const { data: session } = useSession();
 
   const [home, setHome] = useState<ApiHome | null>(null);
   const [loading, setLoading] = useState(true);
@@ -80,6 +82,7 @@ export default function HomeDetailPage({ params }: { params: Promise<{ id: strin
   const [requiresHistoryDelete, setRequiresHistoryDelete] = useState(false);
 
   const { isDemo, mounted } = useDemoMode();
+  const canManageOwnerControls = isDemo || session?.user?.isAdmin === true;
 
   async function loadHome() {
     try {
@@ -442,6 +445,9 @@ export default function HomeDetailPage({ params }: { params: Promise<{ id: strin
     setDeleteError(null);
     try {
       const deleteHistory = home.bookings.length > 0 || requiresHistoryDelete;
+      if (deleteHistory && !canManageOwnerControls) {
+        throw new Error("Only the account owner can permanently delete a home with history.");
+      }
       const r = await fetch(`/api/homes/${id}`, {
         method: "DELETE",
         headers: deleteHistory ? { "Content-Type": "application/json" } : undefined,
@@ -519,12 +525,14 @@ export default function HomeDetailPage({ params }: { params: Promise<{ id: strin
         setGateCodeVisible={setGateCodeVisible}
         onOpenEdit={() => setShowEdit(true)}
         onCustomerSaved={loadHome}
+        canManageAccounts={canManageOwnerControls}
       />
 
       <HomeSubscriptionCard
         homeId={home.id}
         subscription={home.activeSubscription}
         onSaved={loadHome}
+        canManage={canManageOwnerControls}
       />
 
       <Photos
@@ -573,25 +581,29 @@ export default function HomeDetailPage({ params }: { params: Promise<{ id: strin
         deleteNote={deleteNote}
       />
 
-      <div className="mt-6 rounded-2xl border border-error/20 bg-surface p-4">
-        <p className="text-[13px] font-semibold text-text-primary">Remove home</p>
-        <p className="mt-1 text-[12px] leading-relaxed text-text-secondary">
-          Empty homes can be removed normally. Staff can also permanently delete tester homes and their history.
-        </p>
-        <button
-          type="button"
-          onClick={() => {
-            setDeleteError(null);
-            setDeleteConfirmation("");
-            setRequiresHistoryDelete(false);
-            setShowDelete(true);
-          }}
-          className="mt-3 inline-flex items-center gap-1.5 rounded-xl border border-error/30 px-3.5 py-2 text-[12px] font-semibold text-error active:bg-error-light"
-        >
-          <Trash2 size={14} />
-          Delete Home
-        </button>
-      </div>
+      {(canManageOwnerControls || home.bookings.length === 0) && (
+        <div className="mt-6 rounded-2xl border border-error/20 bg-surface p-4">
+          <p className="text-[13px] font-semibold text-text-primary">Remove home</p>
+          <p className="mt-1 text-[12px] leading-relaxed text-text-secondary">
+            {canManageOwnerControls
+              ? "Empty homes can be removed normally. Owners can also permanently delete tester homes and their history."
+              : "This empty home can be removed. Only the account owner can delete a home that has history."}
+          </p>
+          <button
+            type="button"
+            onClick={() => {
+              setDeleteError(null);
+              setDeleteConfirmation("");
+              setRequiresHistoryDelete(false);
+              setShowDelete(true);
+            }}
+            className="mt-3 inline-flex min-h-11 items-center gap-1.5 rounded-xl border border-error/30 px-3.5 py-2 text-[12px] font-semibold text-error active:bg-error-light"
+          >
+            <Trash2 size={14} />
+            Delete Home
+          </button>
+        </div>
+      )}
 
       <EditHomeModal
         open={showEdit}
@@ -603,7 +615,7 @@ export default function HomeDetailPage({ params }: { params: Promise<{ id: strin
       />
 
       {showDelete && (
-        <div className="fixed inset-0 z-50 flex items-end justify-center bg-black/40 p-4 sm:items-center">
+        <div className="fixed inset-0 z-50 flex items-end justify-center bg-black/40 p-4 pb-[max(env(safe-area-inset-bottom),16px)] sm:items-center sm:p-4">
           <div className="max-h-[calc(100dvh-2rem)] w-full max-w-sm overflow-y-auto rounded-2xl bg-surface p-5 pb-[calc(1.25rem+env(safe-area-inset-bottom))] shadow-xl">
             <div className="flex h-11 w-11 items-center justify-center rounded-xl bg-error-light">
               <Trash2 size={20} className="text-error" />
@@ -631,7 +643,7 @@ export default function HomeDetailPage({ params }: { params: Promise<{ id: strin
                   autoComplete="off"
                   autoCapitalize="characters"
                   placeholder="DELETE"
-                  className="mt-1.5 w-full rounded-xl border border-error/30 bg-surface px-3 py-2.5 text-[14px] font-semibold text-text-primary outline-none focus:border-error"
+                  className="mt-1.5 min-h-12 w-full rounded-xl border border-error/30 bg-surface px-3 py-2.5 text-[14px] font-semibold text-text-primary outline-none focus:border-error"
                 />
               </div>
             )}
@@ -645,7 +657,7 @@ export default function HomeDetailPage({ params }: { params: Promise<{ id: strin
                 type="button"
                 disabled={deleting}
                 onClick={() => setShowDelete(false)}
-                className="flex-1 rounded-xl border border-border px-4 py-2.5 text-[13px] font-semibold text-text-primary disabled:opacity-50"
+                className="min-h-11 flex-1 rounded-xl border border-border px-4 py-2.5 text-[13px] font-semibold text-text-primary disabled:opacity-50"
               >
                 Cancel
               </button>
@@ -656,7 +668,7 @@ export default function HomeDetailPage({ params }: { params: Promise<{ id: strin
                   ((home.bookings.length > 0 || requiresHistoryDelete) && deleteConfirmation !== "DELETE")
                 }
                 onClick={deleteHome}
-                className="flex-1 rounded-xl bg-error px-4 py-2.5 text-[13px] font-semibold text-white disabled:opacity-50"
+                className="min-h-11 flex-1 rounded-xl bg-error px-4 py-2.5 text-[13px] font-semibold text-white disabled:opacity-50"
               >
                 {deleting
                   ? "Deleting…"

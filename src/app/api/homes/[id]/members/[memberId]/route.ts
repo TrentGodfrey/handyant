@@ -9,7 +9,7 @@ async function ensureAccess(homeId: string) {
   if (!user) return { error: unauthorized() };
   const home = await prisma.home.findUnique({ where: { id: homeId } });
   if (!home) return { error: notFound("Home not found") };
-  if (home.customerId !== user.id) return { error: forbidden() };
+  if (home.customerId !== user.id && !user.isAdmin) return { error: forbidden() };
   return { user, home };
 }
 

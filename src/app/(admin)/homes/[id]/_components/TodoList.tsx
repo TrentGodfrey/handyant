@@ -46,15 +46,17 @@ export default function TodoList({
         </h2>
         <div className="flex items-center gap-1.5">
           <button
+            type="button"
             onClick={onTogglePhotoForm}
-            className="flex items-center gap-1 rounded-lg border border-border bg-surface px-2.5 py-1.5 text-[11px] font-medium text-text-secondary active:bg-surface-secondary transition-colors"
+            className="flex min-h-11 items-center gap-1 rounded-lg border border-border bg-surface px-2.5 py-1.5 text-[11px] font-medium text-text-secondary active:bg-surface-secondary transition-colors"
           >
             <Camera size={11} />
             Photo
           </button>
           <button
+            type="button"
             onClick={() => setShowAddTask((v) => !v)}
-            className="flex items-center gap-1 rounded-lg bg-primary px-2.5 py-1.5 text-[11px] font-semibold text-white active:bg-primary-dark transition-colors shadow-[0_1px_4px_rgba(79,149,152,0.30)]"
+            className="flex min-h-11 items-center gap-1 rounded-lg bg-primary px-2.5 py-1.5 text-[11px] font-semibold text-white active:bg-primary-dark transition-colors shadow-[0_1px_4px_rgba(79,149,152,0.30)]"
           >
             {showAddTask ? <X size={11} /> : <Plus size={11} />}
             {showAddTask ? "Cancel" : "Add Task"}
@@ -170,19 +172,23 @@ export default function TodoList({
                     </div>
                     <div className="flex items-center gap-1.5">
                       <button
+                        type="button"
                         onClick={() => deleteTask(item.id)}
-                        className="flex h-6 w-6 items-center justify-center rounded-full text-text-tertiary active:bg-error-light active:text-error transition-colors"
+                        className="flex h-11 w-11 items-center justify-center rounded-full text-text-tertiary active:bg-error-light active:text-error transition-colors"
+                        aria-label={`Delete ${item.task}`}
                         title="Delete task"
                       >
                         <Trash2 size={11} />
                       </button>
                       <button
+                        type="button"
                         onClick={() => toggleTaskComplete(item.id, item.status)}
-                        className={`flex items-center gap-1 rounded-full px-2.5 py-1 text-[10px] font-semibold active:opacity-70 transition-opacity ${
+                        className={`flex min-h-11 items-center gap-1 rounded-full px-2.5 py-1 text-[10px] font-semibold active:opacity-70 transition-opacity ${
                           item.status === "completed"
                             ? "bg-surface-secondary text-text-secondary"
                             : "bg-success-light text-success"
                         }`}
+                        aria-pressed={item.status === "completed"}
                       >
                         <CheckCircle2 size={10} />
                         {item.status === "completed" ? "Reopen" : "Done"}

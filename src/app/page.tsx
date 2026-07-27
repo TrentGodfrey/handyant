@@ -1,12 +1,17 @@
 import Link from "next/link";
 import {
-  ArrowRight, CheckCircle2, Star, Shield, Clock,
+  ArrowRight, CheckCircle2, Shield, Clock,
   Droplet, Zap, Hammer, PaintBucket, Square, Refrigerator, Trees, Wifi,
   CalendarPlus, MessageCircle, MapPin,
 } from "lucide-react";
 import { DEMO_TECH } from "@/lib/demoData";
 import { WHY_MCQ, PLANS, VISIT_USES } from "@/lib/plans";
 import { LandingHeaderActions, LandingPrimaryActions } from "@/components/LandingSessionActions";
+import { prisma } from "@/lib/prisma";
+
+// Service areas are managed in production and must be read at request time,
+// rather than freezing database state into the build artifact.
+export const dynamic = "force-dynamic";
 
 const categories = [
   { name: "Plumbing", icon: Droplet, color: "text-blue-500", bg: "bg-blue-50" },
@@ -19,64 +24,37 @@ const categories = [
   { name: "Smart Home", icon: Wifi, color: "text-violet-500", bg: "bg-violet-50" },
 ];
 
-const cities = [
-  "Highland Park",
-  "University Park",
-  "Dallas",
-  "Hurst",
-  "Bedford",
-  "Southlake",
-  "Colleyville",
-  "Grapevine",
-  "Fort Worth",
-  "Arlington",
-  "Grand Prairie",
-  "Plano",
-  "Frisco",
-  "McKinney",
-  "Allen",
-  "Roanoke",
-  "Waxahachie",
-];
-
-const testimonials = [
-  {
-    name: "Sarah M.",
-    city: "Plano",
-    rating: 5,
-    text: "Anthony fixed three things in under two hours and left the kitchen cleaner than he found it. Booking on the app took 30 seconds.",
-  },
-  {
-    name: "Robert C.",
-    city: "Frisco",
-    rating: 5,
-    text: "Smart thermostat install + 3 outlets done in one trip. The app showed me exactly when he'd arrive. Will absolutely use again.",
-  },
-  {
-    name: "Angela T.",
-    city: "Waxahachie",
-    rating: 5,
-    text: "I love the Pro plan - priority scheduling has saved me twice when something broke right before guests came over.",
-  },
-];
-
 const steps = [
   { n: 1, title: "Tell us what's broken", body: "Snap a photo, describe the job, or just pick from a list. Two minutes." },
-  { n: 2, title: "Pick a time that works", body: "See real availability on Anthony's calendar. Mornings, evenings, weekends." },
-  { n: 3, title: "Get it fixed - for good", body: "Insured, reliable, and on time. Upfront pricing. Real receipts. Real warranties." },
+  { n: 2, title: "Pick an available time", body: "Choose one of the open weekday visit windows shown in the app." },
+  { n: 3, title: "Track the work", body: "Keep tasks, visit notes, photos, and updates together in your home profile." },
 ];
 
-export default function LandingPage() {
+async function activeServiceAreas(): Promise<string[]> {
+  try {
+    const areas = await prisma.serviceArea.findMany({
+      where: { active: true },
+      select: { city: true },
+      orderBy: { city: "asc" },
+    });
+    return [...new Set(areas.map((area) => area.city.trim()).filter(Boolean))];
+  } catch {
+    return [];
+  }
+}
+
+export default async function LandingPage() {
+  const cities = await activeServiceAreas();
   return (
     <div className="min-h-screen bg-white">
       {/* ── Top Bar ───────────────────────────────────────────────── */}
-      <header className="sticky top-0 z-40 border-b border-border bg-white/80 backdrop-blur-lg">
-        <div className="mx-auto flex max-w-6xl items-center justify-between px-5 py-3">
-          <Link href="/" className="flex items-center gap-2.5">
+      <header className="sticky top-0 z-40 border-b border-border bg-white/80 pt-[env(safe-area-inset-top)] backdrop-blur-lg">
+        <div className="mx-auto flex max-w-6xl items-center justify-between px-4 py-2.5 sm:px-5 sm:py-3">
+          <Link href="/" className="flex min-h-11 items-center gap-2.5" aria-label="MCQ Property Care home">
             <div className="relative flex h-9 w-9 items-center justify-center rounded-xl bg-primary shadow-[0_2px_8px_rgba(79,149,152,0.30)]">
               <span className="text-[10px] font-black tracking-[-0.05em] text-white">MCQ</span>
             </div>
-            <span className="text-[18px] font-black tracking-tight text-text-primary">MCQ Property Care</span>
+            <span className="hidden text-[18px] font-black tracking-tight text-text-primary sm:inline">MCQ Property Care</span>
           </Link>
           <LandingHeaderActions />
         </div>
@@ -106,7 +84,7 @@ export default function LandingPage() {
 
               <p className="mt-5 max-w-xl mx-auto lg:mx-0 text-[16px] sm:text-[17px] leading-relaxed text-text-secondary">
                 Plumbing leaks, broken switches, that closet door that never closed right -
-                book MCQ Property Care in 30 seconds and stop adding things to a list nobody&apos;s ever going to read.
+                request a visit with MCQ Property Care and keep the whole job organized in one place.
               </p>
 
               <p className="mt-4 max-w-xl mx-auto lg:mx-0 text-[13px] font-semibold text-primary tracking-wide">
@@ -133,7 +111,7 @@ export default function LandingPage() {
               <div className="mt-3 flex flex-wrap items-center justify-center lg:justify-start gap-2">
                 <Link
                   href="/book?type=walkthrough"
-                  className="inline-flex items-center gap-1.5 rounded-full border border-success/30 bg-success-light/60 px-3.5 py-1.5 text-[12px] font-semibold text-success hover:bg-success-light transition-colors"
+                  className="inline-flex min-h-11 items-center gap-1.5 rounded-full border border-success/30 bg-success-light/60 px-3.5 py-1.5 text-[12px] font-semibold text-success hover:bg-success-light transition-colors"
                 >
                   <CheckCircle2 size={12} />
                   Free home walk-through
@@ -146,12 +124,12 @@ export default function LandingPage() {
                   Insured &amp; reliable
                 </div>
                 <div className="flex items-center gap-1.5">
-                  <Star size={14} className="text-warning fill-warning" />
-                  4.9 · 86 reviews
+                  <MessageCircle size={14} className="text-primary" />
+                  Direct updates
                 </div>
                 <div className="hidden sm:flex items-center gap-1.5">
                   <Clock size={14} className="text-primary" />
-                  Same-week availability
+                  Live availability
                 </div>
               </div>
             </div>
@@ -177,7 +155,7 @@ export default function LandingPage() {
 
                     <div className="rounded-xl bg-primary p-3 mb-3">
                       <p className="text-[11px] font-bold text-white">Anthony is confirmed</p>
-                      <p className="text-[9px] text-white/70 mt-0.5">Tap to track on the day of your visit</p>
+                      <p className="text-[9px] text-white/70 mt-0.5">View appointment status and updates</p>
                     </div>
 
                     <p className="text-[9px] font-semibold text-text-secondary uppercase tracking-wider mb-1.5">Next Visit</p>
@@ -188,7 +166,7 @@ export default function LandingPage() {
                         </div>
                         <div className="flex-1 min-w-0">
                           <p className="text-[11px] font-semibold text-text-primary">{DEMO_TECH.name}</p>
-                          <p className="text-[9px] text-text-secondary mt-0.5">Tuesday · 9:00 AM</p>
+                          <p className="text-[9px] text-text-secondary mt-0.5">Tuesday · 8:00 AM</p>
                         </div>
                         <div className="rounded-full bg-success-light px-1.5 py-0.5">
                           <span className="text-[8px] font-semibold text-success">Confirmed</span>
@@ -225,10 +203,10 @@ export default function LandingPage() {
       <section className="border-y border-border bg-surface">
         <div className="mx-auto max-w-6xl px-5 py-6 grid grid-cols-2 sm:grid-cols-4 gap-6">
           {[
-            { num: "4.9★", label: "86 reviews" },
-            { num: "1,200+", label: "jobs completed" },
-            { num: "DFW", label: "since 2024" },
-            { num: "$1M", label: "liability coverage" },
+            { num: "Book", label: "from your phone" },
+            { num: "Track", label: "tasks and visits" },
+            { num: "Share", label: "photos and notes" },
+            { num: "Message", label: "MCQ directly" },
           ].map((s) => (
             <div key={s.label} className="text-center">
               <p className="text-[20px] sm:text-[24px] font-black text-text-primary leading-none">{s.num}</p>
@@ -308,41 +286,6 @@ export default function LandingPage() {
                 <CheckCircle2 size={18} className="text-primary" />
               </div>
               <p className="text-[14px] font-semibold text-text-primary leading-snug">{point}</p>
-            </div>
-          ))}
-        </div>
-      </section>
-
-      {/* ── Testimonials ──────────────────────────────────────────── */}
-      <section className="mx-auto max-w-6xl px-5 py-16 lg:py-20 border-t border-border">
-        <div className="text-center mb-10">
-          <p className="text-[12px] font-semibold uppercase tracking-wider text-primary mb-2">From homeowners</p>
-          <h2 className="text-[28px] sm:text-[34px] font-black tracking-tight text-text-primary">
-            People who used to dread the to-do list.
-          </h2>
-        </div>
-
-        <div className="grid gap-4 sm:grid-cols-3">
-          {testimonials.map((t) => (
-            <div key={t.name} className="rounded-2xl border border-border bg-white p-6">
-              <div className="flex gap-0.5 mb-3">
-                {Array.from({ length: t.rating }).map((_, i) => (
-                  <Star key={i} size={14} className="fill-warning text-warning" />
-                ))}
-              </div>
-              <p className="text-[14px] leading-relaxed text-text-primary">&ldquo;{t.text}&rdquo;</p>
-              <div className="mt-4 flex items-center gap-2.5 pt-4 border-t border-border-light">
-                <div className="flex h-8 w-8 items-center justify-center rounded-full bg-primary-100">
-                  <span className="text-[11px] font-bold text-primary">{t.name[0]}</span>
-                </div>
-                <div>
-                  <p className="text-[13px] font-semibold text-text-primary">{t.name}</p>
-                  <div className="flex items-center gap-1 text-[11px] text-text-tertiary">
-                    <MapPin size={10} />
-                    <span>{t.city}</span>
-                  </div>
-                </div>
-              </div>
             </div>
           ))}
         </div>
@@ -441,17 +384,23 @@ export default function LandingPage() {
                 Don&apos;t see your city? <Link href="/signup" className="text-white underline hover:text-primary-200">Ask anyway</Link>.
               </p>
             </div>
-            <div className="flex flex-wrap gap-2">
-              {cities.map((c) => (
-                <span
-                  key={c}
-                  className="inline-flex items-center gap-1.5 rounded-full bg-white/10 px-4 py-2 text-[13px] font-semibold text-white border border-white/10"
-                >
-                  <MapPin size={12} />
-                  {c}
-                </span>
-              ))}
-            </div>
+            {cities.length > 0 ? (
+              <div className="flex flex-wrap gap-2">
+                {cities.map((c) => (
+                  <span
+                    key={c}
+                    className="inline-flex items-center gap-1.5 rounded-full bg-white/10 px-4 py-2 text-[13px] font-semibold text-white border border-white/10"
+                  >
+                    <MapPin size={12} />
+                    {c}
+                  </span>
+                ))}
+              </div>
+            ) : (
+              <div className="rounded-2xl border border-white/15 bg-white/10 p-5 text-[14px] leading-relaxed text-white/80">
+                Enter your address when you request a visit and MCQ will confirm that it is inside the current service area.
+              </div>
+            )}
           </div>
         </div>
       </section>
@@ -463,7 +412,7 @@ export default function LandingPage() {
             Stop staring at the to-do list.
           </h2>
           <p className="mt-4 max-w-xl mx-auto text-[16px] text-text-secondary">
-            Book MCQ Property Care in 30 seconds. Get back to your life.
+            Request a visit, share the details, and keep every update in one place.
           </p>
           <div className="mt-7"><LandingPrimaryActions /></div>
         </div>
@@ -495,9 +444,6 @@ export default function LandingPage() {
               </a>
             </div>
           </div>
-          <p className="mt-3 text-[11px] text-text-tertiary">
-            24/7 emergency service available (additional fee).
-          </p>
           <p className="mt-2 text-[11px] text-text-tertiary">
             © {new Date().getFullYear()} MCQ Property Care - Meticulous Craftsman Quality. Fully insured. Independently owned.
           </p>

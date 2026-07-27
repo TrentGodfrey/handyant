@@ -35,6 +35,7 @@ type StaffRow = {
   phone: string | null;
   avatarUrl: string | null;
   createdAt: string | null;
+  isAdmin: boolean;
 };
 
 // ── Demo data ────────────────────────────────────────────────────────────────
@@ -100,6 +101,7 @@ const DEMO_STAFF_ROWS: StaffRow[] = [
     phone: DEMO_TECH.phone,
     avatarUrl: null,
     createdAt: new Date(2024, 0, 10).toISOString(),
+    isAdmin: true,
   },
   {
     id: "demo-tech-2",
@@ -108,6 +110,7 @@ const DEMO_STAFF_ROWS: StaffRow[] = [
     phone: "(972) 555-0177",
     avatarUrl: null,
     createdAt: new Date(2024, 6, 1).toISOString(),
+    isAdmin: false,
   },
 ];
 
@@ -132,6 +135,7 @@ export default function PeoplePage() {
   const { data: session } = useSession();
   const currentUserId = session?.user?.id ?? null;
   const { isDemo, mounted } = useDemoMode();
+  const canManageAccounts = isDemo || session?.user?.isAdmin === true;
 
   const [tab, setTab] = useState<"customers" | "staff">("customers");
   const [search, setSearch] = useState("");
@@ -167,10 +171,12 @@ export default function PeoplePage() {
         if (!r.ok) throw new Error(`Customers (${r.status})`);
         return r.json();
       }),
-      fetch("/api/admin/staff", { signal: ctrl.signal }).then((r) => {
-        if (!r.ok) throw new Error(`Staff (${r.status})`);
-        return r.json();
-      }),
+      canManageAccounts
+        ? fetch("/api/admin/staff", { signal: ctrl.signal }).then((r) => {
+            if (!r.ok) throw new Error(`Staff (${r.status})`);
+            return r.json();
+          })
+        : Promise.resolve([]),
     ])
       .then(([c, s]) => {
         setCustomers(Array.isArray(c) ? c : []);
@@ -183,7 +189,7 @@ export default function PeoplePage() {
       .finally(() => setLoading(false));
 
     return () => ctrl.abort();
-  }, [isDemo, mounted]);
+  }, [canManageAccounts, isDemo, mounted]);
 
   const filteredCustomers = useMemo(() => {
     const q = search.trim().toLowerCase();
@@ -306,10 +312,10 @@ export default function PeoplePage() {
             People
           </h1>
         </div>
-        {tab === "staff" && (
+        {canManageAccounts && tab === "staff" && (
           <button
             onClick={() => setInviteOpen(true)}
-            className="flex items-center gap-1.5 rounded-xl bg-primary px-4 py-2.5 text-[13px] font-semibold text-white shadow-[0_2px_8px_rgba(79,149,152,0.30)] active:bg-primary-dark transition-colors"
+            className="flex min-h-11 items-center gap-1.5 rounded-xl bg-primary px-4 py-2.5 text-[13px] font-semibold text-white shadow-[0_2px_8px_rgba(79,149,152,0.30)] active:bg-primary-dark transition-colors"
           >
             <UserPlus size={15} />
             Invite Staff
@@ -321,7 +327,7 @@ export default function PeoplePage() {
       <div className="mb-4 inline-flex rounded-full bg-surface-secondary p-1">
         <button
           onClick={() => setTab("customers")}
-          className={`flex items-center gap-1.5 rounded-full px-4 py-1.5 text-[12px] font-semibold transition-all ${
+          className={`flex min-h-11 items-center gap-1.5 rounded-full px-4 py-1.5 text-[12px] font-semibold transition-all ${
             tab === "customers"
               ? "bg-white text-primary shadow-sm"
               : "text-text-tertiary hover:text-text-secondary"
@@ -331,18 +337,20 @@ export default function PeoplePage() {
           Customers
           <span className="ml-1 text-[10px] opacity-70">{customers.length}</span>
         </button>
-        <button
-          onClick={() => setTab("staff")}
-          className={`flex items-center gap-1.5 rounded-full px-4 py-1.5 text-[12px] font-semibold transition-all ${
-            tab === "staff"
-              ? "bg-white text-primary shadow-sm"
-              : "text-text-tertiary hover:text-text-secondary"
-          }`}
-        >
-          <ShieldCheck size={12} />
-          Staff
-          <span className="ml-1 text-[10px] opacity-70">{staff.length}</span>
-        </button>
+        {canManageAccounts && (
+          <button
+            onClick={() => setTab("staff")}
+            className={`flex min-h-11 items-center gap-1.5 rounded-full px-4 py-1.5 text-[12px] font-semibold transition-all ${
+              tab === "staff"
+                ? "bg-white text-primary shadow-sm"
+                : "text-text-tertiary hover:text-text-secondary"
+            }`}
+          >
+            <ShieldCheck size={12} />
+            Staff
+            <span className="ml-1 text-[10px] opacity-70">{staff.length}</span>
+          </button>
+        )}
       </div>
 
       {/* Search */}
@@ -462,14 +470,14 @@ export default function PeoplePage() {
                         {details}
                       </div>
                     )}
-                    {c._count.homes === 0 && (
+                    {canManageAccounts && c._count.homes === 0 && (
                       <button
                         type="button"
                         onClick={() => handleDeleteCustomer(c)}
                         disabled={removingId === c.id}
                         aria-label={`Delete ${c.name}`}
                         title="Delete customer"
-                        className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl text-text-tertiary hover:bg-error-light hover:text-error active:bg-error-light transition-colors disabled:opacity-40"
+                        className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl text-text-tertiary hover:bg-error-light hover:text-error active:bg-error-light transition-colors disabled:opacity-40"
                       >
                         {removingId === c.id ? <Spinner size="sm" /> : <Trash2 size={16} />}
                       </button>
@@ -483,7 +491,7 @@ export default function PeoplePage() {
       )}
 
       {/* ── Staff tab ─────────────────────────────────────────────────────── */}
-      {!loading && tab === "staff" && (
+      {!loading && canManageAccounts && tab === "staff" && (
         <>
           {filteredStaff.length === 0 ? (
             <EmptyState
@@ -512,7 +520,7 @@ export default function PeoplePage() {
                           {s.name}
                         </p>
                         <span className="shrink-0 rounded-full bg-primary px-2 py-0.5 text-[10px] font-semibold tracking-wide text-white">
-                          Tech
+                          {s.isAdmin ? "Owner" : "Tech"}
                         </span>
                         {isSelf && (
                           <span className="shrink-0 rounded-full bg-surface-secondary px-2 py-0.5 text-[10px] font-medium text-text-tertiary">
@@ -538,13 +546,13 @@ export default function PeoplePage() {
                         Joined {formatJoinedDate(s.createdAt)}
                       </p>
                     </div>
-                    {!isSelf && (
+                    {!isSelf && !s.isAdmin && (
                       <button
                         type="button"
                         onClick={() => handleRemoveStaff(s.id, s.name)}
                         disabled={removingId === s.id}
                         title="Remove from staff"
-                        className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg text-text-tertiary hover:bg-error-light hover:text-error transition-colors disabled:opacity-40"
+                        className="flex h-11 w-11 shrink-0 items-center justify-center rounded-lg text-text-tertiary hover:bg-error-light hover:text-error transition-colors disabled:opacity-40"
                       >
                         <Trash2 size={14} />
                       </button>
@@ -557,7 +565,7 @@ export default function PeoplePage() {
         </>
       )}
 
-      {inviteOpen && (
+      {canManageAccounts && inviteOpen && (
         <InviteStaffModal
           isDemo={isDemo}
           existingEmails={staff.map((s) => s.email).filter(Boolean) as string[]}
@@ -641,6 +649,7 @@ function InviteStaffModal({
         phone: phone.trim(),
         avatarUrl: null,
         createdAt: new Date().toISOString(),
+        isAdmin: false,
       };
       setTimeout(() => {
         onInvited(newStaff);
@@ -668,6 +677,7 @@ function InviteStaffModal({
         phone: phone.trim(),
         avatarUrl: null,
         createdAt: new Date().toISOString(),
+        isAdmin: data.isAdmin === true,
       };
       onInvited(newStaff);
       setInvitedName(newStaff.name);
@@ -689,15 +699,15 @@ function InviteStaffModal({
   }
 
   return (
-    <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-black/40 p-0 sm:p-4">
-      <div className="w-full max-w-md max-h-[90vh] overflow-y-auto rounded-t-2xl sm:rounded-2xl bg-white shadow-xl">
+    <div className="fixed inset-0 z-50 flex items-end justify-center bg-black/40 p-0 pb-[env(safe-area-inset-bottom)] sm:items-center sm:p-4">
+      <div className="max-h-[90dvh] w-full max-w-md overflow-y-auto rounded-t-2xl bg-white shadow-xl sm:rounded-2xl">
         <div className="sticky top-0 flex items-center justify-between border-b border-border bg-white px-5 py-4">
           <h2 className="text-[16px] font-bold text-text-primary">
             {tempPassword ? "Staff invited" : "Invite staff"}
           </h2>
           <button
             onClick={onClose}
-            className="flex h-7 w-7 items-center justify-center rounded-full text-text-secondary active:bg-surface-secondary transition-colors"
+            className="-mr-2 flex h-11 w-11 items-center justify-center rounded-full text-text-secondary active:bg-surface-secondary transition-colors"
           >
             <X size={16} />
           </button>
@@ -722,7 +732,7 @@ function InviteStaffModal({
                 <button
                   type="button"
                   onClick={handleCopy}
-                  className="flex shrink-0 items-center gap-1.5 rounded-lg bg-primary px-2.5 py-1.5 text-[12px] font-semibold text-white hover:bg-primary-dark transition-colors"
+                  className="flex min-h-11 shrink-0 items-center gap-1.5 rounded-lg bg-primary px-2.5 py-1.5 text-[12px] font-semibold text-white hover:bg-primary-dark transition-colors"
                 >
                   <Copy size={12} />
                   Copy
@@ -736,7 +746,7 @@ function InviteStaffModal({
             <button
               type="button"
               onClick={onClose}
-              className="w-full rounded-xl bg-primary py-2.5 text-[14px] font-semibold text-white hover:bg-primary-dark transition-colors"
+              className="min-h-11 w-full rounded-xl bg-primary py-2.5 text-[14px] font-semibold text-white hover:bg-primary-dark transition-colors"
             >
               Done
             </button>
@@ -759,7 +769,7 @@ function InviteStaffModal({
                 onChange={(e) => setName(e.target.value)}
                 required
                 placeholder="Anthony Bell"
-                className="w-full rounded-lg border border-border bg-white px-3 py-2 text-[13px] text-text-primary focus:outline-none focus:border-primary"
+                className="min-h-12 w-full rounded-lg border border-border bg-white px-3 py-2 text-[13px] text-text-primary focus:outline-none focus:border-primary"
               />
             </div>
 
@@ -773,7 +783,7 @@ function InviteStaffModal({
                 onChange={(e) => setEmail(e.target.value)}
                 required
                 placeholder="staff@mcqhomeco.com"
-                className="w-full rounded-lg border border-border bg-white px-3 py-2 text-[13px] text-text-primary focus:outline-none focus:border-primary"
+                className="min-h-12 w-full rounded-lg border border-border bg-white px-3 py-2 text-[13px] text-text-primary focus:outline-none focus:border-primary"
               />
             </div>
 
@@ -787,7 +797,7 @@ function InviteStaffModal({
                 onChange={(e) => setPhone(e.target.value)}
                 required
                 placeholder="(555) 123-4567"
-                className="w-full rounded-lg border border-border bg-white px-3 py-2 text-[13px] text-text-primary focus:outline-none focus:border-primary"
+                className="min-h-12 w-full rounded-lg border border-border bg-white px-3 py-2 text-[13px] text-text-primary focus:outline-none focus:border-primary"
               />
             </div>
 
@@ -795,14 +805,14 @@ function InviteStaffModal({
               <button
                 type="button"
                 onClick={onClose}
-                className="rounded-lg border border-border bg-white px-4 py-2 text-[13px] font-semibold text-text-secondary hover:bg-surface-secondary transition-colors"
+                className="min-h-11 rounded-lg border border-border bg-white px-4 py-2 text-[13px] font-semibold text-text-secondary hover:bg-surface-secondary transition-colors"
               >
                 Cancel
               </button>
               <button
                 type="submit"
                 disabled={submitting}
-                className="rounded-lg bg-primary px-4 py-2 text-[13px] font-semibold text-white hover:bg-primary-dark transition-colors disabled:opacity-50"
+                className="min-h-11 rounded-lg bg-primary px-4 py-2 text-[13px] font-semibold text-white hover:bg-primary-dark transition-colors disabled:opacity-50"
               >
                 {submitting ? "Inviting..." : "Send invite"}
               </button>

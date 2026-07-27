@@ -1,0 +1,13 @@
+[Unit]
+Description=Check for due MCQ appointment reminders every five minutes
+
+[Timer]
+OnBootSec=3m
+OnUnitActiveSec=5m
+AccuracySec=30s
+RandomizedDelaySec=15s
+Persistent=true
+Unit=mcq-reminders.service
+
+[Install]
+WantedBy=timers.target

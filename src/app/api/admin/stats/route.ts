@@ -1,22 +1,42 @@
 import { prisma } from "@/lib/prisma";
 import { requireTech, unauthorized } from "@/lib/session";
 import { sumBookedMinutes } from "@/lib/booking-stats";
+import {
+  addDaysToDateString,
+  businessDateString,
+  businessDateTimeToInstant,
+} from "@/lib/booking-policy";
+import {
+  bookingDateParts,
+  bookingDateToDatabaseDate,
+} from "@/lib/booking-time";
 
 export async function GET() {
   const tech = await requireTech();
   if (!tech) return unauthorized();
 
   const now = new Date();
-  const startOfDay = new Date(now);
-  startOfDay.setHours(0, 0, 0, 0);
-  const endOfDay = new Date(startOfDay);
-  endOfDay.setDate(endOfDay.getDate() + 1);
-  const startOfWeek = new Date(startOfDay);
-  startOfWeek.setDate(startOfWeek.getDate() - startOfWeek.getDay());
-  const endOfWeek = new Date(startOfWeek);
-  endOfWeek.setDate(endOfWeek.getDate() + 7);
-  const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1);
-  const endOfMonth = new Date(now.getFullYear(), now.getMonth() + 1, 1);
+  const today = businessDateString(now);
+  const todayParts = bookingDateParts(today)!;
+  const tomorrow = addDaysToDateString(today, 1)!;
+  const weekday = new Date(
+    Date.UTC(todayParts.year, todayParts.month - 1, todayParts.day),
+  ).getUTCDay();
+  const weekStart = addDaysToDateString(today, -weekday)!;
+  const weekEnd = addDaysToDateString(weekStart, 7)!;
+  const monthStart = `${today.slice(0, 7)}-01`;
+  const nextMonthValue = new Date(
+    Date.UTC(todayParts.year, todayParts.month, 1),
+  );
+  const monthEnd = nextMonthValue.toISOString().slice(0, 10);
+  const startOfDay = bookingDateToDatabaseDate(today)!;
+  const endOfDay = bookingDateToDatabaseDate(tomorrow)!;
+  const startOfWeek = bookingDateToDatabaseDate(weekStart)!;
+  const endOfWeek = bookingDateToDatabaseDate(weekEnd)!;
+  const startOfMonth = bookingDateToDatabaseDate(monthStart)!;
+  const endOfMonth = bookingDateToDatabaseDate(monthEnd)!;
+  const reviewMonthStart = businessDateTimeToInstant(monthStart, "00:00")!;
+  const reviewMonthEnd = businessDateTimeToInstant(monthEnd, "00:00")!;
 
   const [todayBookings, weekBookings, monthBookings, partsNeeded, allReviews, pendingOffers] = await Promise.all([
     prisma.booking.findMany({
@@ -61,11 +81,20 @@ export async function GET() {
       include: { booking: { include: { customer: true } } },
     }),
     prisma.review.findMany({
-      where: { techId: tech.id, createdAt: { gte: startOfMonth, lt: endOfMonth } },
+      where: {
+        techId: tech.id,
+        createdAt: { gte: reviewMonthStart, lt: reviewMonthEnd },
+      },
       select: { rating: true },
     }),
     prisma.booking.findMany({
-      where: { status: "pending", OR: [{ techId: null }, { techId: tech.id }] },
+      where: {
+        status: "pending",
+        OR: [{ techId: null }, { techId: tech.id }],
+        ...(tech.isAdmin
+          ? {}
+          : { declines: { none: { techId: tech.id } } }),
+      },
       include: {
         customer: { select: { id: true, name: true, phone: true } },
         home: { select: { address: true, city: true, state: true, zip: true } },

@@ -56,7 +56,7 @@ export default function Members(props: MembersProps) {
   return (
     <>
       {/* WiFi + Household quick cards */}
-      <div className="grid grid-cols-2 gap-3">
+      <div className="grid grid-cols-1 gap-3 min-[360px]:grid-cols-2">
         <Card padding="sm" className="border border-border">
           <div className="flex items-center justify-between mb-2">
             <div className="flex items-center gap-2">
@@ -66,7 +66,7 @@ export default function Members(props: MembersProps) {
               <span className="text-[10px] font-semibold uppercase tracking-wider text-text-tertiary">WiFi</span>
             </div>
             {!editingWifi && (
-              <button onClick={() => setEditingWifi(true)} className="text-[11px] font-semibold text-primary">
+              <button onClick={() => setEditingWifi(true)} className="min-h-11 px-2 text-[11px] font-semibold text-primary">
                 {home.wifiName ? "Edit" : "Add"}
               </button>
             )}
@@ -76,11 +76,15 @@ export default function Members(props: MembersProps) {
               <>
                 <p className="text-[13px] font-semibold text-text-primary truncate">{home.wifiName}</p>
                 {home.wifiPassword && (
-                  <div className="mt-1.5 flex items-center gap-1.5">
-                    <span className={`text-[12px] font-mono text-text-secondary tracking-wider truncate ${!showWifiPw ? "blur-[3px] select-none" : ""}`}>
+                  <div className="mt-1.5 flex min-w-0 items-center gap-1.5">
+                    <span className={`min-w-0 flex-1 truncate text-[12px] font-mono text-text-secondary tracking-wider ${!showWifiPw ? "blur-[3px] select-none" : ""}`}>
                       {home.wifiPassword}
                     </span>
-                    <button onClick={() => setShowWifiPw(!showWifiPw)} className="text-text-tertiary hover:text-text-secondary transition-colors shrink-0">
+                    <button
+                      onClick={() => setShowWifiPw(!showWifiPw)}
+                      className="flex h-11 w-11 shrink-0 items-center justify-center text-text-tertiary transition-colors hover:text-text-secondary"
+                      aria-label={showWifiPw ? "Hide WiFi password" : "Show WiFi password"}
+                    >
                       {showWifiPw ? <EyeOff size={13} /> : <Eye size={13} />}
                     </button>
                   </div>
@@ -96,14 +100,14 @@ export default function Members(props: MembersProps) {
                 value={editWifiName}
                 onChange={(e) => setEditWifiName(e.target.value)}
                 placeholder="Network name"
-                className="w-full rounded-md border border-border bg-surface px-2 py-1.5 text-[12px] outline-none focus:border-primary"
+                className="min-h-11 w-full rounded-md border border-border bg-surface px-2 py-1.5 text-[12px] outline-none focus:border-primary"
               />
               <input
                 type="text"
                 value={editWifiPassword}
                 onChange={(e) => setEditWifiPassword(e.target.value)}
                 placeholder="Password"
-                className="w-full rounded-md border border-border bg-surface px-2 py-1.5 text-[12px] font-mono outline-none focus:border-primary"
+                className="min-h-11 w-full rounded-md border border-border bg-surface px-2 py-1.5 text-[12px] font-mono outline-none focus:border-primary"
               />
               <div className="flex gap-1">
                 <Button variant="primary" size="sm" disabled={savingWifi} onClick={saveWifi}>
@@ -143,7 +147,7 @@ export default function Members(props: MembersProps) {
           <p className="text-sm font-semibold uppercase tracking-wider text-text-secondary">Household Members</p>
           <button
             onClick={() => setShowAddMember(!showAddMember)}
-            className="flex items-center gap-1 text-[12px] font-semibold text-primary"
+            className="flex min-h-11 items-center gap-1 px-2 text-[12px] font-semibold text-primary"
           >
             <Plus size={12} />
             Add member
@@ -160,21 +164,21 @@ export default function Members(props: MembersProps) {
                 onChange={(e) => setNewMemberName(e.target.value)}
                 placeholder="Full name"
                 autoFocus
-                className="w-full rounded-lg border border-border bg-surface px-3 py-2 text-[13px] outline-none focus:border-primary"
+                className="min-h-11 w-full rounded-lg border border-border bg-surface px-3 py-2 text-[13px] outline-none focus:border-primary"
               />
               <input
                 type="text"
                 value={newMemberRole}
                 onChange={(e) => setNewMemberRole(e.target.value)}
                 placeholder="Role (e.g. Spouse, Child)"
-                className="w-full rounded-lg border border-border bg-surface px-3 py-2 text-[13px] outline-none focus:border-primary"
+                className="min-h-11 w-full rounded-lg border border-border bg-surface px-3 py-2 text-[13px] outline-none focus:border-primary"
               />
               <input
                 type="tel"
                 value={newMemberPhone}
                 onChange={(e) => setNewMemberPhone(e.target.value)}
                 placeholder="Phone (optional)"
-                className="w-full rounded-lg border border-border bg-surface px-3 py-2 text-[13px] outline-none focus:border-primary"
+                className="min-h-11 w-full rounded-lg border border-border bg-surface px-3 py-2 text-[13px] outline-none focus:border-primary"
               />
               <div className="flex gap-2 pt-1">
                 <Button variant="outline" size="sm" onClick={() => { setShowAddMember(false); setNewMemberName(""); setNewMemberRole(""); setNewMemberPhone(""); }}>Cancel</Button>
@@ -204,14 +208,18 @@ export default function Members(props: MembersProps) {
                   </p>
                 </div>
                 {member.phone && (
-                  <a href={`tel:${member.phone}`} className="flex h-9 w-9 items-center justify-center rounded-full bg-success-light active:bg-success/20 transition-colors">
+                  <a
+                    href={`tel:${member.phone}`}
+                    className="flex h-11 w-11 items-center justify-center rounded-full bg-success-light active:bg-success/20 transition-colors"
+                    aria-label={`Call ${member.name}`}
+                  >
                     <Phone size={15} className="text-success" />
                   </a>
                 )}
                 <button
                   onClick={() => removeMember(member.id)}
-                  className="flex h-9 w-9 items-center justify-center rounded-full hover:bg-error-light transition-colors"
-                  aria-label="Remove member"
+                  className="flex h-11 w-11 items-center justify-center rounded-full hover:bg-error-light transition-colors"
+                  aria-label={`Remove ${member.name}`}
                 >
                   <X size={14} className="text-text-tertiary" />
                 </button>

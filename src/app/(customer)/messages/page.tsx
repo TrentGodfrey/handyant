@@ -2,10 +2,13 @@
 
 import { useState, useRef, useEffect, useCallback } from "react";
 import { useSession } from "next-auth/react";
+import Image from "next/image";
 import { Send, Camera, Paperclip, ArrowLeft, Phone, MoreVertical, MessageSquare } from "lucide-react";
 import { useDemoMode } from "@/lib/useDemoMode";
 import { toast as appToast } from "@/components/Toaster";
 import { bookingDateToLocalDate } from "@/lib/booking-time";
+import { businessDateString } from "@/lib/booking-policy";
+import { prepareImageForUpload } from "@/lib/client-image-upload";
 
 interface Message {
   id: string;
@@ -90,16 +93,16 @@ const DEMO_THREADS: Thread[] = [
     time: "11:20 AM",
     unread: 0,
     online: true,
-    nextVisit: "Tue, Apr 1 · 9:00 AM",
+    nextVisit: "Tue, Apr 1 · 8:00 AM",
     address: "4821 Oak Hollow Dr",
     phone: "(214) 555-0199",
     messages: [
-      { id: "1", text: "Hi Sarah! Just confirming our appointment for Tuesday. I'll be there around 9 AM.", sender: "tech", timestamp: "Mar 28, 10:30 AM", type: "text" },
+      { id: "1", text: "Hi Sarah! Just confirming our appointment for Tuesday. I'll be there at 8:00 AM.", sender: "tech", timestamp: "Mar 28, 10:30 AM", type: "text" },
       { id: "2", text: "Sounds great! The kitchen faucet has been leaking worse this week.", sender: "customer", timestamp: "Mar 28, 10:45 AM", type: "text" },
       { id: "3", text: "Got it, I'll bring a Moen cartridge. Any preference on finish?", sender: "tech", timestamp: "Mar 28, 11:02 AM", type: "text" },
       { id: "4", text: "Brushed nickel if possible! Also the garage door sensor has been acting up - it closes then reopens immediately.", sender: "customer", timestamp: "Mar 28, 11:15 AM", type: "text" },
       { id: "5", text: "Classic alignment issue. I'll bring my laser level. See you Tuesday! 👍", sender: "tech", timestamp: "Mar 28, 11:20 AM", type: "text" },
-      { id: "s1", text: "Appointment confirmed for Tue, Apr 1 at 9:00 AM", sender: "tech", timestamp: "Mar 28, 11:21 AM", type: "system" },
+      { id: "s1", text: "Appointment confirmed for Tue, Apr 1 at 8:00 AM", sender: "tech", timestamp: "Mar 28, 11:21 AM", type: "system" },
     ],
   },
   {
@@ -159,6 +162,7 @@ export default function MessagesPage() {
   const [messagesByThread, setMessagesByThread] = useState<Record<string, Message[]>>({});
   const [input, setInput] = useState("");
   const [sending, setSending] = useState(false);
+  const [uploadingPhoto, setUploadingPhoto] = useState(false);
   const [toast, setToast] = useState<string | null>(null);
   const [menuOpen, setMenuOpen] = useState(false);
 
@@ -196,9 +200,11 @@ export default function MessagesPage() {
 
       // Build a map of techId → upcoming visit info
       const visitsByTech = new Map<string, ApiBookingLite>();
+      const today = businessDateString();
       for (const b of bookings) {
         if (!b.techId) continue;
         if (!["pending", "confirmed", "in_progress"].includes(b.status)) continue;
+        if (b.scheduledDate.slice(0, 10) < today) continue;
         const existing = visitsByTech.get(b.techId);
         if (!existing || b.scheduledDate < existing.scheduledDate) {
           visitsByTech.set(b.techId, b);
@@ -280,6 +286,8 @@ export default function MessagesPage() {
   }, [loadThreads, mounted]);
 
   const bottomRef = useRef<HTMLDivElement>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
+  const cameraInputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: "smooth" });
@@ -343,6 +351,8 @@ export default function MessagesPage() {
     }
 
     setSending(true);
+    let optimisticConversationId: string | null = null;
+    let optimisticTempId: string | null = null;
     try {
       let conversationId = activeThread.id;
 
@@ -354,7 +364,6 @@ export default function MessagesPage() {
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
             otherUserId: activeThread.techUserId,
-            firstMessage: text,
           }),
         });
         const created = await createRes.json();
@@ -372,19 +381,12 @@ export default function MessagesPage() {
           return next;
         });
 
-        // Refetch the canonical message list (includes the firstMessage).
-        const msgs = await fetch(`/api/messages?conversationId=${conversationId}`).then((r) => r.json());
-        if (Array.isArray(msgs) && userId) {
-          setMessagesByThread((prev) => ({
-            ...prev,
-            [conversationId]: msgs.map((m: ApiMessage) => adaptMessage(m, userId)),
-          }));
-        }
-        return;
       }
 
       // Optimistic append.
       const tempId = `tmp-${Date.now()}`;
+      optimisticConversationId = conversationId;
+      optimisticTempId = tempId;
       const optimistic: Message = {
         id: tempId,
         text,
@@ -402,15 +404,14 @@ export default function MessagesPage() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ conversationId, text }),
       });
-      const created: ApiMessage | { error: string } = await res.json();
+      const created: ApiMessage | { error?: string } = await res.json().catch(() => ({}));
 
       if (!res.ok || !("id" in created) || !userId) {
-        // Roll back the optimistic message on failure.
-        setMessagesByThread((prev) => ({
-          ...prev,
-          [conversationId]: (prev[conversationId] || []).filter((m) => m.id !== tempId),
-        }));
-        return;
+        throw new Error(
+          "error" in created && created.error
+            ? created.error
+            : "Your message could not be sent",
+        );
       }
 
       setMessagesByThread((prev) => ({
@@ -419,10 +420,86 @@ export default function MessagesPage() {
           m.id === tempId ? adaptMessage(created, userId) : m
         ),
       }));
-    } catch {
-      // Best-effort: silent on error in this UI layer.
+    } catch (error) {
+      if (optimisticConversationId && optimisticTempId) {
+        setMessagesByThread((prev) => ({
+          ...prev,
+          [optimisticConversationId!]: (prev[optimisticConversationId!] || []).filter(
+            (message) => message.id !== optimisticTempId,
+          ),
+        }));
+      }
+      setInput((current) => current || text);
+      appToast.error(
+        error instanceof Error
+          ? `Couldn't send message: ${error.message}`
+          : "Couldn't send message. Please try again.",
+      );
     } finally {
       setSending(false);
+    }
+  }
+
+  async function sendPhoto(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0];
+    e.target.value = "";
+    if (!file || !activeThread || uploadingPhoto) return;
+    setUploadingPhoto(true);
+    try {
+      const dataUrl = await prepareImageForUpload(file);
+      if (isDemo) {
+        const demoMessage: Message = {
+          id: `photo-${Date.now()}`,
+          text: dataUrl,
+          sender: "customer",
+          timestamp: "Just now",
+          type: "photo",
+        };
+        setMessagesByThread((prev) => ({
+          ...prev,
+          [activeThread.id]: [...(prev[activeThread.id] || []), demoMessage],
+        }));
+        return;
+      }
+
+      let conversationId = activeThread.id;
+      if (conversationId.startsWith("new:")) {
+        if (!activeThread.techUserId) throw new Error("No staff member is available");
+        const createRes = await fetch("/api/conversations", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ otherUserId: activeThread.techUserId }),
+        });
+        const created = await createRes.json();
+        if (!createRes.ok || !created?.id) throw new Error(created?.error ?? "Could not start conversation");
+        conversationId = created.id;
+        const upgraded = { ...activeThread, id: conversationId };
+        setThreads((prev) => prev.map((thread) => thread.id === activeThread.id ? upgraded : thread));
+        setActiveThread(upgraded);
+        setMessagesByThread((prev) => {
+          const next = { ...prev, [conversationId]: prev[activeThread.id] ?? [] };
+          delete next[activeThread.id];
+          return next;
+        });
+      }
+
+      const response = await fetch("/api/messages", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ conversationId, type: "photo", dataUrl }),
+      });
+      const created: ApiMessage | { error?: string } = await response.json().catch(() => ({}));
+      if (!response.ok || !("id" in created) || !userId) {
+        throw new Error("error" in created && created.error ? created.error : "Photo upload failed");
+      }
+      setMessagesByThread((prev) => ({
+        ...prev,
+        [conversationId]: [...(prev[conversationId] || []), adaptMessage(created, userId)],
+      }));
+    } catch (error) {
+      appToast.error(error instanceof Error ? error.message : "Photo upload failed");
+    } finally {
+      setUploadingPhoto(false);
     }
   }
 
@@ -430,16 +507,16 @@ export default function MessagesPage() {
   if (activeThread) {
     const messages = messagesByThread[activeThread.id] || [];
     return (
-      <div className="fixed inset-0 lg:left-64 flex flex-col bg-background">
+      <div className="fixed inset-0 h-[100dvh] lg:left-64 flex flex-col bg-background">
         {/* Header */}
         <div className="bg-white border-b border-border px-4 pt-14 lg:pt-4 pb-3 flex items-center gap-3 shrink-0">
           <button
             onClick={() => setActiveThread(null)}
-            className="flex h-9 w-9 items-center justify-center rounded-full hover:bg-surface-secondary transition-colors"
+            className="flex h-11 w-11 items-center justify-center rounded-full hover:bg-surface-secondary transition-colors"
           >
             <ArrowLeft size={20} className="text-text-secondary" />
           </button>
-          <div className="flex items-center gap-3 flex-1">
+          <div className="flex min-w-0 flex-1 items-center gap-3">
             <div className="relative">
               <div className="h-10 w-10 rounded-full bg-primary flex items-center justify-center">
                 <span className="text-[13px] font-bold text-white">{activeThread.initials}</span>
@@ -448,8 +525,8 @@ export default function MessagesPage() {
                 <div className="absolute -bottom-0.5 -right-0.5 h-3 w-3 rounded-full border-2 border-white bg-success" />
               )}
             </div>
-            <div>
-              <p className="text-[15px] font-semibold text-text-primary">{activeThread.name}</p>
+            <div className="min-w-0">
+              <p className="truncate text-[15px] font-semibold text-text-primary">{activeThread.name}</p>
               <p className={`text-[11px] font-medium ${activeThread.online ? "text-success" : "text-text-tertiary"}`}>
                 {activeThread.online ? "Online now" : "Offline"}
               </p>
@@ -457,13 +534,14 @@ export default function MessagesPage() {
           </div>
           <div className="flex items-center gap-1 relative">
             {activeThread.phone && (
-              <a href={`tel:${activeThread.phone.replace(/[^+\d]/g, "")}`} className="flex h-9 w-9 items-center justify-center rounded-full hover:bg-surface-secondary transition-colors">
+              <a aria-label="Call staff" href={`tel:${activeThread.phone.replace(/[^+\d]/g, "")}`} className="flex h-11 w-11 items-center justify-center rounded-full hover:bg-surface-secondary transition-colors">
                 <Phone size={18} className="text-text-secondary" />
               </a>
             )}
             <button
               onClick={() => setMenuOpen((v) => !v)}
-              className="flex h-9 w-9 items-center justify-center rounded-full hover:bg-surface-secondary transition-colors"
+              aria-label="Conversation options"
+              className="flex h-11 w-11 items-center justify-center rounded-full hover:bg-surface-secondary transition-colors"
             >
               <MoreVertical size={18} className="text-text-secondary" />
             </button>
@@ -485,7 +563,7 @@ export default function MessagesPage() {
                       setThreads((prev) => prev.map((t) => t.id === activeThread.id ? { ...t, unread: 0 } : t));
                       showToast("Marked as read");
                     }}
-                    className="w-full text-left px-4 py-2.5 text-[13px] text-text-primary hover:bg-surface-secondary transition-colors"
+                    className="min-h-11 w-full px-4 py-2.5 text-left text-[13px] text-text-primary hover:bg-surface-secondary transition-colors"
                   >
                     Mark as read
                   </button>
@@ -494,7 +572,7 @@ export default function MessagesPage() {
                       setMenuOpen(false);
                       showToast("Profile coming soon");
                     }}
-                    className="w-full text-left px-4 py-2.5 text-[13px] text-text-primary hover:bg-surface-secondary transition-colors border-t border-border"
+                    className="min-h-11 w-full border-t border-border px-4 py-2.5 text-left text-[13px] text-text-primary hover:bg-surface-secondary transition-colors"
                   >
                     View profile
                   </button>
@@ -506,12 +584,12 @@ export default function MessagesPage() {
 
         {/* Pinned visit bar */}
         {activeThread.nextVisit && (
-          <div className="bg-primary-50 border-b border-primary-100 px-4 py-2 flex items-center justify-between shrink-0">
-            <div className="flex items-center gap-2">
+          <div className="flex shrink-0 items-center justify-between gap-3 border-b border-primary-100 bg-primary-50 px-4 py-2">
+            <div className="flex min-w-0 items-center gap-2">
               <div className="h-1.5 w-1.5 rounded-full bg-primary" />
               <span className="text-[11px] font-semibold text-primary">Next: {activeThread.nextVisit}</span>
             </div>
-            <span className="text-[11px] text-text-tertiary">{activeThread.address}</span>
+            <span className="min-w-0 truncate text-right text-[11px] text-text-tertiary">{activeThread.address}</span>
           </div>
         )}
 
@@ -535,7 +613,18 @@ export default function MessagesPage() {
                     ? "bg-primary text-white rounded-br-md"
                     : "bg-white border border-border text-text-primary rounded-bl-md shadow-[0_1px_2px_rgba(0,0,0,0.04)]"
                 }`}>
-                  <p className="text-[14px] leading-relaxed">{msg.text}</p>
+                  {msg.type === "photo" ? (
+                    <Image
+                      src={msg.text.replace(/^\[photo\]\s*/, "")}
+                      alt="Shared message photo"
+                      width={640}
+                      height={480}
+                      unoptimized
+                      className="h-auto max-h-72 w-full rounded-xl object-cover"
+                    />
+                  ) : (
+                    <p className="text-[14px] leading-relaxed whitespace-pre-wrap break-words">{msg.text}</p>
+                  )}
                   <p className={`text-[10px] mt-1 ${isCustomer ? "text-white/50" : "text-text-tertiary"}`}>{msg.timestamp}</p>
                 </div>
               </div>
@@ -545,21 +634,29 @@ export default function MessagesPage() {
         </div>
 
         {/* Input */}
-        <div className="bg-white border-t border-border px-4 py-3 shrink-0" style={{ paddingBottom: "calc(80px + env(safe-area-inset-bottom, 0px))" }}>
-          <div className="flex items-end gap-2">
+        <div className="shrink-0 border-t border-border bg-white px-3 pt-3 pb-[calc(68px+env(safe-area-inset-bottom,0px))] lg:px-4 lg:pb-3">
+          <div className="flex items-end gap-1.5 sm:gap-2">
+            <input ref={fileInputRef} type="file" accept="image/*" className="hidden" onChange={sendPhoto} />
+            <input ref={cameraInputRef} type="file" accept="image/*" capture="environment" className="hidden" onChange={sendPhoto} />
             <button
-              onClick={() => showToast("Attachments coming soon")}
-              className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full hover:bg-surface-secondary transition-colors"
+              type="button"
+              onClick={() => fileInputRef.current?.click()}
+              disabled={uploadingPhoto}
+              aria-label="Choose a photo"
+              className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full hover:bg-surface-secondary transition-colors disabled:opacity-50"
             >
               <Paperclip size={20} className="text-text-tertiary" />
             </button>
             <button
-              onClick={() => showToast("Photo upload coming soon")}
-              className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full hover:bg-surface-secondary transition-colors"
+              type="button"
+              onClick={() => cameraInputRef.current?.click()}
+              disabled={uploadingPhoto}
+              aria-label="Take a photo"
+              className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full hover:bg-surface-secondary transition-colors disabled:opacity-50"
             >
               <Camera size={20} className="text-text-tertiary" />
             </button>
-            <div className="flex-1 flex items-end gap-2 rounded-2xl border border-border bg-surface-secondary px-4 py-2.5">
+            <div className="flex min-w-0 flex-1 items-end gap-2 rounded-2xl border border-border bg-surface-secondary px-3 py-2.5 sm:px-4">
               <input
                 type="text"
                 value={input}
@@ -572,7 +669,8 @@ export default function MessagesPage() {
             <button
               onClick={sendMessage}
               disabled={!input.trim() || sending}
-              className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-full transition-all ${
+              aria-label="Send message"
+              className={`flex h-11 w-11 shrink-0 items-center justify-center rounded-full transition-all ${
                 input.trim() && !sending ? "bg-primary text-white shadow-sm" : "bg-surface-secondary text-text-tertiary"
               }`}
             >

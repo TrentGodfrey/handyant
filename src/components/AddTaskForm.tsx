@@ -162,7 +162,7 @@ export default function AddTaskForm({
         <p className="text-[13px] font-semibold text-text-primary">New Task</p>
         <button
           onClick={onCancel}
-          className="flex h-7 w-7 items-center justify-center rounded-full text-text-tertiary hover:bg-white hover:text-text-secondary transition-colors"
+          className="-mr-2 flex h-11 w-11 items-center justify-center rounded-full text-text-tertiary hover:bg-white hover:text-text-secondary transition-colors"
           aria-label="Close"
         >
           <X size={14} />
@@ -209,7 +209,7 @@ export default function AddTaskForm({
             key={opt.value}
             type="button"
             onClick={() => setPriority(opt.value)}
-            className={`flex items-center gap-1.5 rounded-full px-3 py-1.5 text-[12px] font-semibold border transition-all ${
+            className={`flex min-h-11 items-center gap-1.5 rounded-full px-3 py-1.5 text-[12px] font-semibold border transition-all ${
               priority === opt.value
                 ? "border-primary bg-primary text-white"
                 : "border-border bg-surface text-text-secondary"
@@ -231,7 +231,7 @@ export default function AddTaskForm({
         value={partsDescription}
         onChange={(e) => setPartsDescription(e.target.value)}
         placeholder="e.g. Ecobee Smart Thermostat"
-        className="w-full rounded-xl border border-border bg-surface px-4 py-2.5 text-[13px] text-text-primary placeholder:text-text-tertiary focus:border-primary focus:outline-none mb-2.5"
+        className="min-h-12 w-full rounded-xl border border-border bg-surface px-4 py-2.5 text-[13px] text-text-primary placeholder:text-text-tertiary focus:border-primary focus:outline-none mb-2.5"
       />
       {partsDescription.trim() && (
         <div className="mb-3">
@@ -240,7 +240,7 @@ export default function AddTaskForm({
             <button
               type="button"
               onClick={() => setPartsBuyer("customer")}
-              className={`rounded-full px-3 py-1 text-[11px] font-semibold transition-all ${
+              className={`min-h-11 rounded-full px-3 py-1 text-[11px] font-semibold transition-all ${
                 partsBuyer === "customer" ? "bg-primary text-white shadow-sm" : "text-text-secondary"
               }`}
             >
@@ -249,7 +249,7 @@ export default function AddTaskForm({
             <button
               type="button"
               onClick={() => setPartsBuyer("tech")}
-              className={`rounded-full px-3 py-1 text-[11px] font-semibold transition-all ${
+              className={`min-h-11 rounded-full px-3 py-1 text-[11px] font-semibold transition-all ${
                 partsBuyer === "tech" ? "bg-primary text-white shadow-sm" : "text-text-secondary"
               }`}
             >
@@ -287,10 +287,12 @@ export default function AddTaskForm({
               <button
                 type="button"
                 onClick={() => removePhoto(p.id)}
-                className="absolute -top-1.5 -right-1.5 flex h-5 w-5 items-center justify-center rounded-full bg-error text-white shadow-sm hover:bg-red-700"
+                className="absolute -right-3 -top-3 flex h-11 w-11 items-center justify-center rounded-full"
                 aria-label="Remove photo"
               >
-                <X size={11} strokeWidth={2.5} />
+                <span className="flex h-5 w-5 items-center justify-center rounded-full bg-error text-white shadow-sm hover:bg-red-700">
+                  <X size={11} strokeWidth={2.5} />
+                </span>
               </button>
             </div>
           ))}

@@ -20,7 +20,7 @@ export async function sendHomeTaskEmail(params: HomeTaskEmailParams) {
     ? home.customer
     : await prisma.user.findFirst({
         where: { role: "tech", email: { not: null } },
-        orderBy: { createdAt: "asc" },
+        orderBy: [{ isAdmin: "desc" }, { createdAt: "asc" }],
         select: { name: true, email: true },
       });
 
@@ -30,7 +30,7 @@ export async function sendHomeTaskEmail(params: HomeTaskEmailParams) {
     subject: params.subject,
     heading: "To-do update",
     message: params.message,
-    actionPath: params.taskId ? `/task/${params.taskId}` : params.actorRole === "tech" ? "/todo" : "/admin-todos",
+    actionPath: params.taskId ? `/task/${params.taskId}` : params.actorRole === "tech" ? "/todo" : "/homes",
     actionLabel: "View to-do",
   });
 }

@@ -3,6 +3,7 @@ import { hash } from "bcryptjs";
 import { prisma } from "@/lib/prisma";
 import { rateLimited, requestIp, takeRateLimit } from "@/lib/rate-limit";
 import { hashSecurityToken } from "@/lib/security-tokens";
+import { MAX_PASSWORD_LENGTH } from "@/lib/login-security";
 
 export async function POST(req: NextRequest) {
   let body: { token?: unknown; password?: unknown };
@@ -24,6 +25,12 @@ export async function POST(req: NextRequest) {
     return Response.json(
       { error: "Password must be at least 8 characters" },
       { status: 400 }
+    );
+  }
+  if (password.length > MAX_PASSWORD_LENGTH) {
+    return Response.json(
+      { error: `Password must be at most ${MAX_PASSWORD_LENGTH} characters` },
+      { status: 400 },
     );
   }
 
@@ -49,14 +56,25 @@ export async function POST(req: NextRequest) {
   }
 
   const passwordHash = await hash(password, 12);
-  await prisma.user.update({
-    where: { id: user.id },
+  const consumed = await prisma.user.updateMany({
+    where: {
+      id: user.id,
+      passwordResetToken: hashSecurityToken(token),
+      passwordResetExpires: { gt: new Date() },
+    },
     data: {
       passwordHash,
       passwordResetToken: null,
       passwordResetExpires: null,
+      sessionVersion: { increment: 1 },
     },
   });
+  if (consumed.count !== 1) {
+    return Response.json(
+      { error: "Invalid or expired reset link" },
+      { status: 400 },
+    );
+  }
 
   return Response.json({ ok: true });
 }

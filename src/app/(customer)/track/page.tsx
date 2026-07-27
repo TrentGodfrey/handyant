@@ -1,47 +1,24 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import Link from "next/link";
 import Card from "@/components/Card";
 import Button from "@/components/Button";
 import Spinner from "@/components/Spinner";
 import {
   ArrowLeft, Phone, MessageCircle, Star, ChevronDown, ChevronUp,
-  CheckCircle2, MapPin, Clock, Share2, Truck, Check,
-  Wrench, Package, DollarSign, CalendarDays, Sparkles, XCircle,
+  CheckCircle2, Clock, Check, Wrench, Package, CalendarDays, Sparkles, XCircle,
 } from "lucide-react";
 import { useDemoMode } from "@/lib/useDemoMode";
 import { toast } from "@/components/Toaster";
 import { bookingDateToLocalDate, bookingTimeParts, formatBookingTime } from "@/lib/booking-time";
+import {
+  bookingDateAndTimeToInstant,
+  businessDateString,
+} from "@/lib/booking-policy";
 
 function combineDateTime(scheduledDate: string, scheduledTime: string): Date | null {
-  // Date may be "YYYY-MM-DD" or full ISO; time may be "HH:mm[:ss]" or full ISO
-  const dateStr = scheduledDate.split("T")[0];
-  const parts = bookingTimeParts(scheduledTime);
-  if (!parts) return null;
-  const { hours: h, minutes: m } = parts;
-  const [yStr, moStr, dStr] = dateStr.split("-");
-  const y = parseInt(yStr, 10);
-  const mo = parseInt(moStr, 10) - 1;
-  const day = parseInt(dStr, 10);
-  if (!Number.isFinite(y) || !Number.isFinite(mo) || !Number.isFinite(day)) return null;
-  const out = new Date(y, mo, day, h, m, 0, 0);
-  return isNaN(out.getTime()) ? null : out;
-}
-
-function computeEtaLabel(scheduledDate: string, scheduledTime: string, status: string): { primary: string; secondary: string } {
-  if (status === "in_progress") return { primary: "On site", secondary: "Tech is working" };
-  const target = combineDateTime(scheduledDate, scheduledTime);
-  if (!target) return { primary: "Soon", secondary: "" };
-  const now = new Date();
-  const diffMin = Math.round((target.getTime() - now.getTime()) / 60000);
-  const arrivalTime = target.toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit" });
-  if (diffMin <= -5) return { primary: "Running late", secondary: `Was scheduled for ${arrivalTime}` };
-  if (diffMin <= 0) return { primary: "Arriving now", secondary: `Scheduled for ${arrivalTime}` };
-  if (diffMin < 60) return { primary: `Arriving in ${diffMin} min`, secondary: `Around ${arrivalTime}` };
-  const hours = Math.floor(diffMin / 60);
-  const mins = diffMin % 60;
-  return { primary: `Arriving at ${arrivalTime}`, secondary: hours > 0 ? `In ${hours}h ${mins}m` : "" };
+  return bookingDateAndTimeToInstant(scheduledDate, scheduledTime);
 }
 
 // ─── Types & Data ──────────────────────────────────────────────────────────
@@ -54,10 +31,8 @@ interface ApiBooking {
   scheduledDate: string;
   scheduledTime: string;
   description: string | null;
-  estimatedCost: string | number | null;
   durationMinutes: number | null;
   tech: { id: string; name: string; phone: string | null } | null;
-  home: { address: string; city: string | null; state?: string | null; zip?: string | null } | null;
   tasks: { id: string; label: string; done: boolean | null }[];
   parts?: { id: string; item: string }[];
 }
@@ -68,13 +43,10 @@ interface ActiveBooking {
   scheduledDate: string;
   scheduledTime: string;
   description: string | null;
-  estimatedCost: number | null;
   durationMinutes: number | null;
   techName: string;
   techInitial: string;
   techPhone: string | null;
-  address: string;
-  cityLine: string;
   tasks: { label: string; done: boolean }[];
   parts: string[];
 }
@@ -82,16 +54,13 @@ interface ActiveBooking {
 const DEMO_ACTIVE: ActiveBooking = {
   id: "demo",
   status: "confirmed",
-  scheduledDate: "2026-04-24",
-  scheduledTime: "09:00",
+  scheduledDate: businessDateString(),
+  scheduledTime: "10:00",
   description: null,
-  estimatedCost: 340,
-  durationMinutes: 180,
+  durationMinutes: 105,
   techName: "Anthony B.",
   techInitial: "A",
   techPhone: "(214) 555-0199",
-  address: "4821 Oak Hollow Dr",
-  cityLine: "Plano, TX 75024",
   tasks: [
     { label: "Replace kitchen faucet", done: false },
     { label: "Fix garage door sensor", done: false },
@@ -99,20 +68,16 @@ const DEMO_ACTIVE: ActiveBooking = {
   parts: ["Moen 7594ESRS Arbor Faucet"],
 };
 
-const ACTIVE_STATUSES = new Set(["confirmed", "in_progress"]);
+const ACTIVE_STATUSES = new Set(["pending", "confirmed", "in_progress"]);
 
 function todayStr(): string {
-  const d = new Date();
-  const y = d.getFullYear();
-  const m = String(d.getMonth() + 1).padStart(2, "0");
-  const day = String(d.getDate()).padStart(2, "0");
-  return `${y}-${m}-${day}`;
+  return businessDateString();
 }
 
 function statusToPhase(status: string): Phase {
   if (status === "completed") return 3;
   if (status === "in_progress") return 2;
-  // We don't have an explicit "on_the_way" status - keep the demo advance toggle.
+  if (status === "confirmed") return 1;
   return 0;
 }
 
@@ -129,21 +94,16 @@ function formatDate(dateStr: string): string {
 
 function adapt(b: ApiBooking): ActiveBooking {
   const techName = b.tech?.name ?? "Technician TBD";
-  const cityParts = [b.home?.city, b.home?.state].filter(Boolean).join(", ");
-  const cityLine = [cityParts, b.home?.zip].filter(Boolean).join(" ");
   return {
     id: b.id,
     status: b.status,
     scheduledDate: b.scheduledDate,
     scheduledTime: b.scheduledTime,
     description: b.description,
-    estimatedCost: b.estimatedCost == null ? null : Number(b.estimatedCost),
     durationMinutes: b.durationMinutes,
     techName,
     techInitial: techName[0]?.toUpperCase() ?? "?",
     techPhone: b.tech?.phone ?? null,
-    address: b.home?.address ?? "Address on file",
-    cityLine: cityLine || "",
     tasks: (b.tasks ?? []).map((t) => ({ label: t.label, done: !!t.done })),
     parts: (b.parts ?? []).map((p) => p.item),
   };
@@ -151,105 +111,34 @@ function adapt(b: ApiBooking): ActiveBooking {
 
 function pickActive(list: ApiBooking[]): ApiBooking | null {
   const today = todayStr();
-  // Prefer today's confirmed/in_progress booking
-  const todays = list.filter(
-    (b) => ACTIVE_STATUSES.has(b.status) && b.scheduledDate.startsWith(today)
-  );
-  if (todays.length) return todays[0];
-  // Fall back to any active booking (next upcoming)
+  const now = Date.now();
+  const isUpcoming = (booking: ApiBooking) => {
+    if (!ACTIVE_STATUSES.has(booking.status)) return false;
+    if (booking.status === "in_progress") return true;
+    const start = combineDateTime(booking.scheduledDate, booking.scheduledTime);
+    return !!start && start.getTime() >= now;
+  };
+  // Prefer today's requested, confirmed, or in-progress booking.
   const active = list
-    .filter((b) => ACTIVE_STATUSES.has(b.status))
-    .sort((a, b) => a.scheduledDate.localeCompare(b.scheduledDate));
+    .filter(isUpcoming)
+    .sort((a, b) => {
+      const aStart = combineDateTime(a.scheduledDate, a.scheduledTime);
+      const bStart = combineDateTime(b.scheduledDate, b.scheduledTime);
+      return (aStart?.getTime() ?? Number.MAX_SAFE_INTEGER) -
+        (bStart?.getTime() ?? Number.MAX_SAFE_INTEGER);
+    });
+  const todayBooking = active.find((booking) => booking.scheduledDate.startsWith(today));
+  if (todayBooking) return todayBooking;
+  // Fall back to the next requested, confirmed, or in-progress booking.
   return active[0] ?? null;
-}
-
-// ─── Route SVG ─────────────────────────────────────────────────────────────
-
-function RouteSVG({ phase }: { phase: Phase }) {
-  // Only fully visible in "On the Way" phase, but we render it conditionally
-  return (
-    <div className="relative w-full h-40 my-2">
-      <svg viewBox="0 0 320 120" className="w-full h-full" fill="none">
-        {/* Road / path background */}
-        <path
-          d="M 30 95 C 80 95, 90 30, 160 30 C 230 30, 240 95, 290 95"
-          stroke="var(--color-border, #E5E7EB)"
-          strokeWidth="6"
-          strokeLinecap="round"
-        />
-        {/* Traveled portion */}
-        <path
-          d="M 30 95 C 80 95, 90 30, 160 30 C 230 30, 240 95, 290 95"
-          stroke="var(--color-primary, #4F9598)"
-          strokeWidth="6"
-          strokeLinecap="round"
-          strokeDasharray="400"
-          strokeDashoffset={phase === 1 ? "0" : "400"}
-          className="transition-[stroke-dashoffset] duration-[3s] ease-in-out"
-        />
-        {/* Dashed center line */}
-        <path
-          d="M 30 95 C 80 95, 90 30, 160 30 C 230 30, 240 95, 290 95"
-          stroke="white"
-          strokeWidth="1.5"
-          strokeLinecap="round"
-          strokeDasharray="6 8"
-          opacity="0.5"
-        />
-
-        {/* Start point (Anthony) */}
-        <circle cx="30" cy="95" r="6" fill="var(--color-primary, #4F9598)" />
-        <circle cx="30" cy="95" r="3" fill="white" />
-
-        {/* End point (Home) */}
-        <circle cx="290" cy="95" r="6" fill="var(--color-success, #22C55E)" />
-        <circle cx="290" cy="95" r="3" fill="white" />
-
-        {/* Distance markers */}
-        <text x="80" y="75" fontSize="9" fill="var(--color-text-tertiary, #9CA3AF)" fontFamily="system-ui">2.1 mi</text>
-        <text x="200" y="75" fontSize="9" fill="var(--color-text-tertiary, #9CA3AF)" fontFamily="system-ui">0.8 mi</text>
-
-        {/* Moving truck icon - animated along path */}
-        {phase === 1 && (
-          <g className="animate-truck-move">
-            <circle r="12" fill="var(--color-primary, #4F9598)" className="drop-shadow-md" />
-            <circle r="10" fill="var(--color-primary, #4F9598)" />
-            {/* Truck icon simplified */}
-            <rect x="-6" y="-4" width="8" height="7" rx="1" fill="white" />
-            <rect x="2" y="-2" width="5" height="5" rx="1" fill="white" opacity="0.8" />
-            <circle cx="-3" cy="4" r="1.5" fill="white" />
-            <circle cx="4" cy="4" r="1.5" fill="white" />
-          </g>
-        )}
-      </svg>
-
-      {/* Labels under start/end */}
-      <div className="absolute bottom-0 left-2 text-[10px] text-text-tertiary font-medium">Tech</div>
-      <div className="absolute bottom-0 right-1 text-[10px] text-text-tertiary font-medium">Your Home</div>
-
-      {/* CSS for the truck animation */}
-      <style>{`
-        @keyframes truckMove {
-          0%   { transform: translate(30px, 95px); }
-          25%  { transform: translate(80px, 60px); }
-          50%  { transform: translate(160px, 30px); }
-          75%  { transform: translate(240px, 60px); }
-          100% { transform: translate(290px, 95px); }
-        }
-        .animate-truck-move {
-          animation: truckMove 8s ease-in-out infinite;
-        }
-      `}</style>
-    </div>
-  );
 }
 
 // ─── Progress Timeline ─────────────────────────────────────────────────────
 
 function ProgressTimeline({ currentPhase, scheduledTimeLabel }: { currentPhase: Phase; scheduledTimeLabel: string }) {
   const phases = [
+    { label: "Requested", time: scheduledTimeLabel, description: "Booking request received" },
     { label: "Confirmed", time: scheduledTimeLabel, description: "Appointment confirmed" },
-    { label: "On the Way", time: "", description: "Tech is headed to you" },
     { label: "In Progress", time: "", description: "Work has started" },
     { label: "Complete", time: "", description: "All tasks finished" },
   ];
@@ -328,68 +217,66 @@ export default function TrackPage() {
   const [loading, setLoading] = useState(true);
   const [phase, setPhase] = useState<Phase>(0);
   const [detailsOpen, setDetailsOpen] = useState(false);
-  const [shareToast, setShareToast] = useState<string | null>(null);
   const [cancelOpen, setCancelOpen] = useState(false);
   const [cancelling, setCancelling] = useState(false);
+  const currentBookingId = useRef<string | null>(null);
 
   useEffect(() => {
     if (!mounted) return;
     if (isDemo) {
       setBooking(DEMO_ACTIVE);
-      setPhase(0);
+      setPhase(statusToPhase(DEMO_ACTIVE.status));
       setLoading(false);
       return;
     }
-    fetch("/api/bookings?view=customer")
-      .then((r) => r.json())
-      .then((data: ApiBooking[]) => {
-        if (!Array.isArray(data)) {
-          setBooking(null);
-          return;
-        }
-        const active = pickActive(data);
+
+    let cancelled = false;
+
+    async function loadBooking(initialLoad: boolean) {
+      try {
+        const response = await fetch("/api/bookings?view=customer", { cache: "no-store" });
+        if (!response.ok) throw new Error("Failed to load appointment status");
+        const data: unknown = await response.json();
+        if (cancelled || !Array.isArray(data)) return;
+
+        const current = currentBookingId.current
+          ? (data as ApiBooking[]).find(
+              (item) =>
+                item.id === currentBookingId.current &&
+                (ACTIVE_STATUSES.has(item.status) || item.status === "completed"),
+            ) ?? null
+          : null;
+        const active = current ?? pickActive(data as ApiBooking[]);
+
         if (!active) {
+          currentBookingId.current = null;
           setBooking(null);
           return;
         }
+
         const adapted = adapt(active);
+        currentBookingId.current = adapted.id;
         setBooking(adapted);
         setPhase(statusToPhase(adapted.status));
-      })
-      .catch(() => setBooking(null))
-      .finally(() => setLoading(false));
+      } catch {
+        if (initialLoad && !cancelled) setBooking(null);
+      } finally {
+        if (initialLoad && !cancelled) setLoading(false);
+      }
+    }
+
+    void loadBooking(true);
+    const pollId = window.setInterval(() => {
+      void loadBooking(false);
+    }, 30_000);
+
+    return () => {
+      cancelled = true;
+      window.clearInterval(pollId);
+    };
   }, [isDemo, mounted]);
 
-  const advancePhase = () => setPhase((p) => (p < 3 ? ((p + 1) as Phase) : 0));
-
-  async function handleShareEta() {
-    if (!booking) return;
-    const eta = computeEtaLabel(booking.scheduledDate, booking.scheduledTime, booking.status);
-    const shareUrl = typeof window !== "undefined" ? window.location.href : "";
-    const text = `${booking.techName} - ${eta.primary}${eta.secondary ? ` (${eta.secondary})` : ""}`;
-    try {
-      if (typeof navigator !== "undefined" && navigator.share) {
-        await navigator.share({
-          title: "MCQ Property Care ETA",
-          text,
-          url: shareUrl,
-        });
-        return;
-      }
-    } catch {
-      // user cancelled or share failed - fall through to copy
-    }
-    try {
-      if (typeof navigator !== "undefined" && navigator.clipboard) {
-        await navigator.clipboard.writeText(shareUrl || text);
-        setShareToast("Copied");
-        setTimeout(() => setShareToast(null), 2000);
-      }
-    } catch {
-      setShareToast("Couldn't copy");
-      setTimeout(() => setShareToast(null), 2000);
-    }
-  }
+  const advancePhase = () => setPhase((p) => (p < 3 ? ((p + 1) as Phase) : 1));
 
   // ── Loading / empty states ───────────────────────────────────────────────
   if (loading) {
@@ -398,14 +285,15 @@ export default function TrackPage() {
         <div className="bg-surface border-b border-border px-5 pt-12 lg:pt-8 pb-4">
           <div className="flex items-center gap-3">
             <Link
-              href="/"
-              className="h-9 w-9 rounded-full bg-surface-secondary flex items-center justify-center active:scale-95 transition-transform"
+              href="/home"
+              aria-label="Back to home"
+              className="flex h-11 w-11 items-center justify-center rounded-full bg-surface-secondary transition-transform active:scale-95"
             >
               <ArrowLeft size={18} className="text-text-primary" />
             </Link>
             <div>
               <h1 className="text-[18px] font-bold text-text-primary leading-tight">Your Appointment</h1>
-              <p className="text-[12px] text-text-tertiary mt-0.5">Track your tech in real time</p>
+              <p className="mt-0.5 text-[12px] text-text-tertiary">View your appointment status</p>
             </div>
           </div>
         </div>
@@ -422,14 +310,15 @@ export default function TrackPage() {
         <div className="bg-surface border-b border-border px-5 pt-12 lg:pt-8 pb-4">
           <div className="flex items-center gap-3">
             <Link
-              href="/"
-              className="h-9 w-9 rounded-full bg-surface-secondary flex items-center justify-center active:scale-95 transition-transform"
+              href="/home"
+              aria-label="Back to home"
+              className="flex h-11 w-11 items-center justify-center rounded-full bg-surface-secondary transition-transform active:scale-95"
             >
               <ArrowLeft size={18} className="text-text-primary" />
             </Link>
             <div>
               <h1 className="text-[18px] font-bold text-text-primary leading-tight">Your Appointment</h1>
-              <p className="text-[12px] text-text-tertiary mt-0.5">Track your tech in real time</p>
+              <p className="mt-0.5 text-[12px] text-text-tertiary">View your appointment status</p>
             </div>
           </div>
         </div>
@@ -447,7 +336,7 @@ export default function TrackPage() {
               </div>
               <h3 className="text-[16px] font-bold text-text-primary">No active appointment</h3>
               <p className="mt-1.5 max-w-[260px] text-[13px] leading-relaxed text-text-secondary">
-                You&apos;ll see live tracking here when your tech is on the way or working at your home.
+                Booking requests and active visits will appear here with their current status.
               </p>
               <Link href="/book" className="mt-4 w-full max-w-[240px]">
                 <Button variant="primary" fullWidth>Book a Visit</Button>
@@ -476,28 +365,35 @@ export default function TrackPage() {
     : timeLabel;
 
   const statusConfig = {
-    0: { label: "Confirmed", sub: `${dateLabel} · ${durationLabel}`, color: "bg-primary", textColor: "text-white", pulse: false },
-    1: { label: "On the Way", sub: `${booking.techName} is heading to your location`, color: "bg-primary", textColor: "text-white", pulse: true },
-    2: { label: "In Progress", sub: `${booking.techName} is working at your home`, color: "bg-success", textColor: "text-white", pulse: false },
-    3: { label: "Complete", sub: "All tasks have been finished", color: "bg-success", textColor: "text-white", pulse: false },
+    0: { label: "Requested", sub: "Waiting for Anthony to confirm this time", color: "bg-warning", textColor: "text-white" },
+    1: { label: "Confirmed", sub: `${dateLabel} · ${durationLabel}`, color: "bg-primary", textColor: "text-white" },
+    2: { label: "In Progress", sub: `${booking.techName} is working at your home`, color: "bg-success", textColor: "text-white" },
+    3: { label: "Complete", sub: "All tasks have been finished", color: "bg-success", textColor: "text-white" },
   } as const;
 
   const status = statusConfig[phase];
 
   return (
-    <div className="min-h-screen bg-background pb-28">
+    <div
+      className={`min-h-screen bg-background ${
+        phase <= 1
+          ? "pb-[calc(12.25rem+env(safe-area-inset-bottom))]"
+          : "pb-[calc(9.25rem+env(safe-area-inset-bottom))]"
+      } lg:pb-28`}
+    >
       {/* ── Header ──────────────────────────────────────────────────── */}
       <div className="bg-surface border-b border-border px-5 pt-12 lg:pt-8 pb-4">
         <div className="flex items-center gap-3">
           <Link
-            href="/"
-            className="h-9 w-9 rounded-full bg-surface-secondary flex items-center justify-center active:scale-95 transition-transform"
+            href="/home"
+            aria-label="Back to home"
+            className="flex h-11 w-11 items-center justify-center rounded-full bg-surface-secondary transition-transform active:scale-95"
           >
             <ArrowLeft size={18} className="text-text-primary" />
           </Link>
           <div>
             <h1 className="text-[18px] font-bold text-text-primary leading-tight">Your Appointment</h1>
-            <p className="text-[12px] text-text-tertiary mt-0.5">Track your tech in real time</p>
+            <p className="mt-0.5 text-[12px] text-text-tertiary">Status refreshes every 30 seconds</p>
           </div>
         </div>
       </div>
@@ -506,15 +402,14 @@ export default function TrackPage() {
 
         {/* ── Status Banner ───────────────────────────────────────────── */}
         <button
+          type="button"
           onClick={isDemo ? advancePhase : undefined}
           className="w-full active:scale-[0.985] transition-all duration-200"
           aria-label={isDemo ? "Advance demo phase" : "Status"}
           disabled={!isDemo}
         >
           <div
-            className={`relative overflow-hidden rounded-2xl ${status.color} p-5 ${
-              status.pulse ? "animate-pulse" : ""
-            } transition-colors duration-500`}
+            className={`relative overflow-hidden rounded-2xl ${status.color} p-5 transition-colors duration-500`}
           >
             {/* Decorative elements */}
             <div className="absolute -top-4 -right-4 h-24 w-24 rounded-full bg-white/10" />
@@ -523,8 +418,8 @@ export default function TrackPage() {
             <div className="relative z-10 flex items-center gap-4">
               {/* Status icon */}
               <div className="h-14 w-14 rounded-2xl bg-white/20 backdrop-blur-sm flex items-center justify-center shrink-0">
-                {phase === 0 && <CheckCircle2 size={28} className="text-white" />}
-                {phase === 1 && <Truck size={28} className="text-white" />}
+                {phase === 0 && <Clock size={28} className="text-white" />}
+                {phase === 1 && <CheckCircle2 size={28} className="text-white" />}
                 {phase === 2 && <Wrench size={28} className="text-white" />}
                 {phase === 3 && (
                   <div className="h-8 w-8 rounded-full bg-white flex items-center justify-center">
@@ -562,27 +457,21 @@ export default function TrackPage() {
             </div>
             <div className="flex-1 min-w-0">
               <p className="text-[15px] font-semibold text-text-primary">{booking.techName}</p>
-              <p className="text-[12px] text-text-secondary mt-0.5">Your Handyman</p>
-              {isDemo && (
-                <div className="flex items-center gap-1 mt-0.5">
-                  <Star size={12} className="text-warning fill-warning" />
-                  <span className="text-[12px] font-semibold text-text-primary">4.9</span>
-                  <span className="text-[11px] text-text-tertiary">(127 reviews)</span>
-                </div>
-              )}
+              <p className="text-[12px] text-text-secondary mt-0.5">Your MCQ technician</p>
             </div>
             {/* Action buttons */}
             <div className="flex gap-2 shrink-0">
               <Link
                 href="/messages"
-                className="h-10 w-10 rounded-xl border border-border bg-surface flex items-center justify-center active:scale-95 active:bg-surface-secondary transition-all"
+                aria-label="Message your technician"
+                className="flex h-11 w-11 items-center justify-center rounded-xl border border-border bg-surface transition-all active:scale-95 active:bg-surface-secondary"
               >
                 <MessageCircle size={17} className="text-primary" />
               </Link>
               {booking.techPhone && (
                 <a
                   href={`tel:${booking.techPhone}`}
-                  className="h-10 w-10 rounded-xl border border-border bg-surface flex items-center justify-center active:scale-95 active:bg-surface-secondary transition-all"
+                  className="flex h-11 w-11 items-center justify-center rounded-xl border border-border bg-surface transition-all active:scale-95 active:bg-surface-secondary"
                   aria-label="Call your tech"
                 >
                   <Phone size={17} className="text-success" />
@@ -591,60 +480,6 @@ export default function TrackPage() {
             </div>
           </div>
         </Card>
-
-        {/* ── ETA Section (On the Way only) ───────────────────────────── */}
-        <div
-          className={`transition-all duration-500 ease-in-out overflow-hidden ${
-            phase === 1 ? "max-h-[500px] opacity-100" : "max-h-0 opacity-0"
-          }`}
-        >
-          <Card className="border border-primary-100">
-            {/* ETA countdown */}
-            <div className="flex items-center justify-between mb-1">
-              <div>
-                <p className="text-[11px] font-semibold text-text-secondary uppercase tracking-wider">Estimated Arrival</p>
-                {isDemo ? (
-                  <div className="flex items-baseline gap-2 mt-1">
-                    <span className="text-[40px] font-extrabold text-primary leading-none tracking-tight">12</span>
-                    <span className="text-[16px] font-semibold text-primary">min</span>
-                  </div>
-                ) : (
-                  <p className="mt-1 text-[24px] font-extrabold text-primary leading-tight">
-                    {computeEtaLabel(booking.scheduledDate, booking.scheduledTime, booking.status).primary}
-                  </p>
-                )}
-              </div>
-              <div className="text-right">
-                <div className="flex items-center gap-1.5 text-text-secondary">
-                  <Clock size={13} />
-                  <span className="text-[12px]">Arriving ~{timeLabel}</span>
-                </div>
-                {isDemo && (
-                  <div className="flex items-center gap-1.5 text-text-secondary mt-1">
-                    <MapPin size={13} />
-                    <span className="text-[12px]">3.2 miles away</span>
-                  </div>
-                )}
-              </div>
-            </div>
-
-            {/* Route visualization */}
-            <RouteSVG phase={phase} />
-
-            {/* Destination */}
-            <div className="flex items-center gap-2 mt-1 p-2.5 rounded-lg bg-surface-secondary">
-              <div className="h-8 w-8 rounded-lg bg-success-light flex items-center justify-center shrink-0">
-                <MapPin size={16} className="text-success" />
-              </div>
-              <div>
-                <p className="text-[13px] font-semibold text-text-primary">{booking.address}</p>
-                {booking.cityLine && (
-                  <p className="text-[11px] text-text-tertiary">{booking.cityLine}</p>
-                )}
-              </div>
-            </div>
-          </Card>
-        </div>
 
         {/* ── Progress Timeline ────────────────────────────────────────── */}
         <Card>
@@ -655,8 +490,10 @@ export default function TrackPage() {
         {/* ── Job Details (Expandable) ────────────────────────────────── */}
         <Card padding="sm">
           <button
+            type="button"
             onClick={() => setDetailsOpen((o) => !o)}
-            className="flex items-center justify-between w-full p-1.5"
+            aria-expanded={detailsOpen}
+            className="flex min-h-11 w-full items-center justify-between rounded-lg px-1.5"
           >
             <div className="flex items-center gap-2">
               <div className="h-8 w-8 rounded-lg bg-primary-50 flex items-center justify-center">
@@ -726,19 +563,6 @@ export default function TrackPage() {
                 </div>
               )}
 
-              {/* Cost */}
-              {booking.estimatedCost != null && (
-                <div>
-                  <p className="text-[11px] font-semibold text-text-secondary uppercase tracking-wider mb-2">Estimated Cost</p>
-                  <div className="flex items-center gap-2.5 p-2.5 rounded-lg bg-surface-secondary">
-                    <DollarSign size={15} className="text-success shrink-0" />
-                    <span className="text-[16px] font-bold text-text-primary">
-                      ${booking.estimatedCost}
-                    </span>
-                    <span className="text-[11px] text-text-tertiary">labor + materials</span>
-                  </div>
-                </div>
-              )}
             </div>
           </div>
         </Card>
@@ -746,45 +570,33 @@ export default function TrackPage() {
       </div>
 
       {/* ── Bottom Action Bar ───────────────────────────────────────── */}
-      <div className="fixed bottom-20 lg:bottom-0 left-0 right-0 lg:left-64 z-30">
+      <div className="fixed bottom-[calc(3.5rem+env(safe-area-inset-bottom))] left-0 right-0 z-30 lg:bottom-0 lg:left-64">
         <div className="lg:max-w-3xl lg:mx-auto bg-surface/95 backdrop-blur-md border-t border-border px-5 py-3.5">
-          {phase === 0 && (
+          {phase <= 1 && (
             <div className="space-y-2">
-              <div className="flex gap-3">
-                <Link href="/messages" className="flex-1">
+              <div className={`grid gap-3 ${booking.techPhone ? "grid-cols-2" : "grid-cols-1"}`}>
+                <Link href="/messages" className="min-w-0">
                   <Button variant="outline" fullWidth icon={<MessageCircle size={16} />}>
-                    Message {booking.techName.split(" ")[0]}
+                    Message
                   </Button>
                 </Link>
-                {booking.techPhone ? (
-                  <a href={`tel:${booking.techPhone}`} className="flex-1">
+                {booking.techPhone && (
+                  <a href={`tel:${booking.techPhone}`} className="min-w-0">
                     <Button variant="primary" fullWidth icon={<Phone size={16} />}>
-                      Call {booking.techName.split(" ")[0]}
+                      Call
                     </Button>
                   </a>
-                ) : (
-                  <Button variant="primary" fullWidth icon={<Phone size={16} />}>
-                    Call {booking.techName.split(" ")[0]}
-                  </Button>
                 )}
               </div>
               {!isDemo && (
                 <button
                   type="button"
                   onClick={() => setCancelOpen(true)}
-                  className="w-full text-center text-[12px] font-semibold text-error py-1.5 hover:underline transition-colors"
+                  className="min-h-11 w-full rounded-lg text-center text-[12px] font-semibold text-error transition-colors hover:underline"
                 >
                   Cancel visit
                 </button>
               )}
-            </div>
-          )}
-
-          {phase === 1 && (
-            <div className="relative">
-              <Button variant="primary" fullWidth size="lg" icon={<Share2 size={16} />} onClick={handleShareEta}>
-                {shareToast ?? "Share ETA"}
-              </Button>
             </div>
           )}
 
@@ -809,11 +621,11 @@ export default function TrackPage() {
       {/* Cancel modal */}
       {cancelOpen && (
         <div
-          className="fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-black/50 p-4"
+          className="fixed inset-0 z-50 flex items-end justify-center bg-black/50 p-4 pb-[max(env(safe-area-inset-bottom),16px)] sm:items-center sm:p-4"
           onClick={() => !cancelling && setCancelOpen(false)}
         >
           <div
-            className="w-full max-w-sm rounded-2xl bg-surface shadow-xl overflow-hidden"
+            className="max-h-[calc(100dvh-2rem)] w-full max-w-sm overflow-y-auto rounded-2xl bg-surface shadow-xl"
             onClick={(e) => e.stopPropagation()}
           >
             <div className="px-5 pt-5 pb-3 flex flex-col items-center text-center">
@@ -830,7 +642,7 @@ export default function TrackPage() {
                 type="button"
                 onClick={() => setCancelOpen(false)}
                 disabled={cancelling}
-                className="flex-1 rounded-xl border border-border bg-surface py-3 text-[14px] font-semibold text-text-primary active:bg-surface-secondary disabled:opacity-60"
+                className="min-h-11 flex-1 rounded-xl border border-border bg-surface px-3 text-[14px] font-semibold text-text-primary active:bg-surface-secondary disabled:opacity-60"
               >
                 Keep visit
               </button>
@@ -845,6 +657,7 @@ export default function TrackPage() {
                       body: JSON.stringify({ status: "cancelled" }),
                     });
                     if (!res.ok) throw new Error("Failed");
+                    currentBookingId.current = null;
                     setBooking(null);
                     setCancelOpen(false);
                     toast.success("Visit cancelled");
@@ -855,7 +668,7 @@ export default function TrackPage() {
                   }
                 }}
                 disabled={cancelling}
-                className="flex-1 rounded-xl bg-error py-3 text-[14px] font-semibold text-white active:opacity-90 disabled:opacity-60"
+                className="min-h-11 flex-1 rounded-xl bg-error px-3 text-[14px] font-semibold text-white active:opacity-90 disabled:opacity-60"
               >
                 {cancelling ? "Cancelling…" : "Cancel visit"}
               </button>

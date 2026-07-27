@@ -30,7 +30,7 @@ const DEMO_JOBS: PastJob[] = [
 
 const menuItems = [
   { icon: Home, label: "Home Profile", href: "/account/home", desc: "To-do list, WiFi, household info", color: "bg-primary-50", iconColor: "text-primary" },
-  { icon: Bell, label: "Notifications", href: "/notifications", desc: "Text & email preferences", color: "bg-warning-light", iconColor: "text-accent-amber" },
+  { icon: Bell, label: "Notifications", href: "/notifications", desc: "Email updates and reminders", color: "bg-warning-light", iconColor: "text-accent-amber" },
   { icon: Settings, label: "Manage Account", href: "/account/manage", desc: "Profile, subscription, notifications", color: "bg-surface-secondary", iconColor: "text-text-secondary" },
 ];
 
@@ -121,31 +121,31 @@ export default function AccountPage() {
     <div className="min-h-screen bg-background pb-28 lg:pb-8">
       {/* Profile hero */}
       <div className="bg-surface border-b border-border px-5 pt-14 pb-6 lg:px-8 lg:pt-6 lg:pb-5 lg:rounded-2xl lg:border lg:mt-6 lg:shadow-sm">
-        <div className="flex items-start justify-between mb-5 lg:mb-4">
-          <div className="flex items-center gap-4">
+        <div className="mb-5 flex items-start justify-between gap-3 lg:mb-4">
+          <div className="flex min-w-0 items-center gap-4">
             <div className="relative">
               <div className="flex h-[62px] w-[62px] items-center justify-center rounded-full bg-primary text-[22px] font-bold text-white shadow-[0_2px_12px_rgba(79,149,152,0.3)]">
                 {userInitials}
               </div>
               <div className="absolute -bottom-0.5 -right-0.5 h-4 w-4 rounded-full border-2 border-surface bg-success" />
             </div>
-            <div>
-              <h1 className="text-[20px] font-bold text-text-primary">{userName}</h1>
+            <div className="min-w-0">
+              <h1 className="truncate text-[20px] font-bold text-text-primary">{userName}</h1>
               <div className="flex items-center gap-2 mt-0.5">
                 <span className="flex items-center gap-1 rounded-full bg-primary-50 px-2.5 py-0.5 text-[11px] font-semibold text-primary">
                   <Shield size={10} />
                   Customer
                 </span>
               </div>
-              <p className="text-[12px] text-text-tertiary mt-1">
+              <p className="mt-1 truncate text-[12px] text-text-tertiary">
                 {session?.user?.email || ""}
               </p>
             </div>
           </div>
-          <Link href="/account/manage">
-            <button className="flex h-9 w-9 items-center justify-center rounded-full border border-border bg-surface-secondary hover:bg-border transition-colors">
+          <Link href="/account/manage" aria-label="Edit account">
+            <span className="flex h-11 w-11 items-center justify-center rounded-full border border-border bg-surface-secondary hover:bg-border transition-colors">
               <Edit2 size={15} className="text-text-secondary" />
-            </button>
+            </span>
           </Link>
         </div>
 
@@ -180,6 +180,21 @@ export default function AccountPage() {
       </div>
 
       <div className="px-5 py-5 space-y-6 lg:px-0 lg:py-6 lg:space-y-7">
+        {session?.user?.role === "tech" && (
+          <Link href="/dashboard" className="block lg:hidden">
+            <Card className="flex min-h-14 items-center gap-4 border border-primary-200 bg-primary-50">
+              <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-primary text-white">
+                <Wrench size={20} />
+              </div>
+              <div className="min-w-0 flex-1">
+                <p className="text-[14px] font-semibold text-text-primary">Return to staff view</p>
+                <p className="mt-0.5 text-[12px] text-text-secondary">Dashboard, schedule, jobs, and customers</p>
+              </div>
+              <ChevronRight size={17} className="shrink-0 text-primary" />
+            </Card>
+          </Link>
+        )}
+
         {/* Chat CTA */}
         <Link href="/messages" className="block">
           <Card className="flex items-center gap-4 border border-border">
@@ -205,7 +220,7 @@ export default function AccountPage() {
             <div className="mb-3 flex items-center justify-between">
               <p className="text-sm font-semibold uppercase tracking-wider text-text-secondary">Recent Jobs</p>
               {pastJobs.length > 2 && (
-                <button onClick={() => setShowAllJobs(!showAllJobs)} className="text-[12px] font-semibold text-primary">
+                <button onClick={() => setShowAllJobs(!showAllJobs)} className="min-h-11 px-2 text-[12px] font-semibold text-primary">
                   {showAllJobs ? "Show less" : `See all ${pastJobs.length}`}
                 </button>
               )}

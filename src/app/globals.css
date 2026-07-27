@@ -82,7 +82,7 @@
   --shadow-card: var(--shadow-card);
   --shadow-md: var(--shadow-md);
   --shadow-lg: var(--shadow-lg);
-  --font-sans: var(--font-inter);
+  --font-sans: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
 }
 
 * {
@@ -92,10 +92,38 @@
 body {
   background: var(--background);
   color: var(--text-primary);
-  font-family: var(--font-inter), -apple-system, system-ui, sans-serif;
+  font-family: var(--font-sans);
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
   overscroll-behavior: none;
+  overflow-x: hidden;
+}
+
+/* Individual app pages already reserve space for the persistent bottom
+   navigation. Keep the shell viewport-aware without stacking extra padding
+   that creates a large blank band above the nav. */
+@media (max-width: 1023px) {
+  .app-shell {
+    min-height: 100dvh;
+  }
+
+  /* Top-level app pages use pt-12/pt-14 as their mobile status-bar offset.
+     Preserve that spacing while honoring taller iPhone safe areas when
+     viewport-fit=cover is active. */
+  .app-shell > div > .pt-14,
+  .app-shell > div > * > .pt-14 {
+    padding-top: max(env(safe-area-inset-top, 0px), 3.5rem);
+  }
+
+  .app-shell > div > .pt-12,
+  .app-shell > div > * > .pt-12 {
+    padding-top: max(env(safe-area-inset-top, 0px), 3rem);
+  }
+}
+
+@supports (min-height: 100dvh) {
+  .min-h-screen { min-height: 100dvh; }
+  .h-screen { height: 100dvh; }
 }
 
 ::-webkit-scrollbar { width: 0; background: transparent; }

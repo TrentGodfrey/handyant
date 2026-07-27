@@ -1,8 +1,9 @@
 import { NextRequest } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { decryptHomeAccess, encryptSensitiveValue } from "@/lib/sensitive-data";
-import { requireTech, unauthorized } from "@/lib/session";
+import { requireAdmin, requireTech, unauthorized } from "@/lib/session";
 import { SubscriptionPlan } from "@/generated/prisma/enums";
+import { customerRosterWhere } from "@/lib/resource-access";
 
 export async function GET(req: NextRequest) {
   const tech = await requireTech();
@@ -11,11 +12,25 @@ export async function GET(req: NextRequest) {
   const search = req.nextUrl.searchParams.get("q")?.toLowerCase();
 
   const clients = await prisma.user.findMany({
-    where: { role: "customer" },
+    where: customerRosterWhere(tech),
     include: {
-      homes: { take: 1 },
-      subscriptions: { where: { status: "active" }, take: 1 },
+      homes: {
+        where: tech.isAdmin
+          ? {}
+          : { bookings: { some: { techId: tech.id } } },
+        orderBy: { createdAt: "desc" },
+      },
+      subscriptions: {
+        where: tech.isAdmin
+          ? { status: "active" }
+          : {
+              status: "active",
+              home: { bookings: { some: { techId: tech.id } } },
+            },
+        take: 1,
+      },
       bookingsAsCustomer: {
+        where: tech.isAdmin ? {} : { techId: tech.id },
         select: { id: true, status: true, scheduledDate: true },
       },
     },
@@ -29,6 +44,7 @@ export async function GET(req: NextRequest) {
     phone: c.phone,
     avatarUrl: c.avatarUrl,
     primaryHome: c.homes[0] ? decryptHomeAccess(c.homes[0]) : null,
+    homes: c.homes.map(decryptHomeAccess),
     subscription: c.subscriptions[0] ?? null,
     bookingCount: c.bookingsAsCustomer.length,
     lastBooking: c.bookingsAsCustomer.sort(
@@ -49,7 +65,7 @@ export async function GET(req: NextRequest) {
 }
 
 export async function POST(req: NextRequest) {
-  const tech = await requireTech();
+  const tech = await requireAdmin();
   if (!tech) return unauthorized();
 
   const body = await req.json();
@@ -61,7 +77,6 @@ export async function POST(req: NextRequest) {
   if (plan != null && !Object.values(SubscriptionPlan).includes(plan)) {
     return Response.json({ error: "Invalid subscription plan" }, { status: 400 });
   }
-
   const normalizedEmail =
     typeof body.email === "string" && body.email.trim()
       ? body.email.trim().toLowerCase()

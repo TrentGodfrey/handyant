@@ -33,8 +33,50 @@ export function bookingTimeToDatabaseDate(value: string): Date | null {
   return new Date(Date.UTC(1970, 0, 1, parts.hours, parts.minutes, 0, 0));
 }
 
+export function bookingDateParts(
+  value: Date | string,
+): { year: number; month: number; day: number } | null {
+  if (value instanceof Date && Number.isNaN(value.getTime())) return null;
+  const source = value instanceof Date ? value.toISOString() : value;
+  const match = /^(\d{4})-(\d{2})-(\d{2})(?:T|$)/.exec(source);
+  if (!match) return null;
+  const year = Number(match[1]);
+  const month = Number(match[2]);
+  const day = Number(match[3]);
+  const candidate = new Date(Date.UTC(year, month - 1, day));
+  if (
+    candidate.getUTCFullYear() !== year ||
+    candidate.getUTCMonth() !== month - 1 ||
+    candidate.getUTCDate() !== day
+  ) {
+    return null;
+  }
+  return { year, month, day };
+}
+
+export function bookingDateToDatabaseDate(value: Date | string): Date | null {
+  const parts = bookingDateParts(value);
+  if (!parts) return null;
+  return new Date(Date.UTC(parts.year, parts.month - 1, parts.day));
+}
+
 export function bookingDateToLocalDate(value: string): Date {
-  const match = /^(\d{4})-(\d{2})-(\d{2})/.exec(value);
-  if (!match) return new Date(value);
-  return new Date(Number(match[1]), Number(match[2]) - 1, Number(match[3]));
+  const parts = bookingDateParts(value);
+  if (!parts) return new Date(Number.NaN);
+  return new Date(parts.year, parts.month - 1, parts.day);
+}
+
+/**
+ * Format a Postgres `date` value without allowing the runtime timezone to
+ * shift its calendar day. The UTC formatter is deliberate: `Z` on Prisma's
+ * serialized date-only value is transport metadata, not the property's zone.
+ */
+export function formatBookingDate(
+  value: Date | string,
+  options: Intl.DateTimeFormatOptions,
+  locale = "en-US",
+): string {
+  const date = bookingDateToDatabaseDate(value);
+  if (!date) return typeof value === "string" ? value : "";
+  return new Intl.DateTimeFormat(locale, { ...options, timeZone: "UTC" }).format(date);
 }

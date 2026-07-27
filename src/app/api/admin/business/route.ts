@@ -1,6 +1,6 @@
 import { NextRequest } from "next/server";
 import { prisma } from "@/lib/prisma";
-import { requireTech, unauthorized } from "@/lib/session";
+import { requireAdmin, unauthorized } from "@/lib/session";
 import {
   normalizeAppointmentReminders,
   type AppointmentReminders,
@@ -21,7 +21,7 @@ const DEFAULT_NOTIFY = {
   bookingChanges: true,
   reviews: true,
   payments: true,
-  sms: true,
+  sms: false,
   email: true,
 };
 
@@ -38,7 +38,7 @@ async function getOrCreate(techId: string) {
 }
 
 export async function GET() {
-  const tech = await requireTech();
+  const tech = await requireAdmin();
   if (!tech) return unauthorized();
 
   const profile = await getOrCreate(tech.id);
@@ -46,7 +46,7 @@ export async function GET() {
 }
 
 export async function PATCH(req: NextRequest) {
-  const tech = await requireTech();
+  const tech = await requireAdmin();
   if (!tech) return unauthorized();
 
   await getOrCreate(tech.id);

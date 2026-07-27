@@ -1,0 +1,15 @@
+[Unit]
+Description=MCQ production HTTPS health check
+Wants=network-online.target
+After=network-online.target
+
+[Service]
+Type=oneshot
+User=root
+EnvironmentFile=/etc/mcq-ops.env
+ExecStart=/opt/mcq-ops/bin/check-mcq-health.sh --config /etc/mcq-ops.env
+RuntimeDirectory=mcq-health
+RuntimeDirectoryMode=0700
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=true

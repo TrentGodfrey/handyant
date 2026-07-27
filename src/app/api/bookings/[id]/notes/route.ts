@@ -1,6 +1,7 @@
 import { NextRequest } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { requireUser, unauthorized, notFound, forbidden, badRequest } from "@/lib/session";
+import { canAccessBooking } from "@/lib/resource-access";
 
 export async function GET(_req: NextRequest, ctx: { params: Promise<{ id: string }> }) {
   const user = await requireUser();
@@ -11,8 +12,7 @@ export async function GET(_req: NextRequest, ctx: { params: Promise<{ id: string
   const booking = await prisma.booking.findUnique({ where: { id } });
   if (!booking) return notFound("Booking not found");
 
-  const isAssignedTech = user.role === "tech" && booking.techId === user.id;
-  if (!isAssignedTech) return forbidden();
+  if (!canAccessBooking(user, booking)) return forbidden();
 
   const notes = await prisma.bookingNote.findMany({
     where: { bookingId: id },
@@ -32,7 +32,7 @@ export async function POST(req: NextRequest, ctx: { params: Promise<{ id: string
 
   const booking = await prisma.booking.findUnique({ where: { id } });
   if (!booking) return notFound("Booking not found");
-  if (booking.techId !== user.id) return forbidden();
+  if (!canAccessBooking(user, booking)) return forbidden();
 
   const body = await req.json();
   if (!body.text || typeof body.text !== "string" || body.text.trim().length === 0) {

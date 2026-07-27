@@ -26,7 +26,12 @@ import {
 } from "lucide-react";
 import { useDemoMode } from "@/lib/useDemoMode";
 import { demoCustomerBy } from "@/lib/demoData";
-import { bookingDateToLocalDate, formatBookingTime } from "@/lib/booking-time";
+import {
+  bookingDateToLocalDate,
+  formatBookingDate,
+  formatBookingTime,
+} from "@/lib/booking-time";
+import { businessDateString } from "@/lib/booking-policy";
 
 type ScheduleItem = {
   id: string | number;
@@ -106,8 +111,8 @@ type PartsNeededResponse = {
 const demoTodaySchedule: ScheduleItem[] = [
   {
     id: 1,
-    time: "9:00 AM",
-    duration: "2h",
+    time: "8:00 AM",
+    duration: "1h 45m",
     client: demoCustomerBy("1")!.name,
     address: "4821 Oak Hollow Dr, Plano",
     tasks: ["Replace kitchen faucet", "Fix garage door sensor"],
@@ -116,8 +121,8 @@ const demoTodaySchedule: ScheduleItem[] = [
   },
   {
     id: 2,
-    time: "11:30 AM",
-    duration: "1.5h",
+    time: "10:00 AM",
+    duration: "1h 45m",
     client: demoCustomerBy("2")!.name,
     address: "1205 Elm Creek Ct, Frisco",
     tasks: ["Install smart thermostat", "Replace 3 outlets"],
@@ -127,21 +132,11 @@ const demoTodaySchedule: ScheduleItem[] = [
   {
     id: 3,
     time: "2:00 PM",
-    duration: "2h",
+    duration: "1h 45m",
     client: demoCustomerBy("3")!.name,
     address: "890 Sunset Ridge, Roanoke",
     tasks: ["Drywall repair (2 holes)", "Touch-up paint"],
     status: "pending",
-    partsNeeded: false,
-  },
-  {
-    id: 4,
-    time: "4:30 PM",
-    duration: "30 min",
-    client: "Team Meeting",
-    address: "",
-    tasks: ["Weekly sync"],
-    status: "confirmed",
     partsNeeded: false,
   },
 ];
@@ -170,8 +165,8 @@ const demoMonthlyMetrics: MonthlyMetric[] = [
 ];
 
 const demoKpis = {
-  jobs: "4",
-  hours: "7.5",
+  jobs: "3",
+  hours: "5.25",
   partsToBuy: "2",
 };
 
@@ -340,7 +335,11 @@ export default function AdminDashboard() {
 
   const greetingName = isDemo ? "Anthony" : firstName(session?.user?.name);
   const todayLabel = mounted
-    ? new Date().toLocaleDateString("en-US", { weekday: "long", month: "long", day: "numeric" })
+    ? formatBookingDate(businessDateString(), {
+        weekday: "long",
+        month: "long",
+        day: "numeric",
+      })
     : "";
   const notifBadge = isDemo ? 3 : unreadCount;
 
@@ -401,14 +400,15 @@ export default function AdminDashboard() {
         <div className="flex items-center gap-2">
           <Link
             href="/settings"
-            className="flex h-10 w-10 items-center justify-center rounded-full bg-surface border border-border shadow-[0_1px_4px_rgba(0,0,0,0.08)] active:bg-surface-secondary transition-colors"
+            aria-label="Settings"
+            className="flex h-11 w-11 items-center justify-center rounded-full bg-surface border border-border shadow-[0_1px_4px_rgba(0,0,0,0.08)] active:bg-surface-secondary transition-colors"
           >
             <Settings size={18} className="text-text-secondary" />
           </Link>
           <button
             type="button"
             onClick={() => setNotifPanelOpen(true)}
-            className="relative flex h-10 w-10 items-center justify-center rounded-full bg-surface border border-border shadow-[0_1px_4px_rgba(0,0,0,0.08)] active:bg-surface-secondary transition-colors"
+            className="relative flex h-11 w-11 items-center justify-center rounded-full bg-surface border border-border shadow-[0_1px_4px_rgba(0,0,0,0.08)] active:bg-surface-secondary transition-colors"
             aria-label="Notifications"
           >
             <Bell size={19} className="text-text-secondary" />
@@ -455,20 +455,22 @@ export default function AdminDashboard() {
           <div className="space-y-2.5">
             {demoPendingOffers.map((offer) => (
               <Card key={offer.id} padding="sm">
-                <div className="flex items-center gap-3">
-                  <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-primary-50 text-[14px] font-bold text-primary">
-                    {offer.client.split(" ").map((n) => n[0]).join("")}
+                <div className="sm:flex sm:items-center sm:gap-3">
+                  <div className="flex min-w-0 items-center gap-3">
+                    <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-primary-50 text-[14px] font-bold text-primary">
+                      {offer.client.split(" ").map((n) => n[0]).join("")}
+                    </div>
+
+                    <div className="min-w-0 flex-1">
+                      <p className="text-[14px] font-semibold text-text-primary">{offer.client}</p>
+                      <p className="text-[12px] text-text-secondary truncate">{offer.service}</p>
+                      <p className="text-[11px] text-text-tertiary mt-0.5">
+                        {offer.date} · {offer.area}
+                      </p>
+                    </div>
                   </div>
 
-                  <div className="flex-1 min-w-0">
-                    <p className="text-[14px] font-semibold text-text-primary">{offer.client}</p>
-                    <p className="text-[12px] text-text-secondary truncate">{offer.service}</p>
-                    <p className="text-[11px] text-text-tertiary mt-0.5">
-                      {offer.date} · {offer.area}
-                    </p>
-                  </div>
-
-                  <div className="flex gap-2 shrink-0">
+                  <div className="mt-3 grid grid-cols-2 gap-2 sm:mt-0 sm:flex sm:shrink-0">
                     <Button variant="ghost" size="sm" className="!bg-success-light !text-success hover:!bg-green-100">
                       Confirm
                     </Button>
@@ -499,24 +501,26 @@ export default function AdminDashboard() {
               const timeLabel = formatBookingTime(offer.scheduledTime);
               return (
                 <Card key={offer.id} padding="sm">
-                  <div className="flex items-center gap-3">
-                    <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-primary-50 text-[14px] font-bold text-primary">
-                      {initials || "?"}
+                  <div className="sm:flex sm:items-center sm:gap-3">
+                    <div className="flex min-w-0 items-center gap-3">
+                      <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-primary-50 text-[14px] font-bold text-primary">
+                        {initials || "?"}
+                      </div>
+
+                      <div className="min-w-0 flex-1">
+                        <p className="text-[14px] font-semibold text-text-primary">
+                          {offer.customerName}
+                        </p>
+                        <p className="text-[12px] text-text-secondary truncate">
+                          {offer.description || offer.categories.join(", ") || "Service request"}
+                        </p>
+                        <p className="text-[11px] text-text-tertiary mt-0.5">
+                          {dateLabel} · {timeLabel}
+                        </p>
+                      </div>
                     </div>
 
-                    <div className="flex-1 min-w-0">
-                      <p className="text-[14px] font-semibold text-text-primary">
-                        {offer.customerName}
-                      </p>
-                      <p className="text-[12px] text-text-secondary truncate">
-                        {offer.description || offer.categories.join(", ") || "Service request"}
-                      </p>
-                      <p className="text-[11px] text-text-tertiary mt-0.5">
-                        {dateLabel} · {timeLabel}
-                      </p>
-                    </div>
-
-                    <div className="flex gap-2 shrink-0">
+                    <div className="mt-3 grid grid-cols-2 gap-2 sm:mt-0 sm:flex sm:shrink-0">
                       <Button
                         variant="ghost"
                         size="sm"
@@ -562,10 +566,10 @@ export default function AdminDashboard() {
               <AlertTriangle size={15} className="text-warning" />
             </div>
             <div className="flex-1 min-w-0">
-              <p className="text-[13px] font-semibold text-text-primary">Parts needed before 9 AM</p>
+              <p className="text-[13px] font-semibold text-text-primary">Parts needed before 8 AM</p>
               <p className="text-[11px] text-text-secondary truncate">{demoPartsAlert.item} · Home Depot Plano</p>
             </div>
-            <button className="flex items-center gap-1 rounded-lg bg-warning px-2.5 py-1.5 text-[11px] font-semibold text-white shrink-0 active:opacity-80 transition-opacity">
+            <button className="flex min-h-11 items-center gap-1 rounded-lg bg-warning px-2.5 py-1.5 text-[11px] font-semibold text-white shrink-0 active:opacity-80 transition-opacity">
               <Navigation size={11} />
               Go
             </button>
@@ -588,7 +592,7 @@ export default function AdminDashboard() {
             </div>
             <Link
               href="/jobs?status=confirmed"
-              className="flex items-center gap-1 rounded-lg bg-warning px-2.5 py-1.5 text-[11px] font-semibold text-white shrink-0 active:opacity-80 transition-opacity"
+              className="flex min-h-11 items-center gap-1 rounded-lg bg-warning px-2.5 py-1.5 text-[11px] font-semibold text-white shrink-0 active:opacity-80 transition-opacity"
             >
               View all
             </Link>

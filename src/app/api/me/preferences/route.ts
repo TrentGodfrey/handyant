@@ -1,6 +1,6 @@
 import { NextRequest } from "next/server";
 import { prisma } from "@/lib/prisma";
-import { requireUser, unauthorized } from "@/lib/session";
+import { badRequest, requireUser, unauthorized } from "@/lib/session";
 import {
   DEFAULT_APPOINTMENT_REMINDERS,
   normalizeAppointmentReminders,
@@ -11,7 +11,7 @@ import type { Prisma } from "@/generated/prisma/client";
 const DEFAULT_PREFS = {
   jobReminders: true,
   promos: false,
-  sms: true,
+  sms: false,
   email: true,
 };
 
@@ -48,6 +48,12 @@ export async function PATCH(req: NextRequest) {
 
   // Pull `appointmentReminders` out of body so it does not pollute notifyPrefs.
   const { appointmentReminders: incomingReminders, ...flatPrefs } = body;
+  const allowedPreferences = new Set(["jobReminders", "promos", "sms", "email"]);
+  for (const [key, value] of Object.entries(flatPrefs)) {
+    if (!allowedPreferences.has(key) || typeof value !== "boolean") {
+      return badRequest("Invalid notification preference");
+    }
+  }
 
   const mergedNotify = {
     ...DEFAULT_PREFS,

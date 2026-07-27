@@ -115,7 +115,7 @@ export default function DemoHomeProfile() {
     <div className="min-h-screen bg-background pb-28">
       {/* Header */}
       <div className="bg-surface border-b border-border px-5 pt-14 pb-5">
-        <Link href="/account" className="mb-4 inline-flex items-center gap-1.5 text-[13px] font-medium text-text-secondary hover:text-text-primary transition-colors">
+        <Link href="/account" className="mb-4 inline-flex min-h-11 items-center gap-1.5 text-[13px] font-medium text-text-secondary hover:text-text-primary transition-colors">
           <ChevronLeft size={16} />
           Account
         </Link>
@@ -157,11 +157,15 @@ export default function DemoHomeProfile() {
               <span className="text-[10px] font-semibold uppercase tracking-wider text-text-tertiary">WiFi</span>
             </div>
             <p className="text-[13px] font-semibold text-text-primary">MitchellHome5G</p>
-            <div className="mt-1.5 flex items-center gap-1.5">
-              <span className={`text-[12px] font-mono text-text-secondary tracking-wider ${!showWifiPw ? "blur-[3px] select-none" : ""}`}>
+            <div className="mt-1.5 flex min-w-0 items-center gap-1.5">
+              <span className={`min-w-0 flex-1 truncate text-[12px] font-mono text-text-secondary tracking-wider ${!showWifiPw ? "blur-[3px] select-none" : ""}`}>
                 Sunfl0wer88!
               </span>
-              <button onClick={() => setShowWifiPw(!showWifiPw)} className="text-text-tertiary hover:text-text-secondary transition-colors">
+              <button
+                onClick={() => setShowWifiPw(!showWifiPw)}
+                className="flex h-11 w-11 shrink-0 items-center justify-center text-text-tertiary transition-colors hover:text-text-secondary"
+                aria-label={showWifiPw ? "Hide WiFi password" : "Show WiFi password"}
+              >
                 {showWifiPw ? <EyeOff size={13} /> : <Eye size={13} />}
               </button>
             </div>
@@ -197,7 +201,11 @@ export default function DemoHomeProfile() {
                   <p className="text-[14px] font-semibold text-text-primary">{member.name}</p>
                   <p className="text-[12px] text-text-tertiary">{member.role} · {member.phone}</p>
                 </div>
-                <a href={`tel:${member.phone}`} className="flex h-9 w-9 items-center justify-center rounded-full bg-success-light active:bg-success/20 transition-colors">
+                <a
+                  href={`tel:${member.phone}`}
+                  className="flex h-11 w-11 items-center justify-center rounded-full bg-success-light active:bg-success/20 transition-colors"
+                  aria-label={`Call ${member.name}`}
+                >
                   <Phone size={15} className="text-success" />
                 </a>
               </Card>
@@ -211,7 +219,7 @@ export default function DemoHomeProfile() {
               <p className="text-sm font-semibold uppercase tracking-wider text-text-secondary">To-Do List</p>
               <p className="text-[11px] text-text-tertiary mt-0.5">{todos.length} items · {highCount} urgent</p>
             </div>
-            <button onClick={() => setShowAddTask(!showAddTask)} className="flex items-center gap-1.5 rounded-xl bg-primary px-3.5 py-2 text-[12px] font-semibold text-white shadow-sm active:opacity-90 transition-opacity">
+            <button onClick={() => setShowAddTask(!showAddTask)} className="flex min-h-11 items-center gap-1.5 rounded-xl bg-primary px-3.5 py-2 text-[12px] font-semibold text-white shadow-sm active:opacity-90 transition-opacity">
               <Plus size={14} />
               Add Task
             </button>
@@ -234,7 +242,7 @@ export default function DemoHomeProfile() {
                   <button
                     key={p}
                     onClick={() => setNewPriority(p)}
-                    className={`flex items-center gap-1.5 rounded-full px-3 py-1.5 text-[12px] font-semibold border transition-all ${newPriority === p ? "border-primary bg-primary text-white" : "border-border bg-surface text-text-secondary"}`}
+                    className={`flex min-h-11 items-center gap-1.5 rounded-full px-3 py-1.5 text-[12px] font-semibold border transition-all ${newPriority === p ? "border-primary bg-primary text-white" : "border-border bg-surface text-text-secondary"}`}
                   >
                     <div className={`h-2 w-2 rounded-full ${PRIORITY_CONFIG[p].dot}`} />
                     {PRIORITY_CONFIG[p].label}
@@ -281,7 +289,6 @@ export default function DemoHomeProfile() {
                           <span className="text-[11px] text-text-secondary flex-1 truncate">{item.parts}</span>
                           <span className={`text-[10px] font-semibold shrink-0 ${item.partStatus === "Purchased" ? "text-success" : item.partStatus === "Tech to Purchase" ? "text-primary" : "text-accent-amber"}`}>
                             {item.partStatus}
-                            {item.partStatus === "Tech to Purchase" && " (+$10)"}
                           </span>
                         </div>
                       )}
@@ -293,11 +300,11 @@ export default function DemoHomeProfile() {
                       )}
                       {isExpanded && (
                         <div className="mt-2.5 flex items-center gap-2">
-                          <button className="flex items-center gap-1 rounded-lg bg-primary-50 px-3 py-1.5 text-[11px] font-semibold text-primary hover:bg-primary-100 transition-colors">
+                          <button className="flex min-h-11 items-center gap-1 rounded-lg bg-primary-50 px-3 py-1.5 text-[11px] font-semibold text-primary hover:bg-primary-100 transition-colors">
                             <Camera size={11} />
                             Add Photo
                           </button>
-                          <button onClick={(e) => { e.stopPropagation(); removeTodo(item.id); }} className="flex items-center gap-1 rounded-lg bg-error-light px-3 py-1.5 text-[11px] font-semibold text-error hover:bg-red-100 transition-colors">
+                          <button onClick={(e) => { e.stopPropagation(); removeTodo(item.id); }} className="flex min-h-11 items-center gap-1 rounded-lg bg-error-light px-3 py-1.5 text-[11px] font-semibold text-error hover:bg-red-100 transition-colors">
                             <X size={11} />
                             Remove
                           </button>

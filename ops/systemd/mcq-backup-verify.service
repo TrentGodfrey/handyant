@@ -1,0 +1,14 @@
+[Unit]
+Description=Verify the latest MCQ backup with a disposable restore
+After=postgresql.service
+
+[Service]
+Type=oneshot
+User=root
+EnvironmentFile=/etc/mcq-ops.env
+ExecStart=/opt/mcq-ops/bin/verify-latest-backup.sh --config /etc/mcq-ops.env
+PrivateTmp=true
+ProtectSystem=full
+Nice=10
+IOSchedulingClass=best-effort
+IOSchedulingPriority=7

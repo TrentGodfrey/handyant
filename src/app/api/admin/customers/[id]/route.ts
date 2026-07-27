@@ -1,17 +1,21 @@
 import { NextRequest } from "next/server";
 import { prisma } from "@/lib/prisma";
-import { badRequest, notFound, requireTech, unauthorized } from "@/lib/session";
+import { badRequest, notFound, requireAdmin, unauthorized } from "@/lib/session";
 import { deleteLocalUploadFiles } from "@/lib/upload-storage";
+import { sendVerificationEmail } from "@/lib/verification-email";
 
 export async function PATCH(req: NextRequest, ctx: { params: Promise<{ id: string }> }) {
-  const tech = await requireTech();
-  if (!tech) return unauthorized();
+  const admin = await requireAdmin();
+  if (!admin) return unauthorized();
 
   const { id } = await ctx.params;
   const customer = await prisma.user.findFirst({ where: { id, role: "customer" } });
   if (!customer) return notFound("Customer not found");
 
-  const body = await req.json();
+  const body = await req.json().catch(() => null);
+  if (!body || typeof body !== "object" || Array.isArray(body)) {
+    return badRequest("Invalid request body");
+  }
   if (body.email === undefined) return badRequest("Email is required");
 
   const email = typeof body.email === "string" ? body.email.trim().toLowerCase() : "";
@@ -22,18 +26,40 @@ export async function PATCH(req: NextRequest, ctx: { params: Promise<{ id: strin
     return Response.json({ error: "That email is already in use" }, { status: 409 });
   }
 
+  const emailChanged = email !== (customer.email ?? "").toLowerCase();
   const updated = await prisma.user.update({
     where: { id },
-    data: { email },
+    data: {
+      email,
+      ...(emailChanged
+        ? {
+            emailVerified: false,
+            pendingEmail: null,
+            emailVerificationToken: null,
+            emailVerificationExpires: null,
+            sessionVersion: { increment: 1 },
+          }
+        : {}),
+    },
     select: { id: true, name: true, email: true, phone: true },
   });
 
-  return Response.json(updated);
+  const shouldVerify =
+    emailChanged && Boolean(customer.passwordHash || customer.googleId);
+  const verification = shouldVerify
+    ? await sendVerificationEmail(updated)
+    : null;
+
+  return Response.json({
+    ...updated,
+    verificationRequired: shouldVerify,
+    verificationSent: verification?.ok ?? false,
+  });
 }
 
 export async function DELETE(_req: NextRequest, ctx: { params: Promise<{ id: string }> }) {
-  const tech = await requireTech();
-  if (!tech) return unauthorized();
+  const admin = await requireAdmin();
+  if (!admin) return unauthorized();
 
   const { id } = await ctx.params;
   const customer = await prisma.user.findFirst({

@@ -1,6 +1,6 @@
 import { NextRequest } from "next/server";
 import { prisma } from "@/lib/prisma";
-import { requireTech, unauthorized, notFound } from "@/lib/session";
+import { requireTech, unauthorized, notFound, forbidden, badRequest } from "@/lib/session";
 import { sendActivityEmail } from "@/lib/activity-email";
 
 export async function POST(_req: NextRequest, ctx: { params: Promise<{ id: string }> }) {
@@ -13,39 +13,105 @@ export async function POST(_req: NextRequest, ctx: { params: Promise<{ id: strin
     include: { customer: { select: { name: true, email: true } } },
   });
   if (!existing) return notFound("Booking not found");
+  if (existing.techId && existing.techId !== tech.id && !tech.isAdmin) return forbidden();
+  if (!["pending", "confirmed"].includes(existing.status)) {
+    return badRequest("Only pending or confirmed bookings can be declined");
+  }
 
   const wasUnassignedOffer = existing.techId === null;
+  if (wasUnassignedOffer) {
+    try {
+      await prisma.$transaction(async (tx) => {
+        const current = await tx.booking.findUnique({
+          where: { id },
+          select: { status: true, techId: true },
+        });
+        if (!current) throw new Error("BOOKING_NOT_FOUND");
+        if (current.status !== "pending" || current.techId !== null) {
+          throw new Error("BOOKING_CHANGED");
+        }
+        await tx.bookingDecline.upsert({
+          where: { bookingId_techId: { bookingId: id, techId: tech.id } },
+          update: { declinedAt: new Date() },
+          create: { bookingId: id, techId: tech.id },
+        });
+      }, { isolationLevel: "Serializable" });
+    } catch (error) {
+      if (error instanceof Error && error.message === "BOOKING_NOT_FOUND") {
+        return notFound("Booking not found");
+      }
+      if (
+        (error instanceof Error && error.message === "BOOKING_CHANGED") ||
+        (typeof error === "object" && error && "code" in error && error.code === "P2034")
+      ) {
+        return Response.json(
+          { error: "This booking changed before it could be declined. Refresh and try again." },
+          { status: 409 },
+        );
+      }
+      throw error;
+    }
+    // Declining a shared offer is private staff state. The customer's booking
+    // remains open, so sending them a cancellation-style update would be both
+    // misleading and vulnerable to repeated notification spam.
+    return Response.json({
+      ...existing,
+      estimatedCost: null,
+      finalCost: null,
+      declined: true,
+    });
+  }
 
-  const booking = await prisma.booking.update({
-    where: { id },
-    data: wasUnassignedOffer
-      ? { status: "pending", techId: null }
-      : { status: "cancelled" },
-  });
-
-  await prisma.notification.create({
-    data: {
-      userId: existing.customerId,
-      title: wasUnassignedOffer ? "Booking offer declined" : "Booking cancelled",
-      body: wasUnassignedOffer
-        ? "Your booking is still searching for a tech"
-        : "Your booking has been cancelled by the tech",
-      type: "booking",
-      link: `/booking?id=${booking.id}`,
-    },
-  });
+  let booking;
+  try {
+    booking = await prisma.$transaction(async (tx) => {
+      const changed = await tx.booking.updateMany({
+        where: {
+          id,
+          techId: existing.techId,
+          status: existing.status,
+          updatedAt: existing.updatedAt,
+        },
+        data: { status: "cancelled" },
+      });
+      if (changed.count !== 1) throw new Error("BOOKING_CHANGED");
+      await tx.notification.create({
+        data: {
+          userId: existing.customerId,
+          title: "Booking cancelled",
+          body: "Your booking has been cancelled by the technician",
+          type: "booking",
+          link: "/home",
+        },
+      });
+      return tx.booking.findUniqueOrThrow({ where: { id } });
+    }, { isolationLevel: "Serializable" });
+  } catch (error) {
+    if (
+      (error instanceof Error && error.message === "BOOKING_CHANGED") ||
+      (typeof error === "object" && error && "code" in error && error.code === "P2034")
+    ) {
+      return Response.json(
+        { error: "This booking changed before it could be declined. Refresh and try again." },
+        { status: 409 },
+      );
+    }
+    throw error;
+  }
 
   await sendActivityEmail({
     to: existing.customer.email,
     recipientName: existing.customer.name,
-    subject: wasUnassignedOffer ? "MCQ booking update" : "MCQ booking cancelled",
-    heading: wasUnassignedOffer ? "We are finding another technician" : "Booking cancelled",
-    message: wasUnassignedOffer
-      ? "That technician was unavailable, but your booking remains open while MCQ finds another technician."
-      : "Your booking was cancelled by the assigned technician.",
-    actionPath: `/booking?id=${booking.id}`,
+    subject: "MCQ booking cancelled",
+    heading: "Booking cancelled",
+    message: "Your booking was cancelled by the assigned technician.",
+    actionPath: "/home",
     actionLabel: "View booking",
   });
 
-  return Response.json(booking);
+  return Response.json({
+    ...booking,
+    estimatedCost: null,
+    finalCost: null,
+  });
 }

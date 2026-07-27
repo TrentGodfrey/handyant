@@ -2,12 +2,15 @@
 
 import { useState, useRef, useEffect, useCallback, Suspense } from "react";
 import { useSearchParams } from "next/navigation";
-import { Send, Camera, Paperclip, ArrowLeft, MoreVertical, Search, Plus, Trash2, X } from "lucide-react";
+import Image from "next/image";
+import { Send, Camera, Paperclip, ArrowLeft, Search, Plus, Trash2, X } from "lucide-react";
 import { useDemoMode } from "@/lib/useDemoMode";
 import { demoCustomerBy } from "@/lib/demoData";
 import Spinner from "@/components/Spinner";
 import { toast } from "@/components/Toaster";
 import { bookingDateToLocalDate, formatBookingTime } from "@/lib/booking-time";
+import { businessDateString } from "@/lib/booking-policy";
+import { prepareImageForUpload } from "@/lib/client-image-upload";
 
 interface Message {
   id: string;
@@ -41,16 +44,16 @@ const demoConversations: Conversation[] = [
     lastMessage: "Can't wait! Also, the faucet is dripping from the base now too",
     time: "11:20 AM",
     unread: 2,
-    nextVisit: "Tue, Apr 1 · 9:00 AM",
+    nextVisit: "Tue, Apr 1 · 8:00 AM",
     address: "4821 Oak Hollow Dr",
     online: true,
     messages: [
-      { id: "1", text: "Hi Sarah! Just confirming our appointment for Tuesday. I'll be there around 9 AM.", sender: "tech", timestamp: "Mar 28, 10:30 AM", type: "text" },
+      { id: "1", text: "Hi Sarah! Just confirming our appointment for Tuesday. I'll be there at 8:00 AM.", sender: "tech", timestamp: "Mar 28, 10:30 AM", type: "text" },
       { id: "2", text: "Sounds great! The kitchen faucet has been leaking worse this week.", sender: "customer", timestamp: "Mar 28, 10:45 AM", type: "text" },
       { id: "3", text: "Got it, I'll bring a Moen cartridge. Any preference on finish?", sender: "tech", timestamp: "Mar 28, 11:02 AM", type: "text" },
       { id: "4", text: "Brushed nickel if possible! Also the garage door sensor has been acting up.", sender: "customer", timestamp: "Mar 28, 11:15 AM", type: "text" },
       { id: "5", text: "Classic alignment issue. I'll bring my laser level. See you Tuesday! 👍", sender: "tech", timestamp: "Mar 28, 11:20 AM", type: "text" },
-      { id: "s1", text: "Appointment confirmed for Tue, Apr 1 at 9:00 AM", sender: "tech", timestamp: "Mar 28, 11:21 AM", type: "system" },
+      { id: "s1", text: "Appointment confirmed for Tue, Apr 1 at 8:00 AM", sender: "tech", timestamp: "Mar 28, 11:21 AM", type: "system" },
       { id: "6", text: "Can't wait! Also, the faucet is dripping from the base now too", sender: "customer", timestamp: "Just now", type: "text" },
     ],
   },
@@ -230,8 +233,6 @@ function AdminMessagesPageInner() {
   const [clientsLoading, setClientsLoading] = useState(false);
   const [pickerSearch, setPickerSearch] = useState("");
   const [creating, setCreating] = useState(false);
-  const [hiddenConvoIds, setHiddenConvoIds] = useState<Set<string>>(new Set());
-  const [convoMenuOpen, setConvoMenuOpen] = useState(false);
   const [uploadingPhoto, setUploadingPhoto] = useState(false);
   const [sendingMessage, setSendingMessage] = useState(false);
   const bottomRef = useRef<HTMLDivElement>(null);
@@ -263,7 +264,7 @@ function AdminMessagesPageInner() {
         if (me) setCurrentUserId(me.id);
 
         // Group bookings by customer; pick the soonest upcoming visit for each.
-        const todayStr = new Date().toISOString().slice(0, 10);
+        const todayStr = businessDateString();
         const bookingList: ApiBooking[] = Array.isArray(bookings) ? bookings : [];
         const visitByCustomer = new Map<string, ApiBooking>();
         for (const b of bookingList) {
@@ -524,7 +525,7 @@ function AdminMessagesPageInner() {
     // Demo mode: just spin up an in-memory conversation.
     if (isDemo) {
       const fake: Conversation = {
-        id: `demo-${Date.now()}`,
+        id: `demo-${client.id}`,
         client: client.name,
         initials: initialsOf(client.name),
         lastMessage: "",
@@ -584,16 +585,6 @@ function AdminMessagesPageInner() {
     }
   }
 
-  // Photo upload from paperclip / camera buttons.
-  function readFileAsDataUrl(file: File): Promise<string> {
-    return new Promise((resolve, reject) => {
-      const reader = new FileReader();
-      reader.onload = () => resolve(String(reader.result ?? ""));
-      reader.onerror = () => reject(new Error("Failed to read file"));
-      reader.readAsDataURL(file);
-    });
-  }
-
   async function handlePhotoChange(e: React.ChangeEvent<HTMLInputElement>) {
     const file = e.target.files?.[0];
     e.target.value = ""; // allow re-selecting the same file
@@ -603,7 +594,7 @@ function AdminMessagesPageInner() {
     try {
       if (isDemo) {
         // Demo mode: append a local data-URL message.
-        const dataUrl = await readFileAsDataUrl(file);
+        const dataUrl = await prepareImageForUpload(file);
         setMessagesByConvo((prev) => ({
           ...prev,
           [activeConvo.id]: [
@@ -620,82 +611,39 @@ function AdminMessagesPageInner() {
         return;
       }
 
-      // Real mode: upload to /api/photos, then send the URL inline as a message.
-      // (Real attachments would need Message.attachmentUrl in the schema - out of scope.)
-      const dataUrl = await readFileAsDataUrl(file);
-      const photoRes = await fetch("/api/photos", {
+      const dataUrl = await prepareImageForUpload(file);
+      const photoRes = await fetch("/api/messages", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ dataUrl, label: file.name }),
+        body: JSON.stringify({
+          conversationId: activeConvo.id,
+          type: "photo",
+          dataUrl,
+        }),
       });
-      if (!photoRes.ok) return;
-      const photo = await photoRes.json();
-      const url: string | undefined = photo?.url;
-      if (!url) return;
-
-      const text = `[photo] ${url}`;
-      const optimistic: Message = {
-        id: `tmp-${Date.now()}`,
-        text,
+      const saved: ApiMessage | { error?: string } = await photoRes.json().catch(() => ({}));
+      if (!photoRes.ok || !("id" in saved)) {
+        throw new Error("error" in saved && saved.error ? saved.error : "Photo upload failed");
+      }
+      const uploaded: Message = {
+        id: saved.id,
+        text: saved.text,
         sender: "tech",
-        timestamp: "Just now",
+        timestamp: formatTimestamp(saved.createdAt),
         type: "photo",
       };
       setMessagesByConvo((prev) => ({
         ...prev,
-        [activeConvo.id]: [...(prev[activeConvo.id] || []), optimistic],
+        [activeConvo.id]: [...(prev[activeConvo.id] || []), uploaded],
       }));
-      const r = await fetch("/api/messages", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ conversationId: activeConvo.id, text }),
-      });
-      if (r.ok) {
-        const saved: ApiMessage = await r.json();
-        setMessagesByConvo((prev) => ({
-          ...prev,
-          [activeConvo.id]: (prev[activeConvo.id] || []).map((m) =>
-            m.id === optimistic.id
-              ? {
-                  id: saved.id,
-                  text: saved.text,
-                  sender: "tech",
-                  timestamp: formatTimestamp(saved.createdAt),
-                  type: "photo",
-                }
-              : m
-          ),
-        }));
-      }
-    } catch {
-      /* swallow - UI keeps optimistic state */
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "Photo upload failed");
     } finally {
       setUploadingPhoto(false);
     }
   }
 
-  function archiveActiveConvo() {
-    if (!activeConvo) return;
-    // Local-only hide for now - the schema has no `archived` field on Conversation.
-    // TODO: when schema adds Conversation.archived, PATCH the conversation here.
-    setHiddenConvoIds((prev) => new Set(prev).add(activeConvo.id));
-    setActiveConvo(null);
-    setConvoMenuOpen(false);
-  }
-
-  function blockActiveConvo() {
-    if (!activeConvo) return;
-    if (typeof window !== "undefined" && !window.confirm(`Block ${activeConvo.client}? They won't be able to message you.`)) {
-      return;
-    }
-    // Local-only hide for now - same schema caveat as archive.
-    setHiddenConvoIds((prev) => new Set(prev).add(activeConvo.id));
-    setActiveConvo(null);
-    setConvoMenuOpen(false);
-  }
-
   const filtered = conversations
-    .filter((c) => !hiddenConvoIds.has(c.id))
     .filter((c) =>
       !search.trim() || c.client.toLowerCase().includes(search.toLowerCase())
     );
@@ -710,16 +658,16 @@ function AdminMessagesPageInner() {
   if (activeConvo) {
     const messages = messagesByConvo[activeConvo.id] || [];
     return (
-      <div className="fixed inset-0 lg:left-64 flex flex-col bg-background">
+      <div className="fixed inset-0 h-[100dvh] lg:left-64 flex flex-col bg-background">
         {/* Header */}
         <div className="bg-white border-b border-border px-4 pt-14 pb-3 flex items-center gap-3 shrink-0">
           <button
             onClick={() => setActiveConvo(null)}
-            className="flex h-9 w-9 items-center justify-center rounded-full hover:bg-surface-secondary transition-colors"
+            className="flex h-11 w-11 items-center justify-center rounded-full hover:bg-surface-secondary transition-colors"
           >
             <ArrowLeft size={20} className="text-text-secondary" />
           </button>
-          <div className="flex items-center gap-3 flex-1">
+          <div className="flex min-w-0 flex-1 items-center gap-3">
             <div className="relative">
               <div className="h-10 w-10 rounded-full bg-primary flex items-center justify-center">
                 <span className="text-[13px] font-bold text-white">{activeConvo.initials}</span>
@@ -728,60 +676,25 @@ function AdminMessagesPageInner() {
                 <div className="absolute -bottom-0.5 -right-0.5 h-3 w-3 rounded-full border-2 border-white bg-success" />
               )}
             </div>
-            <div>
-              <p className="text-[15px] font-semibold text-text-primary">{activeConvo.client}</p>
+            <div className="min-w-0">
+              <p className="truncate text-[15px] font-semibold text-text-primary">{activeConvo.client}</p>
               <p className={`text-[11px] font-medium ${activeConvo.online ? "text-success" : "text-text-tertiary"}`}>
                 {activeConvo.online ? "Online now" : "Offline"}
               </p>
             </div>
           </div>
-          <div className="relative">
-            <button
-              type="button"
-              onClick={() => setConvoMenuOpen((v) => !v)}
-              className="flex h-9 w-9 items-center justify-center rounded-full hover:bg-surface-secondary transition-colors"
-              aria-label="Conversation options"
-            >
-              <MoreVertical size={18} className="text-text-secondary" />
-            </button>
-            {convoMenuOpen && (
-              <>
-                <button
-                  aria-label="Close menu"
-                  className="fixed inset-0 z-10 cursor-default"
-                  onClick={() => setConvoMenuOpen(false)}
-                />
-                <div className="absolute right-0 top-10 z-20 w-44 rounded-xl border border-border bg-white shadow-lg overflow-hidden">
-                  <button
-                    type="button"
-                    onClick={archiveActiveConvo}
-                    className="block w-full px-4 py-2.5 text-left text-[13px] text-text-primary hover:bg-surface-secondary transition-colors"
-                  >
-                    Archive conversation
-                  </button>
-                  <button
-                    type="button"
-                    onClick={blockActiveConvo}
-                    className="block w-full px-4 py-2.5 text-left text-[13px] text-error hover:bg-surface-secondary transition-colors"
-                  >
-                    Block client
-                  </button>
-                </div>
-              </>
-            )}
-          </div>
         </div>
 
         {/* Pinned Context */}
         {(activeConvo.nextVisit || activeConvo.address) && (
-          <div className="bg-primary-50 border-b border-primary-100 px-4 py-2 flex items-center justify-between shrink-0">
-            <div className="flex items-center gap-2">
+          <div className="flex shrink-0 items-center justify-between gap-3 border-b border-primary-100 bg-primary-50 px-4 py-2">
+            <div className="flex min-w-0 items-center gap-2">
               <div className="h-1.5 w-1.5 rounded-full bg-primary" />
               <span className="text-[11px] font-semibold text-primary">
                 {activeConvo.nextVisit ? `Next: ${activeConvo.nextVisit}` : ""}
               </span>
             </div>
-            <span className="text-[11px] text-text-tertiary">{activeConvo.address}</span>
+            <span className="min-w-0 truncate text-right text-[11px] text-text-tertiary">{activeConvo.address}</span>
           </div>
         )}
 
@@ -806,7 +719,7 @@ function AdminMessagesPageInner() {
               return (
                 <div key={msg.id} className={`group flex items-center gap-1.5 ${isTech ? "justify-end" : "justify-start"}`}>
                   {!isTech && (
-                    <button type="button" onClick={() => deleteMessage(msg)} className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full text-text-tertiary hover:bg-error-light hover:text-error" aria-label="Delete message">
+                    <button type="button" onClick={() => deleteMessage(msg)} className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full text-text-tertiary hover:bg-error-light hover:text-error" aria-label="Delete message">
                       <Trash2 size={14} />
                     </button>
                   )}
@@ -815,11 +728,22 @@ function AdminMessagesPageInner() {
                       ? "bg-primary text-white rounded-br-md"
                       : "bg-white border border-border text-text-primary rounded-bl-md shadow-[0_1px_2px_rgba(0,0,0,0.04)]"
                   }`}>
-                    <p className="text-[14px] leading-relaxed">{msg.text}</p>
+                    {msg.type === "photo" ? (
+                      <Image
+                        src={msg.text.replace(/^\[photo\]\s*/, "")}
+                        alt="Shared message photo"
+                        width={640}
+                        height={480}
+                        unoptimized
+                        className="h-auto max-h-72 w-full rounded-xl object-cover"
+                      />
+                    ) : (
+                      <p className="text-[14px] leading-relaxed whitespace-pre-wrap break-words">{msg.text}</p>
+                    )}
                     <p className={`text-[10px] mt-1 ${isTech ? "text-white/50" : "text-text-tertiary"}`}>{msg.timestamp}</p>
                   </div>
                   {isTech && (
-                    <button type="button" onClick={() => deleteMessage(msg)} className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full text-text-tertiary hover:bg-error-light hover:text-error" aria-label="Delete message">
+                    <button type="button" onClick={() => deleteMessage(msg)} className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full text-text-tertiary hover:bg-error-light hover:text-error" aria-label="Delete message">
                       <Trash2 size={14} />
                     </button>
                   )}
@@ -832,10 +756,9 @@ function AdminMessagesPageInner() {
 
         {/* Input */}
         <div
-          className="bg-white border-t border-border px-4 py-3 shrink-0"
-          style={{ paddingBottom: "calc(80px + env(safe-area-inset-bottom, 0px))" }}
+          className="shrink-0 border-t border-border bg-white px-3 pt-3 pb-[calc(68px+env(safe-area-inset-bottom,0px))] lg:px-4 lg:pb-3"
         >
-          <div className="flex items-end gap-2">
+          <div className="flex items-end gap-1.5 sm:gap-2">
             <input
               ref={fileInputRef}
               type="file"
@@ -855,7 +778,7 @@ function AdminMessagesPageInner() {
               type="button"
               onClick={() => fileInputRef.current?.click()}
               disabled={uploadingPhoto}
-              className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full hover:bg-surface-secondary transition-colors disabled:opacity-50"
+              className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full hover:bg-surface-secondary transition-colors disabled:opacity-50"
               aria-label="Attach file"
             >
               <Paperclip size={20} className="text-text-tertiary" />
@@ -864,12 +787,12 @@ function AdminMessagesPageInner() {
               type="button"
               onClick={() => cameraInputRef.current?.click()}
               disabled={uploadingPhoto}
-              className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full hover:bg-surface-secondary transition-colors disabled:opacity-50"
+              className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full hover:bg-surface-secondary transition-colors disabled:opacity-50"
               aria-label="Take photo"
             >
               <Camera size={20} className="text-text-tertiary" />
             </button>
-            <div className="flex-1 flex items-end gap-2 rounded-2xl border border-border bg-surface-secondary px-4 py-2.5">
+            <div className="flex min-w-0 flex-1 items-end gap-2 rounded-2xl border border-border bg-surface-secondary px-3 py-2.5 sm:px-4">
               <input
                 type="text"
                 value={input}
@@ -884,7 +807,8 @@ function AdminMessagesPageInner() {
             <button
               onClick={sendMessage}
               disabled={!input.trim() || sendingMessage}
-              className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-full transition-all ${
+              aria-label="Send message"
+              className={`flex h-11 w-11 shrink-0 items-center justify-center rounded-full transition-all ${
                 input.trim() ? "bg-primary text-white shadow-sm" : "bg-surface-secondary text-text-tertiary"
               }`}
             >
@@ -908,7 +832,7 @@ function AdminMessagesPageInner() {
         </div>
         <button
           onClick={openPicker}
-          className="inline-flex items-center gap-1.5 rounded-full bg-primary px-3.5 py-2 text-[13px] font-semibold text-white shadow-sm hover:bg-primary-dark transition-colors active:scale-[0.98]"
+          className="inline-flex min-h-11 items-center gap-1.5 rounded-full bg-primary px-3.5 py-2 text-[13px] font-semibold text-white shadow-sm hover:bg-primary-dark transition-colors active:scale-[0.98]"
         >
           <Plus size={16} />
           <span>New</span>
@@ -917,7 +841,7 @@ function AdminMessagesPageInner() {
 
       {/* Search */}
       <div className="px-5 pt-4 pb-2">
-        <div className="flex items-center gap-2.5 rounded-xl border border-border bg-surface px-3.5 py-2.5 shadow-[0_1px_2px_rgba(0,0,0,0.04)]">
+        <div className="flex min-h-12 items-center gap-2.5 rounded-xl border border-border bg-surface px-3.5 py-2.5 shadow-[0_1px_2px_rgba(0,0,0,0.04)]">
           <Search size={16} className="shrink-0 text-text-tertiary" />
           <input
             type="text"
@@ -976,18 +900,18 @@ function AdminMessagesPageInner() {
 
       {/* New-conversation picker */}
       {pickerOpen && (
-        <div className="fixed inset-0 z-40 flex items-end sm:items-center justify-center bg-black/40 px-4 pb-4 sm:pb-0">
+        <div className="fixed inset-0 z-50 flex items-end justify-center bg-black/40 px-4 pb-[max(env(safe-area-inset-bottom),16px)] sm:items-center sm:pb-0">
           <button
             aria-label="Close"
             className="absolute inset-0 cursor-default"
             onClick={() => setPickerOpen(false)}
           />
-          <div className="relative w-full max-w-md max-h-[80vh] flex flex-col rounded-2xl bg-white shadow-xl overflow-hidden">
+          <div className="relative flex max-h-[80dvh] w-full max-w-md flex-col overflow-hidden rounded-2xl bg-white shadow-xl">
             <div className="flex items-center justify-between px-5 py-4 border-b border-border shrink-0">
               <h2 className="text-[16px] font-bold text-text-primary">New message</h2>
               <button
                 onClick={() => setPickerOpen(false)}
-                className="flex h-8 w-8 items-center justify-center rounded-full hover:bg-surface-secondary transition-colors"
+                className="flex h-11 w-11 items-center justify-center rounded-full hover:bg-surface-secondary transition-colors"
               >
                 <X size={18} className="text-text-secondary" />
               </button>
@@ -1023,7 +947,7 @@ function AdminMessagesPageInner() {
                       key={c.id}
                       disabled={creating}
                       onClick={() => startConversationWith(c)}
-                      className="flex w-full items-center gap-3 rounded-xl px-3 py-2.5 text-left hover:bg-surface-secondary transition-colors disabled:opacity-50"
+                      className="flex min-h-12 w-full items-center gap-3 rounded-xl px-3 py-2.5 text-left hover:bg-surface-secondary transition-colors disabled:opacity-50"
                     >
                       <div className="h-10 w-10 shrink-0 rounded-full bg-primary flex items-center justify-center">
                         <span className="text-[13px] font-bold text-white">{initialsOf(c.name)}</span>

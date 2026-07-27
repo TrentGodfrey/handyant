@@ -39,9 +39,9 @@ export const VISIT_USES: string[] = [
 export const WHY_MCQ: string[] = [
   "Attention to detail and pride in workmanship on every project.",
   "Spend less time managing home repairs, more time enjoying your home.",
-  "24-hour on-call emergency response.",
-  "Fully insured — $1M / $2M coverage.",
-  "Trusted by high-end homeowners across DFW.",
+  "Keep visit scheduling, task details, photos, and updates in one place.",
+  "Service history stays organized with the home.",
+  "Choose from the available weekday visit windows shown in the app.",
   "Clear communication every step. No guesswork, no runaround.",
 ];
 

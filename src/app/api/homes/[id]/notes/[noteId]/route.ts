@@ -1,6 +1,7 @@
 import { NextRequest } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { requireUser, unauthorized, notFound, forbidden } from "@/lib/session";
+import { canAccessHome } from "@/lib/resource-access";
 
 const ALLOWED_FIELDS = ["title", "body", "severity"];
 
@@ -15,6 +16,7 @@ export async function PATCH(
   const { id, noteId } = await ctx.params;
   const home = await prisma.home.findUnique({ where: { id } });
   if (!home) return notFound("Home not found");
+  if (!(await canAccessHome(user, home))) return forbidden();
 
   const note = await prisma.homeNote.findUnique({ where: { id: noteId } });
   if (!note || note.homeId !== id) return notFound("Note not found");
@@ -40,6 +42,7 @@ export async function DELETE(
   const { id, noteId } = await ctx.params;
   const home = await prisma.home.findUnique({ where: { id } });
   if (!home) return notFound("Home not found");
+  if (!(await canAccessHome(user, home))) return forbidden();
 
   const note = await prisma.homeNote.findUnique({ where: { id: noteId } });
   if (!note || note.homeId !== id) return notFound("Note not found");

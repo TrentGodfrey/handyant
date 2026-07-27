@@ -38,7 +38,7 @@ export async function POST(req: NextRequest) {
       },
     });
 
-    const baseUrl = process.env.NEXTAUTH_URL ?? "";
+    const baseUrl = (process.env.NEXTAUTH_URL ?? "https://mcqpropertycare.com").replace(/\/$/, "");
     const resetUrl = `${baseUrl}/reset-password?token=${token}`;
     const safeName = escapeHtml(user.name ?? "there");
     const safeUrl = escapeHtml(resetUrl);

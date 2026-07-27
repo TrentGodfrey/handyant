@@ -1,16 +1,24 @@
 # MCQ Property Care
 
-MCQ Property Care customer and staff portal, built with Next.js, PostgreSQL, Prisma, NextAuth, Resend, and Square.
+MCQ Property Care customer and staff portal, built with Next.js, PostgreSQL, Prisma, NextAuth, and Resend.
 
 ## Production configuration
 
-Copy `.env.example` and configure the required database/auth values. Production membership and invoice checkout also requires the Square access token, location ID, and webhook signature key. Register this exact webhook URL in Square and subscribe it to `payment.created` and `payment.updated`:
+Copy `.env.example` to the production app's `/var/www/handyant/.env`. Production
+requires `DATABASE_URL`, `NEXTAUTH_URL`, `NEXTAUTH_SECRET`,
+`DATA_ENCRYPTION_KEY`, `RESEND_API_KEY`, `EMAIL_FROM`, `EMAIL_REPLY_TO`, and
+`EMAIL_BCC`. Google login and explicit upload-budget overrides are optional.
+The environment file must be readable by the `webapps` account but not by other
+users (for example, owner `root:webapps` and mode `0640`).
 
-`https://mcqpropertycare.com/api/webhooks/square`
+Billing is managed directly by MCQ in Square; invoice, payment-checkout, and
+payment-webhook handlers in this app are retired and return HTTP 410.
 
-The application activates memberships and marks invoices paid only after a signed, amount-matched `COMPLETED` payment event. If Square credentials are absent, checkout fails closed and directs the customer to contact staff.
-
-Home gate codes and Wi-Fi passwords are encrypted with `DATA_ENCRYPTION_KEY`. After setting that key for an existing database, run `npm run db:encrypt-home-access` once to encrypt legacy plaintext values.
+Home gate codes and Wi-Fi passwords are encrypted with `DATA_ENCRYPTION_KEY`.
+Generate this key once, keep a protected off-host copy, and do not rotate or
+replace it without a data-migration plan. After setting it for an existing
+database, run `npm run db:encrypt-home-access` once to encrypt legacy plaintext
+values.
 
 ## Local development
 
@@ -31,9 +39,36 @@ npm run build
 
 ## VPS deployment
 
-Production is hosted on the MCQ VPS, not Vercel. The application lives at `/var/www/handyant`, runs under PM2 as `handyant`, and is served through Nginx at `https://mcqpropertycare.com`.
+Production is hosted on the MCQ VPS, not Vercel. The application lives at
+`/var/www/handyant`, runs under PM2 as `handyant`, and is served through Nginx
+at `https://mcqpropertycare.com`. Use Node.js `20.19+`, `22.12+`, or `24+`, as
+required by the current Prisma release.
 
-Deployments should create a database backup and rollback copy before installing, migrating, building, and restarting the PM2 process. `npm ci` automatically generates the Prisma client required by the production build. Verify both the PM2 process and public HTTPS site after restart.
+Deployments must create and verify a database/upload backup plus an application
+rollback copy before changing the live release. A source checkout cannot be
+built with `npm ci --omit=dev`: TypeScript, Tailwind, and the PostCSS plugin are
+build-time dependencies. Use this order after the backup and rollback copy are
+confirmed:
+
+```bash
+cd /var/www/handyant
+npm ci --include=dev
+npm run build
+npm run db:migrate
+npm prune --omit=dev
+npm ls --omit=dev --depth=0
+git rev-parse HEAD > .release-commit
+sudo -u webapps env PM2_HOME=/home/webapps/.pm2 pm2 reload handyant --update-env
+sudo -u webapps env PM2_HOME=/home/webapps/.pm2 pm2 save
+curl -fsS https://mcqpropertycare.com/ | grep -F 'MCQ Property Care'
+```
+
+`npm ci` generates the Prisma client. Prisma, `tsx`, and `dotenv` are production
+dependencies because migrations and the systemd reminder worker still require
+them after the optional prune. Follow the one-time production database baseline
+procedure in [`ops/DATABASE_MIGRATIONS.md`](ops/DATABASE_MIGRATIONS.md) before
+the first deployment containing that baseline. Also run the reminder and PM2
+checks in [`ops/README.md`](ops/README.md) before closing the release.
 
 ## Production email
 
@@ -41,12 +76,12 @@ Customer-facing messages are sent through Resend and replies are routed to Antho
 
 ```env
 RESEND_API_KEY=re_...
-EMAIL_FROM=Anthony at MCQ <anthony@mcqpropertycare.com>
+EMAIL_FROM="Anthony at MCQ <anthony@mcqpropertycare.com>"
 EMAIL_REPLY_TO=anthony@mcqpropertycare.com
 EMAIL_BCC=me@jordangodfrey.com
 ```
 
-Operational mail (messages, bookings, memberships, to-dos, and invoices) uses the BCC address. Security mail containing password-reset, verification, email-change, or home-invitation links is never copied.
+Operational mail (messages, bookings, memberships, visits, and to-dos) uses the BCC address. Security mail containing password-reset, verification, email-change, or home-invitation links is never copied.
 
 Cloudflare Email Routing owns inbound mail. Its catch-all rule forwards every `@mcqpropertycare.com` address to `mcqpropertycare@gmail.com`. Resend owns outbound mail for both the website and Gmail. Create two sending-only, domain-restricted Resend API keys: one for the VPS and one used only as Gmail's SMTP password.
 
@@ -64,6 +99,6 @@ The Gmail verification message arrives through Cloudflare's catch-all. After con
 
 The complete provider migration, DNS safety checks, testing sequence, and Anthony handoff are in [`docs/email-setup.md`](docs/email-setup.md).
 
-Staff-created customer onboarding is the standard flow: create the customer and home, choose the plan, add known tasks, then create a single-use invitation from the home page. The customer chooses their own password from the emailed or texted link; staff should not create or retain customer passwords.
+Staff-created customer onboarding is the standard flow: create the customer and home, choose the plan, add known tasks, then create a single-use invitation from the home page. The customer chooses their own password from the emailed link; staff should not create or retain customer passwords.
 
 Bookings use one to four consecutive visit blocks. Each block is always 1 hour 45 minutes, and both staff and customer scheduling use the same availability and server-side overlap protection. Open home to-dos can be attached during booking; completing a linked booking task also completes its home to-do. Revenue reporting is intentionally omitted because financial reporting is managed in Square.

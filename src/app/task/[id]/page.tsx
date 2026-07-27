@@ -98,7 +98,7 @@ export default function TaskDetailPage({ params }: { params: Promise<{ id: strin
           <input ref={inputRef} type="file" accept="image/*" className="hidden" onChange={upload} />
           {detail.photos.length === 0 ? <p className="mt-4 rounded-xl bg-surface-secondary px-4 py-5 text-center text-[12px] text-text-tertiary">No task photos yet.</p> : <div className="mt-4 grid grid-cols-2 gap-3 sm:grid-cols-3">{detail.photos.map((photo) => <div key={photo.id} className="relative overflow-hidden rounded-xl border border-border bg-surface-secondary">
             {/* eslint-disable-next-line @next/next/no-img-element */}
-            <img src={photo.url} alt={photo.label ?? "Task photo"} className="aspect-square w-full object-cover" /><button onClick={() => removePhoto(photo.id)} className="absolute right-2 top-2 flex h-8 w-8 items-center justify-center rounded-full bg-black/65 text-white" aria-label="Remove photo"><X size={14} /></button></div>)}</div>}
+            <img src={photo.url} alt={photo.label ?? "Task photo"} className="aspect-square w-full object-cover" /><button type="button" onClick={() => removePhoto(photo.id)} className="absolute right-2 top-2 flex h-11 w-11 items-center justify-center rounded-full bg-black/65 text-white" aria-label="Remove photo"><X size={14} /></button></div>)}</div>}
         </Card>
 
         <button onClick={() => save({ status: detail.status === "completed" ? "pending" : "completed" })} className="mt-4 flex min-h-12 w-full items-center justify-center gap-2 rounded-xl border border-success/30 bg-success-light text-[13px] font-bold text-success"><CheckCircle2 size={16} />{detail.status === "completed" ? "Reopen task" : "Mark task complete"}</button>

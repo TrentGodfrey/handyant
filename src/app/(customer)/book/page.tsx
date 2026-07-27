@@ -14,6 +14,8 @@ import {
 import { useDemoMode } from "@/lib/useDemoMode";
 import { prepareImageForUpload } from "@/lib/client-image-upload";
 import { VISIT_BLOCK_OPTIONS, visitDurationMinutes } from "@/lib/booking-slots";
+import { businessDateString } from "@/lib/booking-policy";
+import { bookingDateToLocalDate } from "@/lib/booking-time";
 
 // ─── Calendar generation ────────────────────────────────────────────────────
 
@@ -43,8 +45,7 @@ function isSameDay(a: Date, b: Date): boolean {
 
 // Build N weeks starting from the Monday of the week containing `start`.
 function buildCalendar(start: Date, weeksCount: number): CalendarDay[][] {
-  const today = new Date();
-  today.setHours(0, 0, 0, 0);
+  const today = bookingDateToLocalDate(businessDateString());
   // Find Monday of the week containing `start`
   const monday = new Date(start);
   monday.setHours(0, 0, 0, 0);
@@ -162,6 +163,13 @@ function toISODate(day: number, month: string, year: number): string {
 interface Photo { id: string; url: string; name: string; dataUrl?: string; }
 interface ServiceCategory { id: string; name: string; }
 interface BookingTodo { id: string; task: string; priority?: string | null; }
+interface BookingHome {
+  id: string;
+  address: string;
+  city: string | null;
+  state: string | null;
+  zip: string | null;
+}
 
 // Keep each visit block focused while allowing longer bookings to carry more work.
 const TODOS_PER_VISIT_BLOCK = 3;
@@ -192,6 +200,7 @@ function BookingPageInner() {
   const [selectedCategories, setSelectedCategories] = useState<string[]>([]);
   const [partsNote, setPartsNote] = useState("");
   const [categories, setCategories] = useState<string[]>(fallbackCategories);
+  const [categoryIdsByName, setCategoryIdsByName] = useState<Record<string, string>>({});
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [submitError, setSubmitError] = useState<string | null>(null);
   const [photoError, setPhotoError] = useState<string | null>(null);
@@ -205,6 +214,7 @@ function BookingPageInner() {
   // address inline as part of this booking. We submit it (and create the
   // Home) just before the booking POST.
   const [existingHomeId, setExistingHomeId] = useState<string | null>(null);
+  const [homes, setHomes] = useState<BookingHome[]>([]);
   const [needsHomeSetup, setNeedsHomeSetup] = useState(false);
   const [homeAddress, setHomeAddress] = useState("");
   const [homeCity, setHomeCity] = useState("");
@@ -216,7 +226,10 @@ function BookingPageInner() {
   const [selectedTodoIds, setSelectedTodoIds] = useState<string[]>([]);
 
   // Build a dynamic calendar starting from today
-  const allCalendarWeeks = useMemo(() => buildCalendar(new Date(), WEEKS_TOTAL), []);
+  const allCalendarWeeks = useMemo(
+    () => buildCalendar(bookingDateToLocalDate(businessDateString()), WEEKS_TOTAL),
+    [],
+  );
 
   // Fetch real service categories, fall back to hardcoded list on error
   useEffect(() => {
@@ -228,6 +241,7 @@ function BookingPageInner() {
       .then((data: ServiceCategory[]) => {
         if (Array.isArray(data) && data.length > 0) {
           setCategories(data.map((c) => c.name));
+          setCategoryIdsByName(Object.fromEntries(data.map((category) => [category.name, category.id])));
         }
       })
       .catch(() => {
@@ -242,6 +256,7 @@ function BookingPageInner() {
   useEffect(() => {
     if (isDemo) {
       setExistingHomeId("demo-home");
+      setHomes([]);
       setNeedsHomeSetup(false);
       setAvailableTodos(DEMO_BOOKING_TODOS);
       return;
@@ -249,30 +264,14 @@ function BookingPageInner() {
     let cancelled = false;
     fetch("/api/homes")
       .then((r) => (r.ok ? r.json() : []))
-      .then(async (homes) => {
+      .then((homeData) => {
         if (cancelled) return;
-        if (Array.isArray(homes) && homes.length > 0) {
-          const primary = homes[0];
+        const homeList = Array.isArray(homeData) ? homeData as BookingHome[] : [];
+        setHomes(homeList);
+        if (homeList.length > 0) {
+          const primary = homeList[0];
           setExistingHomeId(primary.id);
           setNeedsHomeSetup(false);
-          // Pull the home's full detail (which includes todos) so we can let
-          // the customer pick from their existing list.
-          try {
-            const detailRes = await fetch(`/api/homes/${primary.id}`);
-            if (detailRes.ok && !cancelled) {
-              const detail = await detailRes.json();
-              const open = (Array.isArray(detail?.todos) ? detail.todos : [])
-                .filter((t: { status?: string }) => t.status !== "completed")
-                .map((t: { id: string; task: string; priority?: string | null }) => ({
-                  id: t.id,
-                  task: t.task,
-                  priority: t.priority ?? null,
-                }));
-              setAvailableTodos(open);
-            }
-          } catch {
-            // ignore; the picker simply won't show any to-dos
-          }
         } else {
           setExistingHomeId(null);
           setNeedsHomeSetup(true);
@@ -288,6 +287,32 @@ function BookingPageInner() {
       cancelled = true;
     };
   }, [isDemo]);
+
+  useEffect(() => {
+    if (isDemo || !existingHomeId) return;
+    let cancelled = false;
+    setSelectedTodoIds([]);
+    setAvailableTodos([]);
+    fetch(`/api/homes/${existingHomeId}`)
+      .then((response) => (response.ok ? response.json() : null))
+      .then((detail) => {
+        if (cancelled || !detail) return;
+        const open = (Array.isArray(detail.todos) ? detail.todos : [])
+          .filter((todo: { status?: string }) => todo.status !== "completed")
+          .map((todo: { id: string; task: string; priority?: string | null }) => ({
+            id: todo.id,
+            task: todo.task,
+            priority: todo.priority ?? null,
+          }));
+        setAvailableTodos(open);
+      })
+      .catch(() => {
+        if (!cancelled) setAvailableTodos([]);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [existingHomeId, isDemo]);
 
   function toggleTodo(id: string) {
     setSelectedTodoIds((prev) => {
@@ -376,7 +401,8 @@ function BookingPageInner() {
     setSelectedCategories((prev) => prev.includes(cat) ? prev.filter((c) => c !== cat) : [...prev, cat]);
   }
 
-  async function handlePhotoUpload() {
+  async function handlePhotoUpload(source: "camera" | "library") {
+    if (photos.length >= 5) return;
     if (isDemo) {
       // Demo mode: keep existing placeholder behavior
       const id = Math.random().toString(36).slice(2);
@@ -389,6 +415,7 @@ function BookingPageInner() {
     input.type = "file";
     input.accept = "image/*";
     input.multiple = false;
+    if (source === "camera") input.setAttribute("capture", "environment");
     input.onchange = async () => {
       const file = input.files?.[0];
       if (!file) return;
@@ -479,6 +506,9 @@ function BookingPageInner() {
         if (homeRes.ok) {
           const home = await homeRes.json();
           homeIdToUse = home?.id ?? null;
+        } else {
+          const body = await homeRes.json().catch(() => ({}));
+          throw new Error(body?.error ?? "Your home could not be saved. Please try again.");
         }
       }
 
@@ -503,6 +533,9 @@ function BookingPageInner() {
           durationMinutes: visitDurationMinutes(visitCount),
           homeId: homeIdToUse,
           homeTodoIds: selectedTodos.map((todo) => todo.id),
+          categoryIds: selectedCategories
+            .map((name) => categoryIdsByName[name])
+            .filter((id): id is string => !!id),
         }),
       });
 
@@ -533,8 +566,10 @@ function BookingPageInner() {
         const uploadResponses = await Promise.all(uploads);
         const failedUpload = uploadResponses.find((upload) => !upload.ok);
         if (failedUpload) {
-          const body = await failedUpload.json().catch(() => ({}));
-          throw new Error(body?.error ?? "Your visit was created, but a photo could not be uploaded. Please try again from the visit page.");
+          // The booking already exists. Continue to its confirmation instead of
+          // leaving the user on a button that could create a duplicate booking.
+          router.push(`/book/confirmation?id=${bookingId}&photoUpload=failed`);
+          return;
         }
       }
 
@@ -551,7 +586,7 @@ function BookingPageInner() {
       <div className="bg-white px-5 pt-14 lg:pt-8 pb-4 border-b border-border">
         <div className="flex items-center gap-3 mb-3">
           {step > 1 && (
-            <button onClick={() => goTo(step - 1)} className="flex h-9 w-9 items-center justify-center rounded-full bg-surface-secondary active:bg-border transition-colors">
+            <button aria-label="Go back" onClick={() => goTo(step - 1)} className="flex h-11 w-11 items-center justify-center rounded-full bg-surface-secondary active:bg-border transition-colors">
               <ChevronLeft size={18} className="text-text-secondary" />
             </button>
           )}
@@ -591,7 +626,7 @@ function BookingPageInner() {
                     onChange={(e) => setHomeAddress(e.target.value)}
                     placeholder="Street address"
                     autoComplete="street-address"
-                    className="w-full rounded-xl border border-border bg-white px-3.5 py-2.5 text-[14px] text-text-primary placeholder:text-text-tertiary focus:outline-none focus:border-primary focus:ring-2 focus:ring-primary/10"
+                    className="min-h-12 w-full rounded-xl border border-border bg-white px-3.5 py-2.5 text-[14px] text-text-primary placeholder:text-text-tertiary focus:outline-none focus:border-primary focus:ring-2 focus:ring-primary/10"
                   />
                   <input
                     type="text"
@@ -599,7 +634,7 @@ function BookingPageInner() {
                     onChange={(e) => setHomeCity(e.target.value)}
                     placeholder="City"
                     autoComplete="address-level2"
-                    className="w-full rounded-xl border border-border bg-white px-3.5 py-2.5 text-[14px] text-text-primary placeholder:text-text-tertiary focus:outline-none focus:border-primary focus:ring-2 focus:ring-primary/10"
+                    className="min-h-12 w-full rounded-xl border border-border bg-white px-3.5 py-2.5 text-[14px] text-text-primary placeholder:text-text-tertiary focus:outline-none focus:border-primary focus:ring-2 focus:ring-primary/10"
                   />
                   <div className="grid grid-cols-3 gap-2">
                     <input
@@ -609,7 +644,7 @@ function BookingPageInner() {
                       maxLength={2}
                       placeholder="TX"
                       autoComplete="address-level1"
-                      className="w-full rounded-xl border border-border bg-white px-3 py-2.5 text-[14px] uppercase text-text-primary placeholder:text-text-tertiary focus:outline-none focus:border-primary focus:ring-2 focus:ring-primary/10"
+                      className="min-h-12 w-full rounded-xl border border-border bg-white px-3 py-2.5 text-[14px] uppercase text-text-primary placeholder:text-text-tertiary focus:outline-none focus:border-primary focus:ring-2 focus:ring-primary/10"
                     />
                     <input
                       type="text"
@@ -620,10 +655,38 @@ function BookingPageInner() {
                       onChange={(e) => setHomeZip(e.target.value.replace(/\D/g, ""))}
                       placeholder="75201"
                       autoComplete="postal-code"
-                      className="col-span-2 w-full rounded-xl border border-border bg-white px-3.5 py-2.5 text-[14px] text-text-primary placeholder:text-text-tertiary focus:outline-none focus:border-primary focus:ring-2 focus:ring-primary/10"
+                      className="col-span-2 min-h-12 w-full rounded-xl border border-border bg-white px-3.5 py-2.5 text-[14px] text-text-primary placeholder:text-text-tertiary focus:outline-none focus:border-primary focus:ring-2 focus:ring-primary/10"
                     />
                   </div>
                 </div>
+              </div>
+            )}
+
+            {!needsHomeSetup && homes.length > 0 && (
+              <div className="mb-6 rounded-2xl border border-border bg-surface p-4">
+                <label
+                  htmlFor="booking-home"
+                  className="mb-1.5 block text-sm font-semibold uppercase tracking-wider text-text-secondary"
+                >
+                  Service address
+                </label>
+                <select
+                  id="booking-home"
+                  value={existingHomeId ?? ""}
+                  onChange={(event) => setExistingHomeId(event.target.value)}
+                  className="min-h-12 w-full rounded-xl border border-border bg-white px-3.5 text-[14px] text-text-primary focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/10"
+                >
+                  {homes.map((home) => (
+                    <option key={home.id} value={home.id}>
+                      {[home.address, home.city, home.state, home.zip].filter(Boolean).join(", ")}
+                    </option>
+                  ))}
+                </select>
+                {homes.length > 1 && (
+                  <p className="mt-2 text-[11px] text-text-tertiary">
+                    Choose the home Anthony should visit. Its open tasks will appear on the next step.
+                  </p>
+                )}
               </div>
             )}
 
@@ -678,7 +741,7 @@ function BookingPageInner() {
                   <button
                     onClick={() => setCalendarPage(p => Math.max(0, p - 1))}
                     disabled={calendarPage === 0}
-                    className="flex h-8 w-8 items-center justify-center rounded-full hover:bg-surface-secondary transition-colors disabled:opacity-30"
+                    className="flex h-11 w-11 items-center justify-center rounded-full hover:bg-surface-secondary transition-colors disabled:opacity-30"
                   >
                     <ChevronLeft size={18} className="text-text-secondary" />
                   </button>
@@ -686,7 +749,7 @@ function BookingPageInner() {
                   <button
                     onClick={() => setCalendarPage(p => Math.min(totalPages - 1, p + 1))}
                     disabled={calendarPage === totalPages - 1}
-                    className="flex h-8 w-8 items-center justify-center rounded-full hover:bg-surface-secondary transition-colors disabled:opacity-30"
+                    className="flex h-11 w-11 items-center justify-center rounded-full hover:bg-surface-secondary transition-colors disabled:opacity-30"
                   >
                     <ChevronRight size={18} className="text-text-secondary" />
                   </button>
@@ -896,7 +959,7 @@ function BookingPageInner() {
                           type="button"
                           onClick={() => toggleTodo(t.id)}
                           disabled={atLimit}
-                          className={`flex w-full items-center gap-3 rounded-lg px-3 py-2.5 text-left transition-colors ${
+                          className={`flex min-h-11 w-full items-center gap-3 rounded-lg px-3 py-2.5 text-left transition-colors ${
                             checked
                               ? "bg-primary-50 border border-primary/30"
                               : atLimit
@@ -964,7 +1027,7 @@ function BookingPageInner() {
                   const active = selectedCategories.includes(cat);
                   return (
                     <button key={cat} onClick={() => toggleCategory(cat)}
-                      className={`rounded-full px-4 py-2 text-[13px] font-medium transition-all ${
+                      className={`min-h-11 rounded-full px-4 py-2 text-[13px] font-medium transition-all ${
                         active ? "bg-primary text-white shadow-sm" : "border border-border bg-surface text-text-secondary hover:border-primary/40"
                       }`}>
                       {cat}
@@ -972,7 +1035,7 @@ function BookingPageInner() {
                   );
                 })}
               </div>
-              <Link href="/services" className="mt-2.5 inline-block text-[12px] font-semibold text-primary">
+              <Link href="/services" className="mt-2.5 inline-flex min-h-11 items-center text-[12px] font-semibold text-primary">
                 Browse the full service list
               </Link>
             </div>
@@ -983,11 +1046,21 @@ function BookingPageInner() {
                 <span className="text-[11px] text-text-tertiary">{photos.length}/5</span>
               </div>
               <div className="flex gap-2 overflow-x-auto no-scrollbar pb-1">
-                <button onClick={handlePhotoUpload} className="flex h-24 w-24 shrink-0 flex-col items-center justify-center gap-1.5 rounded-xl border-2 border-dashed border-border bg-surface hover:border-primary/50 hover:bg-primary-50 transition-colors">
+                <button
+                  type="button"
+                  onClick={() => handlePhotoUpload("camera")}
+                  disabled={photos.length >= 5}
+                  className="flex h-24 w-24 shrink-0 flex-col items-center justify-center gap-1.5 rounded-xl border-2 border-dashed border-border bg-surface hover:border-primary/50 hover:bg-primary-50 transition-colors disabled:opacity-50"
+                >
                   <Camera size={22} className="text-text-tertiary" />
                   <span className="text-[10px] font-medium text-text-tertiary">Camera</span>
                 </button>
-                <button onClick={handlePhotoUpload} className="flex h-24 w-24 shrink-0 flex-col items-center justify-center gap-1.5 rounded-xl border-2 border-dashed border-border bg-surface hover:border-primary/50 hover:bg-primary-50 transition-colors">
+                <button
+                  type="button"
+                  onClick={() => handlePhotoUpload("library")}
+                  disabled={photos.length >= 5}
+                  className="flex h-24 w-24 shrink-0 flex-col items-center justify-center gap-1.5 rounded-xl border-2 border-dashed border-border bg-surface hover:border-primary/50 hover:bg-primary-50 transition-colors disabled:opacity-50"
+                >
                   <Upload size={22} className="text-text-tertiary" />
                   <span className="text-[10px] font-medium text-text-tertiary">Upload</span>
                 </button>
@@ -996,8 +1069,10 @@ function BookingPageInner() {
                     {/* Local previews use blob/data URLs and should not pass through the image optimizer. */}
                     {/* eslint-disable-next-line @next/next/no-img-element */}
                     <img src={photo.url} alt={photo.name} className="h-full w-full object-cover" />
-                    <button onClick={() => removePhoto(photo.id)} className="absolute right-1 top-1 flex h-5 w-5 items-center justify-center rounded-full bg-black/60">
-                      <X size={10} className="text-white" />
+                    <button aria-label={`Remove ${photo.name}`} onClick={() => removePhoto(photo.id)} className="absolute -right-1 -top-1 flex h-11 w-11 items-center justify-center rounded-full">
+                      <span className="flex h-6 w-6 items-center justify-center rounded-full bg-black/70">
+                        <X size={12} className="text-white" />
+                      </span>
                     </button>
                   </div>
                 ))}
@@ -1015,7 +1090,7 @@ function BookingPageInner() {
                 className="w-full rounded-xl border border-border bg-surface px-4 py-3 text-[14px] text-text-primary placeholder:text-text-tertiary focus:border-primary focus:ring-3 focus:ring-primary/10 focus:outline-none transition-colors" />
               <div className="mt-2 flex items-start gap-1.5">
                 <Info size={12} className="mt-0.5 shrink-0 text-text-tertiary" />
-                <p className="text-[11px] text-text-tertiary">Tech can purchase parts for a $10 procurement fee, or you can provide them yourself.</p>
+                <p className="text-[11px] text-text-tertiary">Add any parts you think may be needed. Anthony will confirm the details before your visit.</p>
               </div>
             </div>
 
@@ -1056,8 +1131,8 @@ function BookingPageInner() {
             <Card variant="flat" padding="sm" className="mb-6 border border-success/20 bg-success-light flex items-start gap-3">
               <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-success/10 mt-0.5"><Check size={15} className="text-success" /></div>
               <div>
-                <p className="text-[13px] font-semibold text-text-primary">You&apos;ll get a confirmation right away</p>
-                <p className="text-[12px] text-text-secondary mt-0.5">Text + email confirmation, plus a reminder 24 hours before.</p>
+                <p className="text-[13px] font-semibold text-text-primary">We&apos;ll email you when it&apos;s confirmed</p>
+                <p className="text-[12px] text-text-secondary mt-0.5">Anthony will review your request, then your selected email reminders will begin.</p>
               </div>
             </Card>
 
@@ -1088,7 +1163,7 @@ function BookingPageInner() {
                     Confirming…
                   </span>
                 ) : (
-                  "Confirm Booking"
+                  "Submit Request"
                 )}
               </Button>
             </div>

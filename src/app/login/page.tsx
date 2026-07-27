@@ -7,17 +7,26 @@ import Link from "next/link";
 
 function ResetNotice() {
   const searchParams = useSearchParams();
-  if (searchParams.get("reset") !== "1") return null;
+  const reset = searchParams.get("reset") === "1";
+  const verified = searchParams.get("verified") === "1";
+  const expired = searchParams.get("expired") === "1";
+  const passwordChanged = searchParams.get("passwordChanged") === "1";
+  if (!reset && !verified && !expired && !passwordChanged) return null;
   return (
-    <div className="p-3 rounded-lg bg-green-50 text-green-700 text-sm">
-      Password reset. You can sign in with your new password.
+    <div className={`p-3 rounded-lg text-sm ${
+      expired ? "bg-amber-50 text-amber-800" : "bg-green-50 text-green-700"
+    }`}>
+      {reset && "Password reset. You can sign in with your new password."}
+      {passwordChanged && "Password changed. Sign in again with your new password."}
+      {verified && "Email verified. You can now use every MCQ feature."}
+      {expired && "Your staff session expired after eight hours. Sign in again to continue."}
     </div>
   );
 }
 
 export default function LoginPage() {
   const router = useRouter();
-  const { status } = useSession();
+  const { data: session, status } = useSession();
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [error, setError] = useState("");
@@ -29,9 +38,9 @@ export default function LoginPage() {
   // feel "logged out" when their session is actually intact. Bounce to /home.
   useEffect(() => {
     if (status === "authenticated") {
-      router.replace("/home");
+      router.replace(session?.user?.role === "tech" ? "/dashboard" : "/home");
     }
-  }, [status, router]);
+  }, [status, session?.user?.role, router]);
 
   // Detect whether Google provider is configured server-side. Default to NOT
   // showing the button until /api/auth/providers confirms it's available - the
@@ -70,7 +79,10 @@ export default function LoginPage() {
     if (res?.error) {
       setError("Invalid email or password");
     } else {
-      router.push("/home");
+      const activeSession = await fetch("/api/auth/session")
+        .then((response) => (response.ok ? response.json() : null))
+        .catch(() => null);
+      router.push(activeSession?.user?.role === "tech" ? "/dashboard" : "/home");
       router.refresh();
     }
   }

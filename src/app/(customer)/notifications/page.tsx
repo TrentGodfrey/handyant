@@ -5,12 +5,12 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import {
   ChevronLeft, Calendar, MessageCircle, Package, CheckCircle2,
-  DollarSign, CreditCard, Bell, BellOff, AlertTriangle, RotateCw, Star,
+  Bell, BellOff, AlertTriangle, RotateCw, Star,
 } from "lucide-react";
 import { useDemoMode } from "@/lib/useDemoMode";
 import Spinner from "@/components/Spinner";
 
-type NotifType = "appointment" | "message" | "parts" | "completed" | "invoice" | "billing" | "review";
+type NotifType = "appointment" | "message" | "parts" | "completed" | "review" | "update";
 type FilterType = "all" | "unread" | "appointments" | "messages" | "updates";
 
 interface Notification {
@@ -72,7 +72,7 @@ const DEMO_NOTIFICATIONS: Notification[] = [
   },
   {
     id: "5",
-    type: "invoice",
+    type: "update",
     title: "Visit Summary Ready",
     description: "Your completed visit summary is ready to review.",
     time: "14d ago",
@@ -94,15 +94,6 @@ const DEMO_NOTIFICATIONS: Notification[] = [
     title: "Parts Ordered",
     description: "Anthony ordered the Moen kitchen faucet cartridge for your repair. Est. arrival 2 days.",
     time: "17d ago",
-    read: true,
-    link: null,
-  },
-  {
-    id: "8",
-    type: "billing",
-    title: "Subscription Renewed",
-    description: "Your Pro plan renewed for March. $89.00 charged to Visa •••• 4242.",
-    time: "28d ago",
     read: true,
     link: null,
   },
@@ -135,9 +126,8 @@ const typeConfig: Record<NotifType, {
   message: { icon: MessageCircle, iconBg: "bg-primary-50", iconColor: "text-primary" },
   parts: { icon: Package, iconBg: "bg-warning-light", iconColor: "text-accent-amber" },
   completed: { icon: CheckCircle2, iconBg: "bg-success-light", iconColor: "text-success" },
-  invoice: { icon: DollarSign, iconBg: "bg-success-light", iconColor: "text-success" },
-  billing: { icon: CreditCard, iconBg: "bg-surface-secondary", iconColor: "text-text-secondary" },
   review: { icon: Star, iconBg: "bg-warning-light", iconColor: "text-warning" },
+  update: { icon: Bell, iconBg: "bg-surface-secondary", iconColor: "text-text-secondary" },
 };
 
 const filters: { id: FilterType; label: string }[] = [
@@ -149,10 +139,13 @@ const filters: { id: FilterType; label: string }[] = [
 ];
 
 const ALLOWED_TYPES = new Set<NotifType>([
-  "appointment", "message", "parts", "completed", "invoice", "billing", "review",
+  "appointment", "message", "parts", "completed", "review", "update",
 ]);
 
 function normalizeType(type: string | null): NotifType {
+  if (type === "booking") return "appointment";
+  if (type === "invoice" || type === "billing") return "update";
+  if (type === "info" || type === "success" || type === "warning" || type === "error") return "update";
   if (type && ALLOWED_TYPES.has(type as NotifType)) return type as NotifType;
   return "appointment";
 }
@@ -190,7 +183,7 @@ function matchesFilter(n: Notification, filter: FilterType): boolean {
   if (filter === "unread") return !n.read;
   if (filter === "appointments") return n.type === "appointment";
   if (filter === "messages") return n.type === "message";
-  if (filter === "updates") return ["parts", "completed", "invoice", "billing", "review"].includes(n.type);
+  if (filter === "updates") return ["parts", "completed", "review", "update"].includes(n.type);
   return true;
 }
 
@@ -263,12 +256,12 @@ export default function NotificationsPage() {
   const filtered = notifications.filter((n) => matchesFilter(n, activeFilter));
 
   return (
-    <div className="min-h-screen bg-background">
+    <div className="min-h-screen bg-background pb-28 lg:pb-8">
       {/* Header */}
       <div className="bg-surface border-b border-border px-5 pt-14 pb-4">
         <Link
-          href="/"
-          className="mb-4 inline-flex items-center gap-1.5 text-[13px] font-medium text-text-secondary hover:text-text-primary transition-colors"
+          href="/home"
+          className="mb-2 inline-flex min-h-11 items-center gap-1.5 rounded-lg pr-3 text-[13px] font-medium text-text-secondary transition-colors hover:text-text-primary"
         >
           <ChevronLeft size={16} />
           Home
@@ -284,11 +277,13 @@ export default function NotificationsPage() {
           </div>
           {unreadCount > 0 && (
             <button
+              type="button"
               onClick={markAllRead}
-              className="flex items-center gap-1.5 text-[12px] font-semibold text-primary hover:text-primary-dark transition-colors"
+              className="-mr-2 flex min-h-11 items-center gap-1.5 rounded-lg px-2 text-[12px] font-semibold text-primary transition-colors hover:text-primary-dark"
             >
               <BellOff size={14} />
-              Mark all read
+              <span className="min-[360px]:hidden">Read all</span>
+              <span className="hidden min-[360px]:inline">Mark all read</span>
             </button>
           )}
         </div>
@@ -301,9 +296,10 @@ export default function NotificationsPage() {
               : notifications.filter((n) => matchesFilter(n, f.id)).length;
             return (
               <button
+                type="button"
                 key={f.id}
                 onClick={() => setActiveFilter(f.id)}
-                className={`shrink-0 flex items-center gap-1.5 rounded-full px-3.5 py-1.5 text-[12px] font-semibold border transition-all ${
+                className={`flex min-h-11 shrink-0 items-center gap-1.5 rounded-full border px-3.5 text-[12px] font-semibold transition-all ${
                   activeFilter === f.id
                     ? "bg-primary border-primary text-white"
                     : "bg-surface border-border text-text-secondary hover:border-primary/40"
@@ -333,11 +329,12 @@ export default function NotificationsPage() {
             </div>
             <button
               type="button"
+              aria-label="Retry loading notifications"
               onClick={() => setReloadKey((k) => k + 1)}
-              className="shrink-0 inline-flex items-center gap-1.5 rounded-lg bg-error px-3 py-1.5 text-[12px] font-semibold text-white hover:bg-red-700 transition-colors"
+              className="inline-flex min-h-11 shrink-0 items-center gap-1.5 rounded-lg bg-error px-3 text-[12px] font-semibold text-white transition-colors hover:bg-red-700"
             >
               <RotateCw size={12} />
-              Retry
+              <span className="hidden min-[360px]:inline">Retry</span>
             </button>
           </div>
         </div>
@@ -367,6 +364,7 @@ export default function NotificationsPage() {
               const Icon = cfg.icon;
               return (
                 <button
+                  type="button"
                   key={notif.id}
                   onClick={() => handleNotifClick(notif)}
                   className={`w-full flex items-start gap-3.5 px-5 py-4 text-left transition-colors active:bg-surface-secondary ${

@@ -2,6 +2,7 @@ import { NextRequest } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { requireUser, unauthorized, notFound, forbidden } from "@/lib/session";
 import { deleteLocalUploadFiles } from "@/lib/upload-storage";
+import { canAccessBooking, canAccessHome } from "@/lib/resource-access";
 
 export async function DELETE(
   _req: NextRequest,
@@ -22,18 +23,16 @@ export async function DELETE(
       select: { customerId: true },
     });
     if (!home) return notFound("Home not found");
-    if (home.customerId !== user.id && user.role !== "tech") return forbidden();
+    if (!(await canAccessHome(user, { ...home, id: photo.homeId }))) return forbidden();
   } else if (photo.bookingId) {
     const booking = await prisma.booking.findUnique({
       where: { id: photo.bookingId },
       select: { customerId: true, techId: true },
     });
     if (!booking) return notFound("Booking not found");
-    if (booking.customerId !== user.id && booking.techId !== user.id && user.role !== "tech") {
-      return forbidden();
-    }
-  } else if (user.role !== "tech") {
-    // Orphan photo with no owner reference - only techs can clean these up.
+    if (!canAccessBooking(user, booking)) return forbidden();
+  } else if (!user.isAdmin) {
+    // Orphan photo with no owner reference - only the owner can clean these up.
     return forbidden();
   }
 

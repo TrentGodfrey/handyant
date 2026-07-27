@@ -1,5 +1,8 @@
-const MAX_UPLOAD_BYTES = 5 * 1024 * 1024;
-const MAX_IMAGE_DIMENSION = 2000;
+// Keep the encoded request comfortably below reverse-proxy limits. A base64
+// payload is roughly 33% larger than the original file, so sending a raw 5 MB
+// phone photo can exceed an otherwise reasonable request-body limit.
+const MAX_UPLOAD_BYTES = 1.5 * 1024 * 1024;
+const MAX_IMAGE_DIMENSION = 1800;
 const DIRECT_UPLOAD_TYPES = new Set([
   "image/jpeg",
   "image/jpg",
@@ -40,8 +43,10 @@ function decodedDataUrlSize(dataUrl: string): number {
 }
 
 /**
- * Keep already-supported small images intact. Large phone photos and formats
- * such as HEIC are resized and converted to a server-supported JPEG.
+ * Keep only genuinely small supported images intact. Normal phone photos and
+ * formats such as HEIC are resized and converted to a server-supported JPEG.
+ * iOS Safari can decode photos selected from the device library into an Image,
+ * even when their source format is HEIC.
  */
 export async function prepareImageForUpload(file: File): Promise<string> {
   if (file.type && !file.type.startsWith("image/")) {
@@ -61,7 +66,7 @@ export async function prepareImageForUpload(file: File): Promise<string> {
   if (!context) throw new Error("Your browser could not prepare that photo.");
   context.drawImage(image, 0, 0, canvas.width, canvas.height);
 
-  for (const quality of [0.84, 0.7, 0.55]) {
+  for (const quality of [0.82, 0.68, 0.52, 0.4]) {
     const dataUrl = canvas.toDataURL("image/jpeg", quality);
     if (decodedDataUrlSize(dataUrl) <= MAX_UPLOAD_BYTES) return dataUrl;
   }

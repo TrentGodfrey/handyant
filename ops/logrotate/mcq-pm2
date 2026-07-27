@@ -1,0 +1,11 @@
+/home/webapps/.pm2/logs/*.log {
+    su webapps webapps
+    daily
+    rotate 14
+    size 25M
+    missingok
+    notifempty
+    compress
+    delaycompress
+    copytruncate
+}

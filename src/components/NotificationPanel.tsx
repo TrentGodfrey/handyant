@@ -185,7 +185,7 @@ export default function NotificationPanel({ open, onClose }: NotificationPanelPr
           // Desktop: full-height right drawer
           "lg:h-full lg:w-96 lg:border-l lg:animate-slide-in-right",
           // Mobile: bottom sheet
-          "mt-auto w-full max-h-[85vh] rounded-t-2xl lg:rounded-none lg:mt-0 lg:max-h-full border-t",
+          "mt-auto w-full max-h-[85dvh] rounded-t-2xl pb-[env(safe-area-inset-bottom)] lg:rounded-none lg:mt-0 lg:max-h-full lg:pb-0 border-t",
           "animate-slide-in-bottom lg:!animate-slide-in-right",
         ].join(" ")}
       >
@@ -204,7 +204,7 @@ export default function NotificationPanel({ open, onClose }: NotificationPanelPr
               <button
                 type="button"
                 onClick={markAllRead}
-                className="flex items-center gap-1.5 rounded-full px-2.5 py-1.5 text-[12px] font-semibold text-primary hover:bg-primary-50 transition-colors"
+                className="flex min-h-11 items-center gap-1.5 rounded-full px-2.5 py-1.5 text-[12px] font-semibold text-primary hover:bg-primary-50 transition-colors"
               >
                 <CheckCheck size={13} />
                 Mark all read
@@ -214,7 +214,7 @@ export default function NotificationPanel({ open, onClose }: NotificationPanelPr
               type="button"
               aria-label="Close"
               onClick={onClose}
-              className="flex h-8 w-8 items-center justify-center rounded-full text-text-tertiary hover:bg-surface-secondary transition-colors"
+              className="flex h-11 w-11 items-center justify-center rounded-full text-text-tertiary hover:bg-surface-secondary transition-colors"
             >
               <X size={18} />
             </button>

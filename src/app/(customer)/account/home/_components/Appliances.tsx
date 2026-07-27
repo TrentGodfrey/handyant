@@ -151,7 +151,7 @@ export default function Appliances({ homeId, appliances, readOnly = false, onCha
           <button
             type="button"
             onClick={() => setShowAdd(true)}
-            className="flex items-center gap-1 rounded-full bg-primary-50 px-3 py-1 text-[12px] font-semibold text-primary hover:bg-primary-100 transition-colors"
+            className="flex min-h-11 items-center gap-1 rounded-full bg-primary-50 px-3 py-1 text-[12px] font-semibold text-primary hover:bg-primary-100 transition-colors"
           >
             <Plus size={12} />
             Add
@@ -169,7 +169,8 @@ export default function Appliances({ homeId, appliances, readOnly = false, onCha
                 setShowAdd(false);
                 setForm(EMPTY_FORM);
               }}
-              className="text-text-tertiary hover:text-text-primary"
+              className="flex h-11 w-11 items-center justify-center text-text-tertiary hover:text-text-primary"
+              aria-label="Close appliance form"
             >
               <X size={16} />
             </button>
@@ -184,10 +185,10 @@ export default function Appliances({ homeId, appliances, readOnly = false, onCha
                 value={form.name}
                 onChange={(e) => setForm({ ...form, name: e.target.value })}
                 placeholder="HVAC filter, Water heater, etc."
-                className="w-full rounded-lg border border-border bg-surface px-3 py-2 text-[13px] outline-none focus:border-primary"
+                className="min-h-11 w-full rounded-lg border border-border bg-surface px-3 py-2 text-[13px] outline-none focus:border-primary"
               />
             </div>
-            <div className="grid grid-cols-2 gap-2">
+            <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
               <div>
                 <label className="mb-1 block text-[11px] font-semibold uppercase tracking-wider text-text-tertiary">
                   Brand
@@ -197,7 +198,7 @@ export default function Appliances({ homeId, appliances, readOnly = false, onCha
                   value={form.brand}
                   onChange={(e) => setForm({ ...form, brand: e.target.value })}
                   placeholder="Carrier"
-                  className="w-full rounded-lg border border-border bg-surface px-3 py-2 text-[13px] outline-none focus:border-primary"
+                  className="min-h-11 w-full rounded-lg border border-border bg-surface px-3 py-2 text-[13px] outline-none focus:border-primary"
                 />
               </div>
               <div>
@@ -209,11 +210,11 @@ export default function Appliances({ homeId, appliances, readOnly = false, onCha
                   value={form.modelNumber}
                   onChange={(e) => setForm({ ...form, modelNumber: e.target.value })}
                   placeholder="—"
-                  className="w-full rounded-lg border border-border bg-surface px-3 py-2 text-[13px] outline-none focus:border-primary"
+                  className="min-h-11 w-full rounded-lg border border-border bg-surface px-3 py-2 text-[13px] outline-none focus:border-primary"
                 />
               </div>
             </div>
-            <div className="grid grid-cols-2 gap-2">
+            <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
               <div>
                 <label className="mb-1 block text-[11px] font-semibold uppercase tracking-wider text-text-tertiary">
                   Installed
@@ -222,7 +223,7 @@ export default function Appliances({ homeId, appliances, readOnly = false, onCha
                   type="date"
                   value={form.installedAt}
                   onChange={(e) => setForm({ ...form, installedAt: e.target.value })}
-                  className="w-full rounded-lg border border-border bg-surface px-3 py-2 text-[13px] outline-none focus:border-primary"
+                  className="min-h-11 w-full rounded-lg border border-border bg-surface px-3 py-2 text-[13px] outline-none focus:border-primary"
                 />
               </div>
               <div>
@@ -235,7 +236,7 @@ export default function Appliances({ homeId, appliances, readOnly = false, onCha
                   value={form.intervalDays}
                   onChange={(e) => setForm({ ...form, intervalDays: e.target.value })}
                   placeholder="90"
-                  className="w-full rounded-lg border border-border bg-surface px-3 py-2 text-[13px] outline-none focus:border-primary"
+                  className="min-h-11 w-full rounded-lg border border-border bg-surface px-3 py-2 text-[13px] outline-none focus:border-primary"
                 />
               </div>
             </div>
@@ -287,7 +288,7 @@ export default function Appliances({ homeId, appliances, readOnly = false, onCha
               <button
                 type="button"
                 onClick={() => setShowAdd(true)}
-                className="mt-3 inline-flex items-center gap-1.5 rounded-full bg-primary px-4 py-1.5 text-[12px] font-semibold text-white hover:bg-primary-dark transition-colors"
+                className="mt-3 inline-flex min-h-11 items-center gap-1.5 rounded-full bg-primary px-4 py-1.5 text-[12px] font-semibold text-white hover:bg-primary-dark transition-colors"
               >
                 <Plus size={13} />
                 Add appliance
@@ -360,7 +361,7 @@ export default function Appliances({ homeId, appliances, readOnly = false, onCha
                           type="button"
                           onClick={() => markServiced(a.id)}
                           disabled={servicingId === a.id}
-                          className="inline-flex items-center gap-1 rounded-full bg-success-light px-2.5 py-1 text-[11px] font-semibold text-success hover:bg-success/15 disabled:opacity-50 transition-colors"
+                          className="inline-flex min-h-11 items-center gap-1 rounded-full bg-success-light px-2.5 py-1 text-[11px] font-semibold text-success hover:bg-success/15 disabled:opacity-50 transition-colors"
                         >
                           <Check size={11} />
                           {servicingId === a.id ? "Saving…" : "Mark serviced"}
@@ -368,7 +369,7 @@ export default function Appliances({ homeId, appliances, readOnly = false, onCha
                         <button
                           type="button"
                           onClick={() => removeAppliance(a.id)}
-                          className="inline-flex items-center gap-1 rounded-full bg-surface-secondary px-2.5 py-1 text-[11px] font-semibold text-text-tertiary hover:text-error hover:bg-error-light transition-colors"
+                          className="inline-flex min-h-11 items-center gap-1 rounded-full bg-surface-secondary px-2.5 py-1 text-[11px] font-semibold text-text-tertiary hover:text-error hover:bg-error-light transition-colors"
                         >
                           <Trash2 size={11} />
                           Remove

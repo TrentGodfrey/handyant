@@ -3,9 +3,14 @@ import { hash } from "bcryptjs";
 import { prisma } from "@/lib/prisma";
 import { hashHomeInviteToken, normalizeEmail } from "@/lib/home-invitations";
 import { rateLimited, requestIp, takeRateLimit } from "@/lib/rate-limit";
+import { sendVerificationEmail } from "@/lib/verification-email";
+import { MAX_PASSWORD_LENGTH } from "@/lib/login-security";
 
 export async function POST(req: NextRequest) {
-  const body = await req.json();
+  const body = await req.json().catch(() => null);
+  if (!body || typeof body !== "object" || Array.isArray(body)) {
+    return Response.json({ error: "Invalid request body" }, { status: 400 });
+  }
 
   // Only name, email, and password are required at signup. Everything else
   // (phone, address) is collected later - at first booking or in
@@ -27,6 +32,12 @@ export async function POST(req: NextRequest) {
     return Response.json(
       { error: "Password must be at least 8 characters" },
       { status: 400 }
+    );
+  }
+  if (String(body.password).length > MAX_PASSWORD_LENGTH) {
+    return Response.json(
+      { error: `Password must be at most ${MAX_PASSWORD_LENGTH} characters` },
+      { status: 400 },
     );
   }
 
@@ -70,6 +81,7 @@ export async function POST(req: NextRequest) {
           data: {
             passwordHash,
             emailVerified: true,
+            sessionVersion: { increment: 1 },
             name: String(body.name).trim(),
             phone:
               typeof body.phone === "string" && body.phone.trim().length > 0
@@ -123,9 +135,18 @@ export async function POST(req: NextRequest) {
       role: "customer",
     },
   });
+  const verification = await sendVerificationEmail(user);
 
   return Response.json(
-    { id: user.id, email: user.email, name: user.name, claimedExisting: false, linkedHomeCount: 0 },
+    {
+      id: user.id,
+      email: user.email,
+      name: user.name,
+      claimedExisting: false,
+      linkedHomeCount: 0,
+      verificationRequired: true,
+      verificationSent: verification.ok,
+    },
     { status: 201 }
   );
 }

@@ -1,6 +1,8 @@
 import { NextRequest } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { requireTech, unauthorized, badRequest, notFound, forbidden } from "@/lib/session";
+import { isValidAvailabilityRange } from "@/lib/data-integrity";
+import { businessDateTimeToInstant } from "@/lib/booking-policy";
 
 export async function GET(req: NextRequest) {
   const tech = await requireTech();
@@ -12,8 +14,16 @@ export async function GET(req: NextRequest) {
   const where: Record<string, unknown> = { techId: tech.id };
   if (from || to) {
     const range: Record<string, Date> = {};
-    if (from) range.gte = new Date(from);
-    if (to) range.lte = new Date(to);
+    if (from) {
+      const value = businessDateTimeToInstant(from, "00:00");
+      if (!value) return badRequest("Invalid from date");
+      range.gte = value;
+    }
+    if (to) {
+      const value = businessDateTimeToInstant(to, "00:00");
+      if (!value) return badRequest("Invalid to date");
+      range.lt = value;
+    }
     where.startAt = range;
   }
 
@@ -36,7 +46,9 @@ export async function POST(req: NextRequest) {
   if (Number.isNaN(startAt.getTime()) || Number.isNaN(endAt.getTime())) {
     return badRequest("Invalid date");
   }
-  if (endAt <= startAt) return badRequest("endAt must be after startAt");
+  if (!isValidAvailabilityRange(startAt, endAt)) {
+    return badRequest("endAt must be after startAt");
+  }
 
   const block = await prisma.availabilityBlock.create({
     data: {

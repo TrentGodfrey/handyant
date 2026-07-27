@@ -62,6 +62,8 @@ interface RealPhoto {
 
 interface HomeRecord {
   id: string;
+  address: string;
+  city?: string | null;
 }
 
 // =====================================================================
@@ -120,7 +122,7 @@ function DemoPhotoGallery() {
       <div className="bg-surface border-b border-border px-5 pt-14 pb-4">
         <Link
           href="/account/home"
-          className="mb-4 inline-flex items-center gap-1.5 text-[13px] font-medium text-text-secondary hover:text-text-primary transition-colors"
+          className="mb-4 inline-flex min-h-11 items-center gap-1.5 text-[13px] font-medium text-text-secondary hover:text-text-primary transition-colors"
         >
           <ChevronLeft size={16} />
           Home Profile
@@ -141,7 +143,7 @@ function DemoPhotoGallery() {
               <button
                 key={f}
                 onClick={() => setActiveFilter(f)}
-                className={`shrink-0 flex items-center gap-1.5 rounded-full px-3.5 py-1.5 text-[12px] font-semibold border transition-all ${
+                className={`flex min-h-11 shrink-0 items-center gap-1.5 rounded-full border px-3.5 py-1.5 text-[12px] font-semibold transition-all ${
                   activeFilter === f
                     ? "bg-primary border-primary text-white"
                     : "bg-surface border-border text-text-secondary hover:border-primary/40"
@@ -212,7 +214,7 @@ function DemoPhotoGallery() {
       <div className="fixed bottom-24 right-5 z-10">
         <button
           onClick={() => setUploadedCount((c) => c + 1)}
-          className="flex items-center gap-2 rounded-full bg-primary text-white px-5 py-3 text-[13px] font-semibold shadow-[0_4px_20px_rgba(79,149,152,0.4)] active:scale-[0.97] transition-all"
+          className="flex min-h-11 items-center gap-2 rounded-full bg-primary px-5 py-3 text-[13px] font-semibold text-white shadow-[0_4px_20px_rgba(79,149,152,0.4)] active:scale-[0.97] transition-all"
         >
           <Upload size={16} />
           Upload Photo
@@ -221,14 +223,14 @@ function DemoPhotoGallery() {
 
       {modalPhoto && (
         <div className="fixed inset-0 z-50 bg-black/90 flex flex-col">
-          <div className="flex items-center justify-between px-5 pt-14 pb-4">
+          <div className="flex items-center justify-between px-5 pt-[max(env(safe-area-inset-top,0px),3.5rem)] pb-4">
             <div>
               <p className="text-white font-semibold text-[15px]">{modalPhoto.taskName}</p>
               <p className="text-white/60 text-[12px] mt-0.5">{modalPhoto.visitDate}</p>
             </div>
             <button
               onClick={closeModal}
-              className="flex h-9 w-9 items-center justify-center rounded-full bg-white/15 active:bg-white/25 transition-colors"
+              className="flex h-11 w-11 items-center justify-center rounded-full bg-white/15 active:bg-white/25 transition-colors"
             >
               <X size={18} className="text-white" />
             </button>
@@ -237,10 +239,10 @@ function DemoPhotoGallery() {
           {modalPhoto.hasBefore && (
             <div className="flex justify-center mb-4">
               <div className="flex gap-1 rounded-xl bg-white/15 p-1">
-                <button onClick={() => setModalView("before")} className={`px-5 py-2 rounded-lg text-[13px] font-semibold transition-all ${modalView === "before" ? "bg-white text-text-primary" : "text-white/70"}`}>
+                <button onClick={() => setModalView("before")} className={`min-h-11 rounded-lg px-5 py-2 text-[13px] font-semibold transition-all ${modalView === "before" ? "bg-white text-text-primary" : "text-white/70"}`}>
                   Before
                 </button>
-                <button onClick={() => setModalView("after")} className={`px-5 py-2 rounded-lg text-[13px] font-semibold transition-all ${modalView === "after" ? "bg-white text-text-primary" : "text-white/70"}`}>
+                <button onClick={() => setModalView("after")} className={`min-h-11 rounded-lg px-5 py-2 text-[13px] font-semibold transition-all ${modalView === "after" ? "bg-white text-text-primary" : "text-white/70"}`}>
                   After
                 </button>
               </div>
@@ -248,7 +250,7 @@ function DemoPhotoGallery() {
           )}
 
           <div className="flex-1 flex items-center justify-center px-8 relative">
-            <button onClick={() => modalNav(-1)} className="absolute left-3 flex h-10 w-10 items-center justify-center rounded-full bg-white/15 active:bg-white/30 transition-colors">
+            <button aria-label="Previous photo" onClick={() => modalNav(-1)} className="absolute left-3 flex h-11 w-11 items-center justify-center rounded-full bg-white/15 active:bg-white/30 transition-colors">
               <ArrowLeft size={20} className="text-white" />
             </button>
             <div className={`w-full max-w-sm aspect-square rounded-2xl ${modalPhoto.color} flex flex-col items-center justify-center gap-3 shadow-xl`}>
@@ -264,7 +266,7 @@ function DemoPhotoGallery() {
                 </span>
               )}
             </div>
-            <button onClick={() => modalNav(1)} className="absolute right-3 flex h-10 w-10 items-center justify-center rounded-full bg-white/15 active:bg-white/30 transition-colors">
+            <button aria-label="Next photo" onClick={() => modalNav(1)} className="absolute right-3 flex h-11 w-11 items-center justify-center rounded-full bg-white/15 active:bg-white/30 transition-colors">
               <ArrowRight size={20} className="text-white" />
             </button>
           </div>
@@ -295,6 +297,8 @@ function formatPhotoDate(iso: string | null): string {
 function RealPhotoGallery() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [homes, setHomes] = useState<HomeRecord[]>([]);
+  const [selectedHomeId, setSelectedHomeId] = useState<string | null>(null);
   const [home, setHome] = useState<HomeRecord | null>(null);
   const [photos, setPhotos] = useState<RealPhoto[]>([]);
 
@@ -312,13 +316,20 @@ function RealPhotoGallery() {
     try {
       const homesRes = await fetch("/api/homes");
       if (!homesRes.ok) throw new Error("Failed to load homes");
-      const homes = (await homesRes.json()) as HomeRecord[];
-      if (!Array.isArray(homes) || homes.length === 0) {
+      const nextHomes = (await homesRes.json()) as HomeRecord[];
+      if (!Array.isArray(nextHomes) || nextHomes.length === 0) {
+        setHomes([]);
+        setSelectedHomeId(null);
         setHome(null);
         setPhotos([]);
         return;
       }
-      const h = homes[0];
+      setHomes(nextHomes);
+      const nextHomeId = nextHomes.some((item) => item.id === selectedHomeId)
+        ? selectedHomeId!
+        : nextHomes[0].id;
+      if (nextHomeId !== selectedHomeId) setSelectedHomeId(nextHomeId);
+      const h = nextHomes.find((item) => item.id === nextHomeId)!;
       setHome(h);
       const photosRes = await fetch(`/api/photos?homeId=${encodeURIComponent(h.id)}`);
       if (!photosRes.ok) throw new Error("Failed to load photos");
@@ -329,7 +340,7 @@ function RealPhotoGallery() {
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [selectedHomeId]);
 
   useEffect(() => {
     refresh();
@@ -410,7 +421,7 @@ function RealPhotoGallery() {
       <div className="bg-surface border-b border-border px-5 pt-14 pb-4">
         <Link
           href="/account/home"
-          className="mb-4 inline-flex items-center gap-1.5 text-[13px] font-medium text-text-secondary hover:text-text-primary transition-colors"
+          className="mb-4 inline-flex min-h-11 items-center gap-1.5 text-[13px] font-medium text-text-secondary hover:text-text-primary transition-colors"
         >
           <ChevronLeft size={16} />
           Home Profile
@@ -423,6 +434,28 @@ function RealPhotoGallery() {
             </p>
           </div>
         </div>
+        {homes.length > 1 && (
+          <div className="mt-4">
+            <label htmlFor="photo-home-selector" className="mb-1.5 block text-[12px] font-semibold text-text-secondary">
+              Home
+            </label>
+            <select
+              id="photo-home-selector"
+              value={selectedHomeId ?? ""}
+              onChange={(event) => {
+                setModalPhoto(null);
+                setSelectedHomeId(event.target.value);
+              }}
+              className="min-h-11 w-full rounded-xl border border-border bg-surface px-3 text-[14px] font-semibold text-text-primary"
+            >
+              {homes.map((item) => (
+                <option key={item.id} value={item.id}>
+                  {item.address}{item.city ? `, ${item.city}` : ""}
+                </option>
+              ))}
+            </select>
+          </div>
+        )}
         {(error || uploadError) && (
           <p className="mt-3 text-[12px] text-error">{error ?? uploadError}</p>
         )}
@@ -440,7 +473,7 @@ function RealPhotoGallery() {
             </p>
             <Link
               href="/account/home"
-              className="mt-4 text-[13px] font-semibold text-primary"
+              className="mt-4 inline-flex min-h-11 items-center text-[13px] font-semibold text-primary"
             >
               Go to Home Profile
             </Link>
@@ -495,7 +528,7 @@ function RealPhotoGallery() {
           <button
             onClick={triggerUpload}
             disabled={uploading}
-            className="flex items-center gap-2 rounded-full bg-primary text-white px-5 py-3 text-[13px] font-semibold shadow-[0_4px_20px_rgba(79,149,152,0.4)] active:scale-[0.97] transition-all disabled:opacity-60"
+            className="flex min-h-11 items-center gap-2 rounded-full bg-primary px-5 py-3 text-[13px] font-semibold text-white shadow-[0_4px_20px_rgba(79,149,152,0.4)] active:scale-[0.97] transition-all disabled:opacity-60"
           >
             {uploading ? <Loader2 size={16} className="animate-spin" /> : <Upload size={16} />}
             {uploading ? "Uploading…" : "Upload Photo"}
@@ -506,7 +539,7 @@ function RealPhotoGallery() {
       {/* Modal */}
       {modalPhoto && (
         <div className="fixed inset-0 z-50 bg-black/90 flex flex-col">
-          <div className="flex items-center justify-between px-5 pt-14 pb-4">
+          <div className="flex items-center justify-between px-5 pt-[max(env(safe-area-inset-top,0px),3.5rem)] pb-4">
             <div className="min-w-0 flex-1">
               <p className="text-white font-semibold text-[15px] truncate">
                 {modalPhoto.label || "Photo"}
@@ -517,7 +550,7 @@ function RealPhotoGallery() {
               <button
                 onClick={() => handleDelete(modalPhoto)}
                 disabled={deletingId === modalPhoto.id}
-                className="flex h-9 w-9 items-center justify-center rounded-full bg-white/15 active:bg-white/25 transition-colors disabled:opacity-50"
+                className="flex h-11 w-11 items-center justify-center rounded-full bg-white/15 active:bg-white/25 transition-colors disabled:opacity-50"
                 aria-label="Delete photo"
               >
                 {deletingId === modalPhoto.id
@@ -526,7 +559,7 @@ function RealPhotoGallery() {
               </button>
               <button
                 onClick={() => setModalPhoto(null)}
-                className="flex h-9 w-9 items-center justify-center rounded-full bg-white/15 active:bg-white/25 transition-colors"
+                className="flex h-11 w-11 items-center justify-center rounded-full bg-white/15 active:bg-white/25 transition-colors"
                 aria-label="Close"
               >
                 <X size={18} className="text-white" />
@@ -536,7 +569,7 @@ function RealPhotoGallery() {
 
           <div className="flex-1 flex items-center justify-center px-8 relative">
             {photos.length > 1 && (
-              <button onClick={() => modalNav(-1)} className="absolute left-3 flex h-10 w-10 items-center justify-center rounded-full bg-white/15 active:bg-white/30 transition-colors">
+              <button onClick={() => modalNav(-1)} className="absolute left-3 flex h-11 w-11 items-center justify-center rounded-full bg-white/15 active:bg-white/30 transition-colors">
                 <ArrowLeft size={20} className="text-white" />
               </button>
             )}
@@ -551,7 +584,7 @@ function RealPhotoGallery() {
             </div>
 
             {photos.length > 1 && (
-              <button onClick={() => modalNav(1)} className="absolute right-3 flex h-10 w-10 items-center justify-center rounded-full bg-white/15 active:bg-white/30 transition-colors">
+              <button onClick={() => modalNav(1)} className="absolute right-3 flex h-11 w-11 items-center justify-center rounded-full bg-white/15 active:bg-white/30 transition-colors">
                 <ArrowRight size={20} className="text-white" />
               </button>
             )}

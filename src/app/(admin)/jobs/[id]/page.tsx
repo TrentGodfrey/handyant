@@ -16,6 +16,7 @@ import { toast } from "@/components/Toaster";
 import { demoCustomerBy } from "@/lib/demoData";
 import Spinner from "@/components/Spinner";
 import { bookingDateToLocalDate, formatBookingTime } from "@/lib/booking-time";
+import { businessDateString } from "@/lib/booking-policy";
 
 // ── Types ────────────────────────────────────────────────────────────────────
 
@@ -57,7 +58,7 @@ function apiStatusToUi(s: string): UiStatus {
 const DEMO_JOBS: Record<string, JobDetail> = {
   "1": {
     id: "1", client: demoCustomerBy("1")!.name, address: "4821 Oak Hollow Dr, Plano TX 75024",
-    phone: "(972) 555-0142", date: "Today", time: "9:00 AM", status: "confirmed",
+    phone: "(972) 555-0142", date: "Today", time: "8:00 AM", status: "confirmed",
     tasks: [
       { id: "t1", label: "Replace kitchen faucet (Moen brushed nickel)", done: false },
       { id: "t2", label: "Fix garage door sensor alignment", done: false, notes: "Laser level needed" },
@@ -77,7 +78,7 @@ const DEMO_JOBS: Record<string, JobDetail> = {
   },
   "2": {
     id: "2", client: demoCustomerBy("2")!.name, address: "1205 Elm Creek Ct, Frisco TX 75034",
-    phone: "(469) 555-0298", date: "Today", time: "11:30 AM", status: "confirmed",
+    phone: "(469) 555-0298", date: "Today", time: "10:00 AM", status: "confirmed",
     tasks: [
       { id: "t1", label: "Install Nest Learning Thermostat (3rd gen)", done: false },
       { id: "t2", label: "Replace 3 duplex outlets - master BR + office + garage", done: false },
@@ -123,7 +124,7 @@ interface ApiBooking {
 
 function bookingToDetail(b: ApiBooking): JobDetail {
   const dateObj = bookingDateToLocalDate(b.scheduledDate);
-  const today = new Date();
+  const today = bookingDateToLocalDate(businessDateString());
   const isToday = dateObj.toDateString() === today.toDateString();
   const dateLabel = isToday
     ? "Today"
@@ -281,21 +282,27 @@ export default function JobDetailPage({ params }: { params: Promise<{ id: string
   const completedCount = tasks.filter((t) => t.done).length;
   const progress = tasks.length > 0 ? Math.round((completedCount / tasks.length) * 100) : 0;
 
-  function toggleTask(taskId: string) {
+  async function toggleTask(taskId: string) {
     const target = tasks.find((t) => t.id === taskId);
     if (!target) return;
     const newDone = !target.done;
     setTasks((prev) => prev.map((t) => t.id === taskId ? { ...t, done: newDone } : t));
     if (isDemo) return;
-    fetch(`/api/tasks/${taskId}`, {
-      method: "PATCH",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ done: newDone }),
-    }).catch((e) => {
+    try {
+      const response = await fetch(`/api/tasks/${taskId}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ done: newDone }),
+      });
+      if (!response.ok) {
+        const body = await response.json().catch(() => ({}));
+        throw new Error(body.error ?? `HTTP ${response.status}`);
+      }
+    } catch (e) {
       toast.error("Failed to update task: " + (e instanceof Error ? e.message : String(e)));
       // revert on failure
       setTasks((prev) => prev.map((t) => t.id === taskId ? { ...t, done: !newDone } : t));
-    });
+    }
   }
 
   async function addTask() {
@@ -600,7 +607,7 @@ export default function JobDetailPage({ params }: { params: Promise<{ id: string
       <div className="min-h-screen bg-background flex flex-col items-center justify-center px-5 text-center">
         <p className="text-[16px] font-bold text-text-primary">Job not found</p>
         <p className="mt-2 text-[13px] text-text-secondary">This booking may have been removed.</p>
-        <Link href="/jobs" className="mt-4 text-[13px] font-semibold text-primary">Back to Jobs</Link>
+        <Link href="/jobs" className="mt-4 inline-flex min-h-11 items-center text-[13px] font-semibold text-primary">Back to Jobs</Link>
       </div>
     );
   }
@@ -609,13 +616,13 @@ export default function JobDetailPage({ params }: { params: Promise<{ id: string
     <div className="min-h-screen bg-background pb-28">
       {/* Header */}
       <div className="bg-white border-b border-border px-5 pt-14 pb-5">
-        <Link href="/jobs" className="mb-4 inline-flex items-center gap-1.5 text-[13px] font-medium text-text-secondary hover:text-text-primary transition-colors">
+        <Link href="/jobs" className="mb-4 inline-flex min-h-11 items-center gap-1.5 text-[13px] font-medium text-text-secondary hover:text-text-primary transition-colors">
           <ChevronLeft size={16} />
           Jobs
         </Link>
         <div className="flex items-start justify-between gap-3">
-          <div>
-            <h1 className="text-[22px] font-bold text-text-primary">{job.client}</h1>
+          <div className="min-w-0">
+            <h1 className="truncate text-[22px] font-bold text-text-primary">{job.client}</h1>
             <div className="mt-1 flex items-center gap-1.5">
               <Clock size={13} className="text-text-tertiary" />
               <span className="text-[13px] text-text-secondary">{job.date} · {job.time}</span>
@@ -632,7 +639,7 @@ export default function JobDetailPage({ params }: { params: Promise<{ id: string
 
         {/* Action buttons */}
         <div className="mt-4 flex gap-2">
-          <a href={`tel:${job.phone}`} className="flex flex-1 items-center justify-center gap-1.5 rounded-xl border border-border bg-surface py-2.5 text-[13px] font-semibold text-text-primary hover:bg-surface-secondary transition-colors">
+          <a href={`tel:${job.phone}`} className="flex min-h-11 flex-1 items-center justify-center gap-1.5 rounded-xl border border-border bg-surface py-2.5 text-[13px] font-semibold text-text-primary hover:bg-surface-secondary transition-colors">
             <Phone size={14} />
             Call
           </a>
@@ -642,14 +649,14 @@ export default function JobDetailPage({ params }: { params: Promise<{ id: string
                 ? `/admin-messages?customerId=${encodeURIComponent(job.customerId)}`
                 : "/admin-messages"
             }
-            className="flex flex-1 items-center justify-center gap-1.5 rounded-xl border border-border bg-surface py-2.5 text-[13px] font-semibold text-text-primary hover:bg-surface-secondary transition-colors"
+            className="flex min-h-11 flex-1 items-center justify-center gap-1.5 rounded-xl border border-border bg-surface py-2.5 text-[13px] font-semibold text-text-primary hover:bg-surface-secondary transition-colors"
           >
             <MessageCircle size={14} />
             Message
           </Link>
           <a
             href={`https://maps.apple.com/?q=${encodeURIComponent(job.address)}`}
-            className="flex flex-1 items-center justify-center gap-1.5 rounded-xl bg-primary py-2.5 text-[13px] font-semibold text-white"
+            className="flex min-h-11 flex-1 items-center justify-center gap-1.5 rounded-xl bg-primary py-2.5 text-[13px] font-semibold text-white"
           >
             <Navigation size={14} />
             Navigate
@@ -680,7 +687,7 @@ export default function JobDetailPage({ params }: { params: Promise<{ id: string
             {!showAddTask && (
               <button
                 onClick={() => setShowAddTask(true)}
-                className="flex items-center gap-1 text-[12px] font-semibold text-primary"
+                className="flex min-h-11 items-center gap-1 px-2 text-[12px] font-semibold text-primary"
               >
                 <Plus size={14} />
                 Add Task
@@ -718,14 +725,14 @@ export default function JobDetailPage({ params }: { params: Promise<{ id: string
                   value={newTaskLabel}
                   onChange={(e) => setNewTaskLabel(e.target.value)}
                   placeholder="Task label (required)"
-                  className="w-full rounded-lg border border-border bg-surface-secondary px-3 py-2.5 text-[13px] text-text-primary placeholder:text-text-tertiary focus:outline-none focus:border-primary"
+                  className="min-h-12 w-full rounded-lg border border-border bg-surface-secondary px-3 py-2.5 text-[13px] text-text-primary placeholder:text-text-tertiary focus:outline-none focus:border-primary"
                 />
                 <input
                   type="text"
                   value={newTaskNotes}
                   onChange={(e) => setNewTaskNotes(e.target.value)}
                   placeholder="Notes (optional)"
-                  className="w-full rounded-lg border border-border bg-surface-secondary px-3 py-2.5 text-[13px] text-text-primary placeholder:text-text-tertiary focus:outline-none focus:border-primary"
+                  className="min-h-12 w-full rounded-lg border border-border bg-surface-secondary px-3 py-2.5 text-[13px] text-text-primary placeholder:text-text-tertiary focus:outline-none focus:border-primary"
                 />
                 {addTaskError && (
                   <p className="text-[12px] text-error">{addTaskError}</p>
@@ -835,9 +842,11 @@ export default function JobDetailPage({ params }: { params: Promise<{ id: string
                   onClick={() => deletePhoto(photo.id)}
                   disabled={deletingPhotoId === photo.id}
                   aria-label={`Delete ${photo.label || "visit photo"}`}
-                  className="absolute right-1.5 top-1.5 z-10 flex h-8 w-8 items-center justify-center rounded-full bg-black/70 text-white shadow-sm active:bg-black/85 disabled:opacity-60"
+                  className="absolute right-0 top-0 z-10 flex h-11 w-11 items-center justify-center rounded-full disabled:opacity-60"
                 >
-                  <Trash2 size={14} />
+                  <span className="flex h-8 w-8 items-center justify-center rounded-full bg-black/70 text-white shadow-sm active:bg-black/85">
+                    <Trash2 size={14} />
+                  </span>
                 </button>
               </div>
             ))}
@@ -863,7 +872,7 @@ export default function JobDetailPage({ params }: { params: Promise<{ id: string
             {!showNoteInput && (
               <button
                 onClick={() => setShowNoteInput(true)}
-                className="flex items-center gap-1 text-[12px] font-semibold text-primary"
+                className="flex min-h-11 items-center gap-1 px-2 text-[12px] font-semibold text-primary"
               >
                 <Plus size={14} />
                 Add
@@ -958,7 +967,7 @@ export default function JobDetailPage({ params }: { params: Promise<{ id: string
                           type="button"
                           onClick={() => deleteBookingNote(note.id)}
                           aria-label="Delete note"
-                          className="shrink-0 flex h-7 w-7 items-center justify-center rounded-lg text-text-tertiary hover:bg-error-light hover:text-error transition-colors"
+                          className="flex h-11 w-11 shrink-0 items-center justify-center rounded-lg text-text-tertiary hover:bg-error-light hover:text-error transition-colors"
                         >
                           <Trash2 size={13} />
                         </button>
@@ -980,27 +989,41 @@ export default function JobDetailPage({ params }: { params: Promise<{ id: string
         </div>
 
         {/* Complete Visit CTA + Cancel */}
-        {tasks.length > 0 && completedCount === tasks.length ? (
-          <Button
-            variant="primary"
-            size="lg"
-            fullWidth
-            icon={<Check size={18} />}
-            onClick={() => setShowCompleteModal(true)}
-          >
-            Complete Visit
-          </Button>
-        ) : (
-          <Button variant="outline" size="lg" fullWidth onClick={scrollToTasks}>
-            {completedCount}/{tasks.length} Tasks Remaining
-          </Button>
-        )}
+        {job.status === "pending" ? (
+          <Card padding="sm" variant="outlined" className="text-center">
+            <p className="text-[12px] text-text-secondary">
+              Confirm this booking request before starting the visit.
+            </p>
+            <Link
+              href="/dashboard"
+              className="mt-2 inline-flex min-h-11 items-center justify-center px-3 text-[13px] font-semibold text-primary"
+            >
+              Review pending requests
+            </Link>
+          </Card>
+        ) : ["confirmed", "in-progress", "scheduled"].includes(job.status) ? (
+          completedCount === tasks.length ? (
+            <Button
+              variant="primary"
+              size="lg"
+              fullWidth
+              icon={<Check size={18} />}
+              onClick={() => setShowCompleteModal(true)}
+            >
+              Complete Visit
+            </Button>
+          ) : (
+            <Button variant="outline" size="lg" fullWidth onClick={scrollToTasks}>
+              {completedCount}/{tasks.length} Tasks Complete
+            </Button>
+          )
+        ) : null}
 
         {job.status !== "completed" && job.status !== "cancelled" && (
           <button
             type="button"
             onClick={() => setShowCancelModal(true)}
-            className="w-full mt-1 text-center text-[13px] font-semibold text-error py-2 hover:underline transition-colors"
+            className="mt-1 min-h-11 w-full py-2 text-center text-[13px] font-semibold text-error hover:underline transition-colors"
           >
             Cancel visit
           </button>
@@ -1010,7 +1033,7 @@ export default function JobDetailPage({ params }: { params: Promise<{ id: string
       {/* Complete modal */}
       {showCompleteModal && (
         <div className="fixed inset-0 z-50 flex items-end justify-center bg-black/40 backdrop-blur-sm" onClick={() => setShowCompleteModal(false)}>
-          <div className="w-full rounded-t-3xl bg-white px-6 pb-10 pt-6" onClick={(e) => e.stopPropagation()}>
+          <div className="max-h-[90dvh] w-full overflow-y-auto rounded-t-3xl bg-white px-6 pt-6 pb-[max(env(safe-area-inset-bottom),2.5rem)]" onClick={(e) => e.stopPropagation()}>
             <div className="mx-auto mb-4 h-1 w-12 rounded-full bg-border" />
             <div className="mb-5 flex flex-col items-center text-center">
               <div className="mb-3 flex h-16 w-16 items-center justify-center rounded-full bg-success-light">
@@ -1036,7 +1059,7 @@ export default function JobDetailPage({ params }: { params: Promise<{ id: string
             >
               {completing ? "Completing…" : "Complete Visit"}
             </Button>
-            <button className="mt-3 w-full text-center text-[13px] text-text-tertiary" onClick={() => setShowCompleteModal(false)}>
+            <button className="mt-3 min-h-11 w-full text-center text-[13px] text-text-tertiary" onClick={() => setShowCompleteModal(false)}>
               Cancel
             </button>
           </div>
@@ -1046,7 +1069,7 @@ export default function JobDetailPage({ params }: { params: Promise<{ id: string
       {/* Cancel-visit modal */}
       {showCancelModal && (
         <div className="fixed inset-0 z-50 flex items-end justify-center bg-black/40 backdrop-blur-sm" onClick={() => setShowCancelModal(false)}>
-          <div className="w-full rounded-t-3xl bg-white px-6 pb-10 pt-6" onClick={(e) => e.stopPropagation()}>
+          <div className="max-h-[90dvh] w-full overflow-y-auto rounded-t-3xl bg-white px-6 pt-6 pb-[max(env(safe-area-inset-bottom),2.5rem)]" onClick={(e) => e.stopPropagation()}>
             <div className="mx-auto mb-4 h-1 w-12 rounded-full bg-border" />
             <div className="mb-5 flex flex-col items-center text-center">
               <div className="mb-3 flex h-16 w-16 items-center justify-center rounded-full bg-error-light">
@@ -1067,7 +1090,7 @@ export default function JobDetailPage({ params }: { params: Promise<{ id: string
             >
               {cancelling ? "Cancelling…" : "Cancel Visit"}
             </Button>
-            <button className="mt-3 w-full text-center text-[13px] text-text-tertiary" onClick={() => setShowCancelModal(false)}>
+            <button className="mt-3 min-h-11 w-full text-center text-[13px] text-text-tertiary" onClick={() => setShowCancelModal(false)}>
               Never mind
             </button>
           </div>

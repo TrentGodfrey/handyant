@@ -7,6 +7,18 @@ import { hash } from "bcryptjs";
 const prisma = new PrismaClient({ adapter: new PrismaPg(process.env.DATABASE_URL!) });
 
 async function main() {
+  if (process.env.NODE_ENV === "production") {
+    throw new Error("The demo seed is local-development-only and must never run in production.");
+  }
+
+  const ownerEmail = process.env.MCQ_SEED_OWNER_EMAIL?.trim().toLowerCase();
+  const ownerPassword = process.env.MCQ_SEED_OWNER_PASSWORD;
+  if (!ownerEmail || !ownerPassword) {
+    throw new Error(
+      "Set MCQ_SEED_OWNER_EMAIL and MCQ_SEED_OWNER_PASSWORD before running the local demo seed.",
+    );
+  }
+
   console.log("Seeding…");
 
   // Service categories
@@ -31,14 +43,19 @@ async function main() {
 
   // Tech account (owner)
   const tech = await prisma.user.upsert({
-    where: { email: "anthony@handyant.com" },
-    update: { name: "Anthony McQuade" },
+    where: { email: ownerEmail },
+    update: {
+      name: "Local Demo Owner",
+      isAdmin: true,
+      mustChangePassword: true,
+    },
     create: {
-      email: "anthony@handyant.com",
-      passwordHash: await hash("anthony123", 12),
-      name: "Anthony McQuade",
-      phone: "(214) 469-7795",
+      email: ownerEmail,
+      passwordHash: await hash(ownerPassword, 12),
+      name: "Local Demo Owner",
       role: "tech",
+      isAdmin: true,
+      mustChangePassword: true,
       emailVerified: true,
     },
   });
@@ -97,11 +114,16 @@ async function main() {
 
     if (c.plan) {
       const existingSub = await prisma.subscription.findFirst({
-        where: { customerId: user.id, status: "active" },
+        where: { customerId: user.id, homeId: home.id, status: "active" },
       });
       if (!existingSub) {
         await prisma.subscription.create({
-          data: { customerId: user.id, plan: c.plan, status: "active" },
+          data: {
+            customerId: user.id,
+            homeId: home.id,
+            plan: c.plan,
+            status: "active",
+          },
         });
       }
     }
@@ -121,11 +143,15 @@ async function main() {
     return d;
   };
 
-  const time = (h: number, m = 0) => new Date(`1970-01-01T${String(h).padStart(2, "0")}:${String(m).padStart(2, "0")}:00`);
+  // Prisma transports Postgres `time` values through Date objects. Use UTC so
+  // the seeded wall-clock value is not shifted by the developer machine's
+  // timezone before it reaches the database.
+  const time = (h: number, m = 0) =>
+    new Date(Date.UTC(1970, 0, 1, h, m, 0, 0));
 
   const bookingSeeds = [
     {
-      customerIdx: 0, dateOffset: 0, hour: 9, status: "confirmed", duration: 120, estimate: 340,
+      customerIdx: 0, dateOffset: 0, hour: 8, status: "confirmed", duration: 210, visitCount: 2, estimate: 340,
       desc: "Kitchen faucet + garage door sensor",
       tasks: [
         { label: "Replace kitchen faucet (Moen brushed nickel)" },
@@ -139,7 +165,7 @@ async function main() {
       categoriesByName: ["Plumbing"],
     },
     {
-      customerIdx: 1, dateOffset: 0, hour: 11, minute: 30, status: "confirmed", duration: 90, estimate: 280,
+      customerIdx: 1, dateOffset: 0, hour: 10, status: "confirmed", duration: 105, visitCount: 1, estimate: 280,
       desc: "Smart thermostat + outlets",
       tasks: [
         { label: "Install Nest Learning Thermostat (3rd gen)" },
@@ -149,7 +175,7 @@ async function main() {
       categoriesByName: ["Electrical", "Smart Home"],
     },
     {
-      customerIdx: 2, dateOffset: 0, hour: 14, status: "pending", duration: 120, estimate: 190,
+      customerIdx: 2, dateOffset: 0, hour: 12, status: "pending", duration: 105, visitCount: 1, estimate: 190,
       desc: "Drywall + paint touch-up",
       tasks: [
         { label: "Drywall patch - 2 holes from TV mount" },
@@ -159,14 +185,14 @@ async function main() {
       categoriesByName: ["Drywall", "Painting"],
     },
     {
-      customerIdx: 3, dateOffset: 4, hour: 10, status: "pending", duration: 240, estimate: 620,
+      customerIdx: 3, dateOffset: 4, hour: 14, status: "pending", duration: 210, visitCount: 2, estimate: 620,
       desc: "Bathroom wallpaper + tile grout",
       tasks: [{ label: "Wallpaper removal (full bathroom)" }, { label: "Tile grout repair" }],
       parts: [{ item: "Wallpaper steamer rental", qty: 1, status: "needed", cost: 35 }],
       categoriesByName: ["Painting"],
     },
     {
-      customerIdx: 4, dateOffset: 5, hour: 8, minute: 30, status: "confirmed", duration: 90, estimate: 175,
+      customerIdx: 4, dateOffset: 5, hour: 8, status: "confirmed", duration: 105, visitCount: 1, estimate: 175,
       desc: "Ceiling fan + bath caulk",
       tasks: [{ label: "Ceiling fan install" }, { label: "Caulk master bath" }],
       parts: [],
@@ -174,7 +200,7 @@ async function main() {
     },
     // Past completed jobs (for receipts + reviews)
     {
-      customerIdx: 0, dateOffset: -16, hour: 9, status: "completed", duration: 150, estimate: 285, finalCost: 285,
+      customerIdx: 0, dateOffset: -16, hour: 8, status: "completed", duration: 210, visitCount: 2, estimate: 285, finalCost: 285,
       desc: "Kitchen faucet repair + garbage disposal",
       tasks: [{ label: "Replace cartridge", done: true }, { label: "Reseat disposal", done: true }],
       parts: [{ item: "Moen cartridge", qty: 1, status: "purchased", cost: 45 }],
@@ -182,7 +208,7 @@ async function main() {
       review: { rating: 5, comment: "Quick and clean." },
     },
     {
-      customerIdx: 0, dateOffset: -45, hour: 13, status: "completed", duration: 90, estimate: 120, finalCost: 120,
+      customerIdx: 0, dateOffset: -45, hour: 10, status: "completed", duration: 105, visitCount: 1, estimate: 120, finalCost: 120,
       desc: "Smart thermostat install",
       tasks: [{ label: "Install Nest", done: true }],
       parts: [],
@@ -190,7 +216,7 @@ async function main() {
       review: { rating: 5, comment: "Perfect job." },
     },
     {
-      customerIdx: 1, dateOffset: -10, hour: 11, status: "completed", duration: 180, estimate: 215, finalCost: 215,
+      customerIdx: 1, dateOffset: -10, hour: 12, status: "completed", duration: 210, visitCount: 2, estimate: 215, finalCost: 215,
       desc: "Garbage disposal + P-trap",
       tasks: [{ label: "Install disposal", done: true }, { label: "Fix leaky P-trap", done: true }],
       parts: [],
@@ -209,7 +235,7 @@ async function main() {
         homeId: customer.homeId,
         techId: tech.id,
         scheduledDate: day(b.dateOffset),
-        scheduledTime: time(b.hour, b.minute ?? 0),
+        scheduledTime: time(b.hour),
         durationMinutes: b.duration,
         status: b.status as BookingStatus,
         description: b.desc,

@@ -26,7 +26,7 @@ export default function RoleSwitcher() {
     >
       <a
         href="/home"
-        className={`flex items-center gap-1.5 rounded-full px-4 py-2 text-[12px] font-semibold transition-all no-underline ${
+        className={`flex min-h-11 items-center gap-1.5 rounded-full px-4 py-2 text-[12px] font-semibold transition-all no-underline ${
           !isAdmin
             ? "bg-primary text-white shadow-sm"
             : "text-gray-400 hover:text-gray-600"
@@ -37,7 +37,7 @@ export default function RoleSwitcher() {
       </a>
       <a
         href="/dashboard"
-        className={`flex items-center gap-1.5 rounded-full px-4 py-2 text-[12px] font-semibold transition-all no-underline ${
+        className={`flex min-h-11 items-center gap-1.5 rounded-full px-4 py-2 text-[12px] font-semibold transition-all no-underline ${
           isAdmin
             ? "bg-primary text-white shadow-sm"
             : "text-gray-400 hover:text-gray-600"

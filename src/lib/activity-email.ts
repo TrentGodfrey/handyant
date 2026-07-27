@@ -1,4 +1,5 @@
 import { emailShell, escapeHtml, sendEmail } from "./email";
+import { prisma } from "./prisma";
 
 interface ActivityEmailParams {
   to: string | null | undefined;
@@ -8,10 +9,39 @@ interface ActivityEmailParams {
   message: string;
   actionPath?: string;
   actionLabel?: string;
+  idempotencyKey?: string;
 }
 
 export async function sendActivityEmail(params: ActivityEmailParams) {
   if (!params.to) return { ok: false, error: "recipient has no email" } as const;
+
+  // Activity email is user-controlled. Security emails (verification, password
+  // reset, and invitations) use sendEmail directly and must never be suppressed.
+  // If this lookup fails we still attempt delivery: a transient database read
+  // should not silently discard an operational notification.
+  try {
+    const recipient = await prisma.user.findFirst({
+      where: { email: { equals: params.to, mode: "insensitive" } },
+      select: {
+        role: true,
+        notifyPrefs: true,
+        businessProfile: { select: { notifyPrefs: true } },
+      },
+    });
+    const rawPreferences =
+      recipient?.role === "tech"
+        ? recipient.businessProfile?.notifyPrefs ?? recipient.notifyPrefs
+        : recipient?.notifyPrefs;
+    if (
+      rawPreferences &&
+      typeof rawPreferences === "object" &&
+      (rawPreferences as Record<string, unknown>).email === false
+    ) {
+      return { ok: true, suppressed: true, id: undefined } as const;
+    }
+  } catch (error) {
+    console.error("[activity-email] failed to read recipient preferences", error);
+  }
 
   const baseUrl = (process.env.NEXTAUTH_URL ?? "https://mcqpropertycare.com").replace(/\/$/, "");
   const actionUrl = params.actionPath
@@ -35,5 +65,6 @@ export async function sendActivityEmail(params: ActivityEmailParams) {
       `,
     }),
     text: `Hi ${greeting},\n\n${params.message}${actionUrl ? `\n\n${params.actionLabel ?? "Open MCQ"}: ${actionUrl}` : ""}`,
+    idempotencyKey: params.idempotencyKey,
   });
 }

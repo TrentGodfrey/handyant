@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { createHmac, randomBytes } from "node:crypto";
+import { randomBytes } from "node:crypto";
 import test from "node:test";
 import { createHomeInviteToken, hashHomeInviteToken, normalizeEmail } from "./home-invitations";
 import {
@@ -7,7 +7,6 @@ import {
   encryptSensitiveValue,
   isEncryptedSensitiveValue,
 } from "./sensitive-data";
-import { isValidSquareWebhookSignature } from "./square";
 import { takeRateLimit } from "./rate-limit";
 import { hashSecurityToken } from "./security-tokens";
 import {
@@ -15,6 +14,10 @@ import {
   isConfirmedHomeHistoryDeletion,
 } from "./home-deletion";
 import { getLocalUploadFilename } from "./upload-storage";
+import {
+  MAX_IMAGE_REQUEST_BYTES,
+  imageRequestExceedsLimit,
+} from "./imageUpload";
 
 test("home invitation tokens are random, normalized, and stored only as hashes", () => {
   const first = createHomeInviteToken();
@@ -39,23 +42,6 @@ test("sensitive home access values round-trip with authenticated encryption", ()
   } finally {
     if (originalKey === undefined) delete process.env.DATA_ENCRYPTION_KEY;
     else process.env.DATA_ENCRYPTION_KEY = originalKey;
-  }
-});
-
-test("Square webhook validation accepts only the correct URL/body signature", () => {
-  const originalKey = process.env.SQUARE_WEBHOOK_SIGNATURE_KEY;
-  const key = "unit-test-signature-key";
-  const url = "https://mcqpropertycare.com/api/webhooks/square";
-  const rawBody = JSON.stringify({ event_id: "event-1", type: "payment.updated" });
-  process.env.SQUARE_WEBHOOK_SIGNATURE_KEY = key;
-  try {
-    const signature = createHmac("sha256", key).update(url + rawBody).digest("base64");
-    assert.equal(isValidSquareWebhookSignature({ rawBody, signature, notificationUrl: url }), true);
-    assert.equal(isValidSquareWebhookSignature({ rawBody: `${rawBody} `, signature, notificationUrl: url }), false);
-    assert.equal(isValidSquareWebhookSignature({ rawBody, signature, notificationUrl: `${url}/wrong` }), false);
-  } finally {
-    if (originalKey === undefined) delete process.env.SQUARE_WEBHOOK_SIGNATURE_KEY;
-    else process.env.SQUARE_WEBHOOK_SIGNATURE_KEY = originalKey;
   }
 });
 
@@ -85,7 +71,27 @@ test("home history deletion requires the exact destructive confirmation", () => 
 test("upload cleanup accepts only generated local image paths", () => {
   assert.equal(getLocalUploadFilename("/api/uploads/photo-id.jpg"), "photo-id.jpg");
   assert.equal(getLocalUploadFilename("/uploads/legacy.png"), "legacy.png");
+  assert.equal(
+    getLocalUploadFilename("/api/uploads/avatar-id.webp?v=12345"),
+    "avatar-id.webp",
+  );
   assert.equal(getLocalUploadFilename("https://example.com/photo.jpg"), null);
+  assert.equal(getLocalUploadFilename("/api/uploads/photo.jpg?download=1"), null);
   assert.equal(getLocalUploadFilename("/api/uploads/../../secret.jpg"), null);
   assert.equal(getLocalUploadFilename("/api/uploads/photo.svg"), null);
+});
+
+test("declared oversized image requests are rejected before JSON decoding", () => {
+  assert.equal(
+    imageRequestExceedsLimit(new Request("https://example.com", {
+      headers: { "content-length": String(MAX_IMAGE_REQUEST_BYTES + 1) },
+    })),
+    true,
+  );
+  assert.equal(
+    imageRequestExceedsLimit(new Request("https://example.com", {
+      headers: { "content-length": String(MAX_IMAGE_REQUEST_BYTES) },
+    })),
+    false,
+  );
 });

@@ -59,7 +59,7 @@ export default function VisitsAndNotes({
                           <Link
                             href={`/account/rate/${visit.id}`}
                             onClick={(event) => event.stopPropagation()}
-                            className="rounded-full bg-warning-light px-2 py-1 text-[10px] font-bold text-warning active:opacity-70"
+                            className="inline-flex min-h-11 items-center rounded-full bg-warning-light px-3 py-1 text-[10px] font-bold text-warning active:opacity-70"
                           >
                             Leave a review
                           </Link>

@@ -1,12 +1,13 @@
 import { prisma } from "@/lib/prisma";
 import { requireTech, unauthorized } from "@/lib/session";
+import { businessDateString } from "@/lib/booking-policy";
+import { bookingDateToDatabaseDate } from "@/lib/booking-time";
 
 export async function GET() {
   const tech = await requireTech();
   if (!tech) return unauthorized();
 
-  const startOfDay = new Date();
-  startOfDay.setHours(0, 0, 0, 0);
+  const startOfDay = bookingDateToDatabaseDate(businessDateString())!;
 
   const parts = await prisma.part.findMany({
     where: {

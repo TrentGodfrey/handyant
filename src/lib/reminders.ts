@@ -35,8 +35,81 @@ export const ALLOWED_LEAD_TIMES: Set<number> = new Set(
 export const DEFAULT_APPOINTMENT_REMINDERS: AppointmentReminders = {
   enabled: true,
   leadTimes: [1440, 60],
-  channels: { email: true, sms: false, push: true },
+  channels: { email: true, sms: false, push: false },
 };
+
+export interface ReminderIdentity {
+  bookingId: string;
+  userId: string;
+  leadTime: number;
+  appointmentAt: Date;
+}
+
+export const REMINDER_CLAIM_LEASE_MS = 4 * 60_000;
+export const REMINDER_RETRY_DELAY_MS = 60_000;
+export const MAX_REMINDER_DELIVERY_ATTEMPTS = 5;
+
+export function canRetryReminderDelivery(params: {
+  sentAt: Date | null;
+  failedAt: Date | null;
+  claimedAt: Date;
+  attemptCount: number;
+  now: Date;
+}): boolean {
+  if (
+    params.sentAt ||
+    params.attemptCount >= MAX_REMINDER_DELIVERY_ATTEMPTS ||
+    !Number.isFinite(params.claimedAt.getTime()) ||
+    !Number.isFinite(params.now.getTime())
+  ) {
+    return false;
+  }
+  return (
+    (params.failedAt !== null &&
+      params.failedAt.getTime() <= params.now.getTime() - REMINDER_RETRY_DELAY_MS) ||
+    params.claimedAt.getTime() <= params.now.getTime() - REMINDER_CLAIM_LEASE_MS
+  );
+}
+
+export function isReminderDue(params: {
+  appointmentAt: Date;
+  leadTime: number;
+  now: Date;
+  lookbackMinutes?: number;
+  lookaheadMinutes?: number;
+}): boolean {
+  const {
+    appointmentAt,
+    leadTime,
+    now,
+    lookbackMinutes = 10,
+    lookaheadMinutes = 5,
+  } = params;
+  if (
+    !Number.isFinite(appointmentAt.getTime()) ||
+    !Number.isFinite(now.getTime()) ||
+    !Number.isInteger(leadTime) ||
+    leadTime <= 0 ||
+    appointmentAt <= now
+  ) {
+    return false;
+  }
+  const fireAt = appointmentAt.getTime() - leadTime * 60_000;
+  return (
+    fireAt >= now.getTime() - lookbackMinutes * 60_000 &&
+    fireAt < now.getTime() + lookaheadMinutes * 60_000
+  );
+}
+
+export function reminderIdempotencyKey(reminder: ReminderIdentity): string {
+  return [
+    "mcq-reminder",
+    reminder.bookingId,
+    reminder.userId,
+    reminder.leadTime,
+    reminder.appointmentAt.getTime(),
+  ].join("-");
+}
 
 /**
  * Coerce any stored JSON blob into a well-formed AppointmentReminders. Silently
@@ -63,9 +136,11 @@ export function normalizeAppointmentReminders(
 
   const ch = (raw.channels ?? {}) as Partial<ReminderChannels>;
   const channels: ReminderChannels = {
-    sms: typeof ch.sms === "boolean" ? ch.sms : DEFAULT_APPOINTMENT_REMINDERS.channels.sms,
     email: typeof ch.email === "boolean" ? ch.email : DEFAULT_APPOINTMENT_REMINDERS.channels.email,
-    push: typeof ch.push === "boolean" ? ch.push : DEFAULT_APPOINTMENT_REMINDERS.channels.push,
+    // SMS and push have no production provider yet. Keep the stored shape
+    // forward-compatible, but never promise or activate an unavailable channel.
+    sms: false,
+    push: false,
   };
 
   return { enabled, leadTimes, channels };

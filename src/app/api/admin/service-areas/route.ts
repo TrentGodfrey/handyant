@@ -1,9 +1,9 @@
 import { NextRequest } from "next/server";
 import { prisma } from "@/lib/prisma";
-import { requireTech, unauthorized, badRequest } from "@/lib/session";
+import { requireAdmin, unauthorized, badRequest } from "@/lib/session";
 
 export async function GET() {
-  const tech = await requireTech();
+  const tech = await requireAdmin();
   if (!tech) return unauthorized();
 
   const areas = await prisma.serviceArea.findMany({
@@ -14,7 +14,7 @@ export async function GET() {
 }
 
 export async function POST(req: NextRequest) {
-  const tech = await requireTech();
+  const tech = await requireAdmin();
   if (!tech) return unauthorized();
 
   const body = await req.json();
@@ -42,7 +42,7 @@ export async function POST(req: NextRequest) {
 }
 
 export async function DELETE(req: NextRequest) {
-  const tech = await requireTech();
+  const tech = await requireAdmin();
   if (!tech) return unauthorized();
 
   const city = req.nextUrl.searchParams.get("city");

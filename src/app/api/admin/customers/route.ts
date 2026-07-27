@@ -1,6 +1,7 @@
 import { NextRequest } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { requireTech, unauthorized } from "@/lib/session";
+import { customerRosterWhere } from "@/lib/resource-access";
 
 /**
  * Lightweight customer roster for the admin /people page.
@@ -14,7 +15,7 @@ export async function GET(req: NextRequest) {
   const search = req.nextUrl.searchParams.get("q")?.toLowerCase().trim() ?? "";
 
   const customers = await prisma.user.findMany({
-    where: { role: "customer" },
+    where: customerRosterWhere(tech),
     select: {
       id: true,
       name: true,
@@ -22,8 +23,23 @@ export async function GET(req: NextRequest) {
       phone: true,
       avatarUrl: true,
       createdAt: true,
-      homes: { select: { id: true }, take: 1 },
-      _count: { select: { homes: true, bookingsAsCustomer: true } },
+      homes: {
+        where: tech.isAdmin
+          ? {}
+          : { bookings: { some: { techId: tech.id } } },
+        select: { id: true },
+        take: 1,
+      },
+      _count: {
+        select: {
+          homes: tech.isAdmin
+            ? true
+            : { where: { bookings: { some: { techId: tech.id } } } },
+          bookingsAsCustomer: tech.isAdmin
+            ? true
+            : { where: { techId: tech.id } },
+        },
+      },
     },
     orderBy: { createdAt: "desc" },
   });

@@ -10,20 +10,25 @@ interface Props {
   homeId: string;
   subscription: ApiHome["activeSubscription"];
   onSaved: () => Promise<void>;
+  canManage: boolean;
 }
 
-export default function HomeSubscriptionCard({ homeId, subscription, onSaved }: Props) {
-  const [editing, setEditing] = useState(!subscription);
+export default function HomeSubscriptionCard({ homeId, subscription, onSaved, canManage }: Props) {
+  const [editing, setEditing] = useState(canManage && !subscription);
   const [plan, setPlan] = useState<PlanId>(subscription?.plan ?? "essential");
   const [visitsUsed, setVisitsUsed] = useState(subscription?.visitsUsed ?? 0);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
 
   useEffect(() => {
-    if (!subscription) return;
+    if (!subscription) {
+      setEditing(canManage);
+      return;
+    }
     setPlan(subscription.plan);
     setVisitsUsed(subscription.visitsUsed);
-  }, [subscription]);
+    if (!canManage) setEditing(false);
+  }, [canManage, subscription]);
 
   const usage = getVisitUsage(subscription?.plan ?? plan, subscription?.visitsUsed ?? visitsUsed);
   const selectedPlan = PLANS.find((item) => item.id === plan) ?? PLANS[0];
@@ -60,14 +65,14 @@ export default function HomeSubscriptionCard({ homeId, subscription, onSaved }: 
             <p className="text-[11px] text-text-secondary">Annual plan for this home</p>
           </div>
         </div>
-        {!editing && (
+        {canManage && !editing && (
           <button type="button" onClick={() => setEditing(true)} className="flex min-h-11 shrink-0 items-center gap-1.5 rounded-xl border border-border bg-surface px-3 text-[12px] font-semibold text-text-secondary active:bg-surface-secondary">
             <Pencil size={13} /> Edit
           </button>
         )}
       </div>
 
-      {editing ? (
+      {canManage && editing ? (
         <div className="space-y-4 p-4">
           <div className="grid gap-3 sm:grid-cols-2">
             <label className="block">

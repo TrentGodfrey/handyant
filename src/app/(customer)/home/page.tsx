@@ -9,7 +9,16 @@ import Spinner from "@/components/Spinner";
 import { useDemoMode } from "@/lib/useDemoMode";
 import { toast } from "@/components/Toaster";
 import { PLANS, type PlanId } from "@/lib/plans";
-import { bookingDateToLocalDate, bookingTimeInputValue, formatBookingTime } from "@/lib/booking-time";
+import {
+  bookingDateToLocalDate,
+  bookingTimeInputValue,
+  formatBookingDate,
+  formatBookingTime,
+} from "@/lib/booking-time";
+import {
+  bookingDateAndTimeToInstant,
+  businessDateString,
+} from "@/lib/booking-policy";
 import { VISIT_DURATION_MINUTES, visitDurationMinutes } from "@/lib/booking-slots";
 import {
   MapPin, Clock, Star, ArrowRight, Camera,
@@ -39,7 +48,7 @@ interface BookingData {
   description: string | null;
   tasks: { label: string; done: boolean }[];
   tech: { name: string; phone?: string | null } | null;
-  home: { address: string; city: string | null } | null;
+  home: { id: string; address: string; city: string | null } | null;
 }
 
 interface ApiReview {
@@ -53,6 +62,7 @@ interface ApiSubscription {
   plan: string;
   status: string | null;
   visitsUsed: number;
+  homeId?: string | null;
 }
 
 interface HomeSummary {
@@ -64,7 +74,7 @@ interface HomeSummary {
 const DEMO_BOOKING: BookingData = {
   id: "demo",
   scheduledDate: "2026-04-08",
-  scheduledTime: "09:00",
+  scheduledTime: "08:00",
   durationMinutes: VISIT_DURATION_MINUTES,
   status: "confirmed",
   description: null,
@@ -73,7 +83,7 @@ const DEMO_BOOKING: BookingData = {
     { label: "Fix garage door sensor", done: false },
   ],
   tech: { name: "Anthony" },
-  home: { address: "4821 Oak Hollow Dr", city: "Plano" },
+  home: { id: "demo", address: "4821 Oak Hollow Dr", city: "Plano" },
 };
 
 // ─── Component ──────────────────────────────────────────────────────────────
@@ -115,7 +125,7 @@ export default function CustomerHome() {
       setActivePlanId("pro");
       setCompletedCount(12);
       setTechPhone("+12144697795");
-      setProfileHome(DEMO_BOOKING.home ? { id: "demo", ...DEMO_BOOKING.home } : null);
+      setProfileHome(DEMO_BOOKING.home ?? null);
       setLoading(false);
       return;
     }
@@ -131,9 +141,25 @@ export default function CustomerHome() {
         if (cancelled) return;
 
         const bookingList: BookingData[] = Array.isArray(bookings) ? bookings : [];
+        const now = Date.now();
         const upcoming = bookingList
-          .filter((b) => ["pending", "confirmed", "in_progress"].includes(b.status))
-          .sort((a, b) => bookingDateToLocalDate(a.scheduledDate).getTime() - bookingDateToLocalDate(b.scheduledDate).getTime())[0];
+          .filter((booking) => {
+            if (!["pending", "confirmed", "in_progress"].includes(booking.status)) {
+              return false;
+            }
+            if (booking.status === "in_progress") return true;
+            const start = bookingDateAndTimeToInstant(
+              booking.scheduledDate,
+              booking.scheduledTime,
+            );
+            return !!start && start.getTime() >= now;
+          })
+          .sort((a, b) => {
+            const aStart = bookingDateAndTimeToInstant(a.scheduledDate, a.scheduledTime);
+            const bStart = bookingDateAndTimeToInstant(b.scheduledDate, b.scheduledTime);
+            return (aStart?.getTime() ?? Number.MAX_SAFE_INTEGER) -
+              (bStart?.getTime() ?? Number.MAX_SAFE_INTEGER);
+          })[0];
         setNextBooking(upcoming || null);
 
         const homeList: HomeSummary[] = Array.isArray(homes) ? homes : [];
@@ -165,7 +191,14 @@ export default function CustomerHome() {
         }
 
         const subsList: ApiSubscription[] = Array.isArray(subs) ? subs : [];
-        const active = subsList.find((s) => s.status === "active") ?? subsList[0];
+        const active =
+          subsList.find((subscription) =>
+            subscription.status === "active" &&
+            upcoming?.home?.id &&
+            subscription.homeId === upcoming.home.id
+          ) ??
+          subsList.find((subscription) => subscription.status === "active") ??
+          subsList[0];
         setActivePlanId(active ? active.plan : null);
         setCompletedCount(active?.visitsUsed ?? 0);
       })
@@ -177,7 +210,7 @@ export default function CustomerHome() {
   }, [isDemo, mounted]);
 
   const trustStats = [
-    { icon: BadgeCheck, label: "Insured & Reliable", sub: "$1M liability coverage", color: "text-primary" },
+    { icon: BadgeCheck, label: "Insured & Reliable", sub: "Clear service updates", color: "text-primary" },
     ...(reviewStats
       ? [{ icon: Star, label: `${reviewStats.avg} Rating`, sub: `${reviewStats.count} review${reviewStats.count === 1 ? "" : "s"}`, color: "text-warning" }]
       : []),
@@ -190,7 +223,9 @@ export default function CustomerHome() {
     ? `tel:${techPhone.replace(/[^+\d]/g, "")}`
     : FALLBACK_TEL;
 
-  const displayHome = profileHome ?? nextBooking?.home ?? null;
+  // When a customer has more than one property, the upcoming visit's home is
+  // the authoritative address for the visit card/header context.
+  const displayHome = nextBooking?.home ?? profileHome ?? null;
 
   const formatDate = (dateStr: string) => {
     const d = bookingDateToLocalDate(dateStr);
@@ -202,7 +237,7 @@ export default function CustomerHome() {
       {/* ── Header + Membership CTA ─────────────────────────────────── */}
       <div className="bg-surface border-b border-border px-5 pt-12 lg:pt-8 pb-4">
         <div className="flex items-center justify-between mb-4">
-          <div>
+          <div className="min-w-0">
             <p className="text-[11px] font-semibold uppercase tracking-wider text-text-secondary">
               Welcome back
             </p>
@@ -210,15 +245,15 @@ export default function CustomerHome() {
               {userName}&apos;s Home
             </h1>
             {displayHome && (
-              <div className="mt-1 flex items-center gap-1 text-text-tertiary">
-                <MapPin size={12} />
-                <span className="text-[12px]">
+              <div className="mt-1 flex min-w-0 items-center gap-1 text-text-tertiary">
+                <MapPin size={12} className="shrink-0" />
+                <span className="truncate text-[12px]">
                   {displayHome.address}{displayHome.city ? `, ${displayHome.city}` : ""}
                 </span>
               </div>
             )}
           </div>
-          <div className="h-10 w-10 rounded-full bg-primary-100 flex items-center justify-center">
+          <div className="ml-3 flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-primary-100">
             <span className="text-[14px] font-bold text-primary">{userInitials}</span>
           </div>
         </div>
@@ -254,17 +289,23 @@ export default function CustomerHome() {
 
         {/* spacer */}
 
-        {/* ── Track Banner (only if upcoming booking) ────────────────── */}
-        {nextBooking && nextBooking.tech && (
+        {/* ── Appointment status banner ──────────────────────────────── */}
+        {nextBooking && (
           <div className="mb-5">
             <Link href="/track">
               <div className="rounded-2xl bg-primary p-4 active:scale-[0.99] transition-transform">
                 <div className="flex items-center justify-between">
                   <div className="flex-1 min-w-0">
                     <p className="text-[15px] font-bold text-white">
-                      {nextBooking.tech.name} is {nextBooking.status === "confirmed" ? "confirmed" : "scheduled"}
+                      {nextBooking.status === "pending"
+                        ? "Your visit request is pending"
+                        : nextBooking.status === "in_progress"
+                          ? "Your visit is in progress"
+                          : `${nextBooking.tech?.name || "Your technician"} is confirmed`}
                     </p>
-                    <p className="text-[12px] text-white/70 mt-0.5">Tap to track on the day of your visit</p>
+                    <p className="text-[12px] text-white/70 mt-0.5">
+                      View appointment status
+                    </p>
                   </div>
                   <div className="ml-3 flex h-10 w-10 items-center justify-center rounded-full bg-white/20 shrink-0">
                     <MapPin size={20} className="text-white" />
@@ -339,14 +380,14 @@ export default function CustomerHome() {
 
               <div className="flex gap-2.5">
                 <Link href="/messages" className="flex-1">
-                  <button className="w-full flex items-center justify-center gap-2 rounded-xl bg-primary py-2.5 text-[13px] font-semibold text-white active:bg-primary-dark transition-colors">
+                  <button className="flex min-h-11 w-full items-center justify-center gap-2 rounded-xl bg-primary py-2.5 text-[13px] font-semibold text-white active:bg-primary-dark transition-colors">
                     <MessageCircle size={15} />
                     Message
                   </button>
                 </Link>
                 <a
                   href={callHref}
-                  className="flex items-center justify-center gap-2 rounded-xl border border-border bg-white px-4 py-2.5 text-[13px] font-semibold text-text-primary active:bg-surface-secondary transition-colors"
+                  className="flex min-h-11 items-center justify-center gap-2 rounded-xl border border-border bg-white px-4 py-2.5 text-[13px] font-semibold text-text-primary active:bg-surface-secondary transition-colors"
                 >
                   <Phone size={15} className="text-success" />
                   Call
@@ -553,7 +594,7 @@ export default function CustomerHome() {
       {/* ── Cancel modal ────────────────────────────────────────────── */}
       {cancelOpen && nextBooking && (
         <div
-          className="fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-black/50 p-4"
+          className="fixed inset-0 z-50 flex items-end justify-center bg-black/50 p-4 pb-[max(env(safe-area-inset-bottom),16px)] sm:items-center sm:p-4"
           onClick={() => !cancelling && setCancelOpen(false)}
         >
           <div
@@ -648,8 +689,7 @@ function parseCurrentTime(scheduledTime: string): string {
 function RescheduleModal({ booking, onClose, onRescheduled }: RescheduleModalProps) {
   const visitCount = Math.min(4, Math.max(1, Math.round((booking.durationMinutes ?? VISIT_DURATION_MINUTES) / VISIT_DURATION_MINUTES)));
   // Build a 30-day window starting today.
-  const today = new Date();
-  today.setHours(0, 0, 0, 0);
+  const today = bookingDateToLocalDate(businessDateString());
   const dates: Date[] = Array.from({ length: 30 }, (_, i) => {
     const d = new Date(today);
     d.setDate(today.getDate() + i);
@@ -735,14 +775,16 @@ function RescheduleModal({ booking, onClose, onRescheduled }: RescheduleModalPro
     }
   }
 
-  const currentDateLabel = new Date(currentDateISO + "T00:00:00").toLocaleDateString("en-US", {
-    weekday: "long", month: "long", day: "numeric",
+  const currentDateLabel = formatBookingDate(currentDateISO, {
+    weekday: "long",
+    month: "long",
+    day: "numeric",
   });
 
   return (
-    <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-black/50 p-4" onClick={onClose}>
+    <div className="fixed inset-0 z-50 flex items-end justify-center bg-black/50 p-4 pb-[max(env(safe-area-inset-bottom),16px)] sm:items-center sm:p-4" onClick={onClose}>
       <div
-        className="w-full max-w-md max-h-[85vh] flex flex-col rounded-2xl bg-surface shadow-xl overflow-hidden"
+        className="flex max-h-[85dvh] w-full max-w-md flex-col overflow-hidden rounded-2xl bg-surface shadow-xl"
         onClick={(e) => e.stopPropagation()}
       >
         {/* Header */}
@@ -755,7 +797,7 @@ function RescheduleModal({ booking, onClose, onRescheduled }: RescheduleModalPro
           </div>
           <button
             onClick={onClose}
-            className="flex h-8 w-8 items-center justify-center rounded-full hover:bg-surface-secondary transition-colors"
+            className="-mr-2 flex h-11 w-11 items-center justify-center rounded-full hover:bg-surface-secondary transition-colors"
             aria-label="Close"
           >
             <X size={18} className="text-text-secondary" />
@@ -808,7 +850,7 @@ function RescheduleModal({ booking, onClose, onRescheduled }: RescheduleModalPro
           ) : slots.length === 0 ? (
             <p className="text-[13px] text-text-secondary py-6 text-center">No availability this day. Try another date.</p>
           ) : (
-            <div className="grid grid-cols-3 gap-2">
+            <div className="grid grid-cols-2 gap-2 min-[400px]:grid-cols-3">
               {slots.map((slot) => {
                 const isSelected = slot.time === selectedTime;
                 return (
@@ -817,7 +859,7 @@ function RescheduleModal({ booking, onClose, onRescheduled }: RescheduleModalPro
                     type="button"
                     disabled={!slot.available}
                     onClick={() => setSelectedTime(slot.time)}
-                    className={`rounded-lg border py-2.5 text-[12px] font-semibold transition-colors ${
+                    className={`min-h-11 rounded-lg border py-2.5 text-[12px] font-semibold transition-colors ${
                       isSelected
                         ? "border-primary bg-primary text-white"
                         : slot.available

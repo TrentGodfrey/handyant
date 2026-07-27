@@ -1,0 +1,11 @@
+[Unit]
+Description=Nightly MCQ PostgreSQL and upload backup
+
+[Timer]
+OnCalendar=*-*-* 03:45:00 UTC
+RandomizedDelaySec=10m
+Persistent=true
+Unit=mcq-backup.service
+
+[Install]
+WantedBy=timers.target

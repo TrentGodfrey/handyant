@@ -54,7 +54,7 @@ export default function ChipMultiSelect<T extends string | number>({
             onClick={() => toggle(opt.value)}
             disabled={disabled}
             aria-pressed={on}
-            className={`inline-flex items-center gap-1.5 rounded-full border px-3 py-1.5 text-[12px] font-semibold transition-all duration-150 disabled:opacity-50 disabled:cursor-not-allowed ${
+            className={`inline-flex min-h-11 items-center gap-1.5 rounded-full border px-3 py-1.5 text-[12px] font-semibold transition-all duration-150 disabled:opacity-50 disabled:cursor-not-allowed ${
               on
                 ? "border-primary bg-primary text-white shadow-[0_2px_8px_rgba(79,149,152,0.25)]"
                 : "border-border bg-surface text-text-secondary hover:border-primary/40 hover:text-primary"

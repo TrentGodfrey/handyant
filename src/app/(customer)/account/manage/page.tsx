@@ -22,6 +22,7 @@ import {
   normalizeAppointmentReminders,
   type AppointmentReminders,
 } from "@/lib/reminders";
+import { prepareImageForUpload } from "@/lib/client-image-upload";
 
 const DEMO_USER = (() => {
   const c = demoCustomerBy("Sarah Mitchell")!;
@@ -30,8 +31,6 @@ const DEMO_USER = (() => {
 
 interface Prefs {
   jobReminders: boolean;
-  promos: boolean;
-  sms: boolean;
   email: boolean;
 }
 
@@ -52,10 +51,12 @@ interface AddressDraft {
 
 interface SubscriptionRecord {
   id: string;
+  homeId: string | null;
   plan: string;
   status: string | null;
   startedAt: string | null;
   endsAt: string | null;
+  home: HomeRecord | null;
 }
 
 // Plan presentation derived from shared PLANS source of truth (src/lib/plans.ts)
@@ -69,6 +70,33 @@ function formatRenewalDate(iso: string | null): string | null {
   const date = new Date(iso);
   if (Number.isNaN(date.getTime())) return null;
   return date.toLocaleDateString("en-US", { month: "long", day: "numeric", year: "numeric" });
+}
+
+function ToggleSwitch({
+  checked,
+  disabled,
+  label,
+  onClick,
+}: {
+  checked: boolean;
+  disabled?: boolean;
+  label: string;
+  onClick: () => void;
+}) {
+  return (
+    <button
+      type="button"
+      aria-label={label}
+      aria-pressed={checked}
+      disabled={disabled}
+      onClick={onClick}
+      className="flex h-11 w-12 shrink-0 items-center disabled:opacity-50"
+    >
+      <span className={`relative h-7 w-12 rounded-full transition-colors ${checked ? "bg-primary" : "bg-border"}`}>
+        <span className={`absolute top-0.5 h-6 w-6 rounded-full bg-white shadow transition-transform ${checked ? "translate-x-5" : "translate-x-0.5"}`} />
+      </span>
+    </button>
+  );
 }
 
 export default function AccountManagePage() {
@@ -92,8 +120,14 @@ export default function AccountManagePage() {
   const [pendingEmail, setPendingEmail] = useState<string | null>(null);
   const [verifySending, setVerifySending] = useState(false);
   const [verifyMessage, setVerifyMessage] = useState<string | null>(null);
+  const [showEmailChange, setShowEmailChange] = useState(false);
+  const [newEmail, setNewEmail] = useState("");
+  const [emailPassword, setEmailPassword] = useState("");
+  const [emailChangeBusy, setEmailChangeBusy] = useState(false);
+  const [emailChangeError, setEmailChangeError] = useState<string | null>(null);
 
   // Address (from Home record in real mode)
+  const [homes, setHomes] = useState<HomeRecord[]>([]);
   const [home, setHome] = useState<HomeRecord | null>(null);
   const [demoAddress, setDemoAddress] = useState("4821 Oak Hollow Dr, Plano TX 75024");
   const [editingAddress, setEditingAddress] = useState(false);
@@ -105,8 +139,6 @@ export default function AccountManagePage() {
   // Notification prefs (real mode persisted via /api/me/preferences)
   const [prefs, setPrefs] = useState<Prefs>({
     jobReminders: true,
-    promos: false,
-    sms: true,
     email: true,
   });
   // Appointment reminder preferences (multi-select lead times + channels).
@@ -117,11 +149,11 @@ export default function AccountManagePage() {
   const reminderSaveTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   // Subscription
-  const [subscription, setSubscription] = useState<SubscriptionRecord | null>(null);
+  const [subscriptions, setSubscriptions] = useState<SubscriptionRecord[]>([]);
   const [subBusy, setSubBusy] = useState(false);
   const [subMessage, setSubMessage] = useState<string | null>(null);
-  const [showPlanPicker, setShowPlanPicker] = useState(false);
-  const [confirmCancelSub, setConfirmCancelSub] = useState(false);
+  const [showPlanPicker, setShowPlanPicker] = useState<string | null>(null);
+  const [confirmCancelSub, setConfirmCancelSub] = useState<string | null>(null);
 
   // Avatar
   const fileInputRef = useRef<HTMLInputElement | null>(null);
@@ -136,6 +168,11 @@ export default function AccountManagePage() {
   const [pwSaving, setPwSaving] = useState(false);
   const [pwError, setPwError] = useState<string | null>(null);
   const [pwSuccess, setPwSuccess] = useState(false);
+  const passwordChangeRequired = session?.user?.mustChangePassword === true;
+
+  useEffect(() => {
+    if (passwordChangeRequired) setShowPasswordForm(true);
+  }, [passwordChangeRequired]);
 
   // Delete account
   const [showDelete, setShowDelete] = useState(false);
@@ -181,9 +218,12 @@ export default function AccountManagePage() {
           }
         }
         if (homesRes.ok) {
-          const homes = await homesRes.json();
-          if (!cancelled && Array.isArray(homes) && homes.length > 0) {
-            const h = homes[0] as HomeRecord;
+          const homeRecords = await homesRes.json();
+          if (!cancelled && Array.isArray(homeRecords)) {
+            setHomes(homeRecords as HomeRecord[]);
+          }
+          if (!cancelled && Array.isArray(homeRecords) && homeRecords.length > 0) {
+            const h = homeRecords[0] as HomeRecord;
             setHome(h);
             setAddressDraft({
               address: h.address ?? "",
@@ -198,8 +238,6 @@ export default function AccountManagePage() {
           if (!cancelled) {
             setPrefs({
               jobReminders: p.jobReminders ?? true,
-              promos: p.promos ?? false,
-              sms: p.sms ?? true,
               email: p.email ?? true,
             });
             setReminders(normalizeAppointmentReminders(p.appointmentReminders));
@@ -208,8 +246,7 @@ export default function AccountManagePage() {
         if (subsRes.ok) {
           const subs = await subsRes.json();
           if (!cancelled && Array.isArray(subs)) {
-            const active = subs.find((s: SubscriptionRecord) => s.status === "active") ?? null;
-            setSubscription(active);
+            setSubscriptions(subs as SubscriptionRecord[]);
           }
         }
       } catch {
@@ -261,14 +298,22 @@ export default function AccountManagePage() {
       setPrefs(next);
       if (isDemo) return;
       try {
-        await fetch("/api/me/preferences", {
+        const response = await fetch("/api/me/preferences", {
           method: "PATCH",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ [key]: next[key] }),
         });
-      } catch {
+        if (!response.ok) {
+          const body = await response.json().catch(() => ({}));
+          throw new Error(body.error ?? `HTTP ${response.status}`);
+        }
+      } catch (error) {
         // Revert on error
         setPrefs(prefs);
+        toast.error(
+          "Couldn't save notification preference: " +
+            (error instanceof Error ? error.message : String(error)),
+        );
       }
     },
     [prefs, isDemo]
@@ -320,12 +365,7 @@ export default function AccountManagePage() {
     setAvatarError(null);
     setAvatarUploading(true);
     try {
-      const dataUrl = await new Promise<string>((resolve, reject) => {
-        const reader = new FileReader();
-        reader.onload = () => resolve(reader.result as string);
-        reader.onerror = () => reject(new Error("Failed to read file"));
-        reader.readAsDataURL(file);
-      });
+      const dataUrl = await prepareImageForUpload(file);
       const res = await fetch("/api/me/avatar", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -347,37 +387,9 @@ export default function AccountManagePage() {
   }
 
   // Subscription actions
-  async function handleChangePlan(plan: string) {
+  async function handleCancelSub(subscription: SubscriptionRecord) {
     if (isDemo) {
-      setShowPlanPicker(false);
-      setSubMessage("Plan change disabled in demo mode");
-      setTimeout(() => setSubMessage(null), 3000);
-      return;
-    }
-    setSubBusy(true);
-    setSubMessage(null);
-    try {
-      const res = await fetch("/api/subscriptions", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ plan }),
-      });
-      if (!res.ok) throw new Error("Failed to update plan");
-      const sub = await res.json();
-      setSubscription(sub);
-      setShowPlanPicker(false);
-      setSubMessage("Plan updated");
-      setTimeout(() => setSubMessage(null), 3000);
-    } catch (e: unknown) {
-      setSubMessage(e instanceof Error ? e.message : "Failed to update plan");
-    } finally {
-      setSubBusy(false);
-    }
-  }
-
-  async function handleCancelSub() {
-    if (isDemo) {
-      setConfirmCancelSub(false);
+      setConfirmCancelSub(null);
       setSubMessage("Cancellation disabled in demo mode");
       setTimeout(() => setSubMessage(null), 3000);
       return;
@@ -385,11 +397,26 @@ export default function AccountManagePage() {
     setSubBusy(true);
     setSubMessage(null);
     try {
-      const res = await fetch("/api/subscriptions", { method: "DELETE" });
-      if (!res.ok) throw new Error("Failed to cancel subscription");
-      setSubscription(null);
-      setConfirmCancelSub(false);
-      setSubMessage("Subscription cancelled");
+      const res = await fetch(
+        `/api/subscriptions?subscriptionId=${encodeURIComponent(subscription.id)}`,
+        { method: "DELETE" },
+      );
+      if (!res.ok) {
+        const body = await res.json().catch(() => ({}));
+        throw new Error(body.error ?? "Failed to cancel subscription");
+      }
+      setSubscriptions((current) =>
+        current.map((item) =>
+          item.id === subscription.id
+            ? { ...item, status: "cancelled", endsAt: new Date().toISOString() }
+            : item,
+        ),
+      );
+      setConfirmCancelSub(null);
+      setShowPlanPicker(null);
+      setSubMessage(
+        `${subscription.home?.address ?? "Selected"} membership cancelled immediately`,
+      );
       setTimeout(() => setSubMessage(null), 3000);
     } catch (e: unknown) {
       setSubMessage(e instanceof Error ? e.message : "Failed to cancel subscription");
@@ -419,6 +446,43 @@ export default function AccountManagePage() {
       setVerifyMessage(e instanceof Error ? e.message : "Failed to send verification email");
     } finally {
       setVerifySending(false);
+    }
+  }
+
+  async function handleEmailChange(e: React.FormEvent) {
+    e.preventDefault();
+    setEmailChangeError(null);
+    if (isDemo) {
+      setEmailChangeError("Email changes are disabled in demo mode");
+      return;
+    }
+    setEmailChangeBusy(true);
+    try {
+      const normalized = newEmail.trim().toLowerCase();
+      const res = await fetch("/api/me/change-email", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          newEmail: normalized,
+          currentPassword: emailPassword,
+        }),
+      });
+      if (!res.ok) {
+        const body = await res.json().catch(() => ({}));
+        throw new Error(body.error ?? "Could not start email change");
+      }
+      setPendingEmail(normalized);
+      setEmailVerified(false);
+      setVerifyMessage(`Confirmation sent to ${normalized}.`);
+      setShowEmailChange(false);
+      setNewEmail("");
+      setEmailPassword("");
+    } catch (error) {
+      setEmailChangeError(
+        error instanceof Error ? error.message : "Could not start email change",
+      );
+    } finally {
+      setEmailChangeBusy(false);
     }
   }
 
@@ -454,10 +518,7 @@ export default function AccountManagePage() {
       setPwCurrent("");
       setPwNext("");
       setPwConfirm("");
-      setTimeout(() => {
-        setShowPasswordForm(false);
-        setPwSuccess(false);
-      }, 1500);
+      await signOut({ callbackUrl: "/login?passwordChanged=1" });
     } catch (e: unknown) {
       setPwError(e instanceof Error ? e.message : "Failed to change password");
     } finally {
@@ -471,7 +532,11 @@ export default function AccountManagePage() {
       if (!res.ok) return;
       const homes = await res.json();
       if (Array.isArray(homes) && homes.length > 0) {
-        const h = homes[0] as HomeRecord;
+        setHomes(homes as HomeRecord[]);
+        const h = (
+          (homes as HomeRecord[]).find((item) => item.id === home?.id)
+          ?? homes[0]
+        ) as HomeRecord;
         setHome(h);
         setAddressDraft({
           address: h.address ?? "",
@@ -481,6 +546,21 @@ export default function AccountManagePage() {
         });
       }
     } catch { /* noop */ }
+  }
+
+  function selectHome(homeId: string) {
+    const selected = homes.find((item) => item.id === homeId);
+    if (!selected) return;
+    setHome(selected);
+    setEditingAddress(false);
+    setAddressError(null);
+    setAddressSuccess(false);
+    setAddressDraft({
+      address: selected.address ?? "",
+      city: selected.city ?? "",
+      state: selected.state ?? "",
+      zip: selected.zip ?? "",
+    });
   }
 
   async function saveAddress() {
@@ -583,8 +663,8 @@ export default function AccountManagePage() {
     return "";
   })();
 
-  function FieldRow({
-    label, value, icon: Icon, field, onChange, readOnly, placeholder,
+  function renderFieldRow({
+    label, value, icon: Icon, field, onChange, readOnly, placeholder, actionLabel, onAction,
   }: {
     label: string;
     value: string;
@@ -593,6 +673,8 @@ export default function AccountManagePage() {
     onChange?: (v: string) => void;
     readOnly?: boolean;
     placeholder?: string;
+    actionLabel?: string;
+    onAction?: () => void;
   }) {
     const isEditing = editing === field;
     return (
@@ -623,11 +705,21 @@ export default function AccountManagePage() {
           <button
             onClick={() => setEditing(isEditing ? null : field)}
             disabled={loading}
-            className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full hover:bg-surface-secondary transition-colors disabled:opacity-40"
+            className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full hover:bg-surface-secondary transition-colors disabled:opacity-40"
           >
             {isEditing
               ? <Check size={16} className="text-primary" />
               : <Pencil size={14} className="text-text-tertiary" />}
+          </button>
+        )}
+        {readOnly && onAction && (
+          <button
+            type="button"
+            onClick={onAction}
+            disabled={loading}
+            className="flex min-h-11 shrink-0 items-center rounded-full px-3 text-[12px] font-semibold text-primary hover:bg-surface-secondary transition-colors disabled:opacity-40"
+          >
+            {actionLabel ?? "Change"}
           </button>
         )}
       </div>
@@ -637,25 +729,99 @@ export default function AccountManagePage() {
   const userInitials = (name || session?.user?.name || "U")
     .split(" ").map((n) => n[0]).join("").toUpperCase().slice(0, 2);
 
-  // Subscription card content
-  const subPlan = subscription ? planMeta(subscription.plan) : null;
-  const subRenewal = subscription ? formatRenewalDate(subscription.endsAt) : null;
+  const activeSubscriptions = subscriptions.filter(
+    (subscription) => subscription.status === "active",
+  );
+
+  function membershipLocation(subscription: SubscriptionRecord): string {
+    if (!subscription.home) return "Account membership";
+    return [
+      subscription.home.address,
+      subscription.home.city,
+      subscription.home.state,
+      subscription.home.zip,
+    ].filter(Boolean).join(", ");
+  }
+
+  function renderPlanPicker(subscription: SubscriptionRecord | null) {
+    const targetHome = subscription?.home ?? home;
+    return (
+      <div className="mt-3 space-y-2 border-t border-border pt-3">
+        {Object.entries(PLAN_PRESENTATION).map(([key, meta]) => {
+          const isCurrent =
+            subscription?.plan === key && subscription.status === "active";
+          const params = new URLSearchParams({
+            topic: "membership",
+            plan: key,
+          });
+          if (targetHome?.id) params.set("homeId", targetHome.id);
+          if (targetHome?.address) params.set("home", targetHome.address);
+          return (
+            <Link
+              key={key}
+              href={isCurrent ? "#" : `/messages?${params.toString()}`}
+              aria-disabled={isCurrent}
+              onClick={(event) => {
+                if (isCurrent) event.preventDefault();
+              }}
+              className={`flex min-h-12 w-full items-center justify-between rounded-lg border px-3 py-2.5 text-left transition-colors ${
+                isCurrent
+                  ? "border-primary bg-primary-50"
+                  : "border-border hover:bg-surface-secondary"
+              } ${isCurrent ? "pointer-events-none opacity-50" : ""}`}
+            >
+              <div>
+                <p className="text-[13px] font-semibold text-text-primary">
+                  {meta.label}{" "}
+                  {isCurrent && (
+                    <span className="text-[11px] text-primary">(current)</span>
+                  )}
+                </p>
+                <p className="text-[11px] text-text-tertiary">{meta.details}</p>
+              </div>
+              <span className="text-[13px] font-bold text-text-primary">
+                {meta.price}
+              </span>
+            </Link>
+          );
+        })}
+      </div>
+    );
+  }
 
   return (
     <div className="min-h-screen bg-background pb-28">
       <div className="bg-white border-b border-border px-5 pt-14 pb-5">
         <Link
           href="/account"
-          className="mb-4 inline-flex items-center gap-1.5 text-[13px] font-medium text-text-secondary hover:text-text-primary transition-colors"
+          className="mb-4 inline-flex min-h-11 items-center gap-1.5 text-[13px] font-medium text-text-secondary hover:text-text-primary transition-colors"
         >
           <ChevronLeft size={16} />
           Account
         </Link>
         <h1 className="text-[24px] font-bold text-text-primary">Manage Account</h1>
-        <p className="mt-1 text-[13px] text-text-secondary">Edit your profile, notifications, and subscription.</p>
+        <p className="mt-1 text-[13px] text-text-secondary">Edit your profile, notifications, and memberships.</p>
       </div>
 
       <div className="px-5 py-5 space-y-6">
+        {passwordChangeRequired && (
+          <div className="rounded-xl border border-warning/30 bg-warning/10 p-3.5">
+            <div className="flex items-start gap-3">
+              <Shield size={18} className="mt-0.5 shrink-0 text-warning" />
+              <div>
+                <p className="text-[13px] font-semibold text-text-primary">
+                  Change your temporary password
+                </p>
+                <p className="mt-0.5 text-[12px] text-text-secondary">
+                  Enter the temporary password you received, then choose a private password before continuing to staff tools.
+                </p>
+                <a href="#change-password" className="mt-2 inline-flex text-[12px] font-semibold text-primary">
+                  Go to password form
+                </a>
+              </div>
+            </div>
+          </div>
+        )}
 
         {/* Email verification banner (real mode only, when unverified) */}
         {!isDemo && emailVerified === false && (
@@ -728,7 +894,7 @@ export default function AccountManagePage() {
               type="button"
               onClick={openFilePicker}
               disabled={avatarUploading}
-              className="text-[12px] font-semibold text-primary disabled:opacity-50"
+              className="min-h-11 px-2 text-[12px] font-semibold text-primary disabled:opacity-50"
             >
               {avatarUploading ? "Uploading…" : "Change photo"}
             </button>
@@ -737,15 +903,25 @@ export default function AccountManagePage() {
         </div>
 
         {/* Personal Info */}
-        <div>
+        <div id="email-security" className="scroll-mt-6">
           <p className="mb-2 text-sm font-semibold uppercase tracking-wider text-text-secondary">Personal Information</p>
           <Card className="divide-y divide-border-light">
-            <FieldRow label="Full Name" value={name} icon={User} field="name" onChange={setName} />
-            {/* TODO: a parallel agent is wiring email-change-with-verification.
-                Hide the pencil for now by omitting onChange - FieldRow only renders
-                its edit button when an onChange handler is supplied. */}
-            <FieldRow label="Email" value={email} icon={Mail} field="email" readOnly />
-            <FieldRow label="Phone" value={phone} icon={Phone} field="phone" onChange={setPhone} />
+            {renderFieldRow({ label: "Full Name", value: name, icon: User, field: "name", onChange: setName })}
+            {renderFieldRow({
+              label: "Email",
+              value: pendingEmail ? `${email} · pending ${pendingEmail}` : email,
+              icon: Mail,
+              field: "email",
+              readOnly: true,
+              actionLabel: "Change",
+              onAction: () => {
+                setNewEmail(pendingEmail ?? "");
+                setEmailPassword("");
+                setEmailChangeError(null);
+                setShowEmailChange(true);
+              },
+            })}
+            {renderFieldRow({ label: "Phone", value: phone, icon: Phone, field: "phone", onChange: setPhone })}
 
             {/* Service Address - inline editable (real + demo) */}
             <div className="py-3.5">
@@ -760,7 +936,7 @@ export default function AccountManagePage() {
                       <button
                         type="button"
                         onClick={() => setEditingAddress(true)}
-                        className="flex h-7 items-center justify-center rounded-full px-2 hover:bg-surface-secondary transition-colors"
+                        className="flex h-11 items-center justify-center rounded-full px-2 hover:bg-surface-secondary transition-colors"
                         aria-label={addressValue ? "Edit address" : "Add address"}
                       >
                         {addressValue
@@ -769,6 +945,21 @@ export default function AccountManagePage() {
                       </button>
                     )}
                   </div>
+
+                  {!isDemo && homes.length > 1 && !editingAddress && (
+                    <select
+                      aria-label="Choose service address"
+                      value={home?.id ?? ""}
+                      onChange={(event) => selectHome(event.target.value)}
+                      className="mt-2 min-h-11 w-full rounded-lg border border-border bg-surface px-3 text-[13px] font-semibold text-text-primary"
+                    >
+                      {homes.map((item) => (
+                        <option key={item.id} value={item.id}>
+                          {item.address}{item.city ? `, ${item.city}` : ""}
+                        </option>
+                      ))}
+                    </select>
+                  )}
 
                   {loading ? (
                     <div className="mt-1.5 h-4 w-32 rounded bg-surface-secondary animate-pulse" />
@@ -784,15 +975,15 @@ export default function AccountManagePage() {
                         onChange={(e) => setAddressDraft((s) => ({ ...s, address: e.target.value }))}
                         placeholder="Street address"
                         autoFocus
-                        className="w-full rounded-lg border border-border bg-surface px-3 py-2 text-[13px] outline-none focus:border-primary"
+                        className="min-h-12 w-full rounded-lg border border-border bg-surface px-3 py-2 text-[13px] outline-none focus:border-primary"
                       />
-                      <div className="grid grid-cols-3 gap-2">
+                      <div className="grid grid-cols-1 gap-2 min-[400px]:grid-cols-3">
                         <input
                           type="text"
                           value={addressDraft.city}
                           onChange={(e) => setAddressDraft((s) => ({ ...s, city: e.target.value }))}
                           placeholder="City"
-                          className="rounded-lg border border-border bg-surface px-3 py-2 text-[13px] outline-none focus:border-primary"
+                          className="min-h-12 rounded-lg border border-border bg-surface px-3 py-2 text-[13px] outline-none focus:border-primary"
                         />
                         <input
                           type="text"
@@ -800,14 +991,14 @@ export default function AccountManagePage() {
                           onChange={(e) => setAddressDraft((s) => ({ ...s, state: e.target.value }))}
                           placeholder="State"
                           maxLength={2}
-                          className="rounded-lg border border-border bg-surface px-3 py-2 text-[13px] outline-none focus:border-primary"
+                          className="min-h-12 rounded-lg border border-border bg-surface px-3 py-2 text-[13px] outline-none focus:border-primary"
                         />
                         <input
                           type="text"
                           value={addressDraft.zip}
                           onChange={(e) => setAddressDraft((s) => ({ ...s, zip: e.target.value }))}
                           placeholder="ZIP"
-                          className="rounded-lg border border-border bg-surface px-3 py-2 text-[13px] outline-none focus:border-primary"
+                          className="min-h-12 rounded-lg border border-border bg-surface px-3 py-2 text-[13px] outline-none focus:border-primary"
                         />
                       </div>
                       <div className="flex gap-2 items-center">
@@ -858,9 +1049,9 @@ export default function AccountManagePage() {
           </div>
         </div>
 
-        {/* Subscription */}
+        {/* Memberships */}
         <div>
-          <p className="mb-2 text-sm font-semibold uppercase tracking-wider text-text-secondary">Subscription</p>
+          <p className="mb-2 text-sm font-semibold uppercase tracking-wider text-text-secondary">Memberships</p>
           <Card>
             {isDemo ? (
               <>
@@ -886,107 +1077,146 @@ export default function AccountManagePage() {
               </>
             ) : loading ? (
               <div className="h-16 rounded bg-surface-secondary animate-pulse" />
-            ) : subscription && subPlan ? (
-              <div className="flex items-center justify-between mb-4">
-                <div>
-                  <div className="flex items-center gap-2">
-                    <span className="text-[15px] font-semibold text-text-primary">{subPlan.label} Plan</span>
-                    <span className="rounded-full bg-success-light px-2.5 py-0.5 text-[10px] font-semibold text-success capitalize">
-                      {subscription.status ?? "active"}
-                    </span>
-                  </div>
-                  <p className="text-[13px] text-text-secondary mt-0.5">
-                    {subPlan.details}
-                    {subRenewal ? ` · Renews ${subRenewal}` : ""}
-                  </p>
-                </div>
-                <span className="text-[20px] font-bold text-text-primary">{subPlan.price}</span>
-              </div>
-            ) : (
-              <div className="mb-4">
-                <p className="text-[15px] font-semibold text-text-primary">No active membership</p>
-                <p className="text-[13px] text-text-secondary mt-0.5">Choose an annual plan below to schedule visits.</p>
-              </div>
-            )}
-
-            <div className="flex gap-2 pt-2">
-              <Button
-                variant="outline"
-                size="sm"
-                fullWidth
-                onClick={() => setShowPlanPicker((v) => !v)}
-                disabled={subBusy}
-              >
-                {subscription ? "Change Plan" : "Subscribe"}
-              </Button>
-              {subscription && (
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  fullWidth
-                  className="text-text-tertiary"
-                  onClick={() => setConfirmCancelSub(true)}
-                  disabled={subBusy}
-                >
-                  Cancel
-                </Button>
-              )}
-            </div>
-
-            {/* Plan picker */}
-            {showPlanPicker && (
-              <div className="mt-3 space-y-2 border-t border-border pt-3">
-                {Object.entries(PLAN_PRESENTATION).map(([key, meta]) => {
-                  const isCurrent = subscription?.plan === key && subscription?.status === "active";
+            ) : activeSubscriptions.length > 0 ? (
+              <div className="divide-y divide-border">
+                {activeSubscriptions.map((subscription) => {
+                  const subPlan = planMeta(subscription.plan);
+                  const subRenewal = formatRenewalDate(subscription.endsAt);
+                  const location = membershipLocation(subscription);
+                  const pickerOpen = showPlanPicker === subscription.id;
+                  const cancelOpen = confirmCancelSub === subscription.id;
                   return (
-                    <button
-                      key={key}
-                      onClick={() => handleChangePlan(key)}
-                      disabled={subBusy || isCurrent}
-                      className={`flex w-full items-center justify-between rounded-lg border px-3 py-2.5 text-left transition-colors ${
-                        isCurrent
-                          ? "border-primary bg-primary-50"
-                          : "border-border hover:bg-surface-secondary"
-                      } disabled:opacity-50`}
-                    >
-                      <div>
-                        <p className="text-[13px] font-semibold text-text-primary">
-                          {meta.label} {isCurrent && <span className="text-[11px] text-primary">(current)</span>}
-                        </p>
-                        <p className="text-[11px] text-text-tertiary">{meta.details}</p>
+                    <section key={subscription.id} className="py-4 first:pt-0 last:pb-0">
+                      <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+                        <div className="min-w-0">
+                          <div className="flex flex-wrap items-center gap-2">
+                            <span className="text-[15px] font-semibold text-text-primary">
+                              {subPlan.label} Plan
+                            </span>
+                            <span className="rounded-full bg-success-light px-2.5 py-0.5 text-[10px] font-semibold capitalize text-success">
+                              {subscription.status ?? "active"}
+                            </span>
+                          </div>
+                          <p className="mt-1 flex items-start gap-1.5 text-[12px] font-medium text-text-secondary">
+                            <MapPin size={13} className="mt-0.5 shrink-0" />
+                            <span>{location}</span>
+                          </p>
+                          <p className="mt-1 text-[12px] text-text-secondary">
+                            {subPlan.details}
+                            {subRenewal ? ` · Ends ${subRenewal}` : ""}
+                          </p>
+                        </div>
+                        <span className="shrink-0 text-[18px] font-bold text-text-primary">
+                          {subPlan.price}
+                        </span>
                       </div>
-                      <span className="text-[13px] font-bold text-text-primary">{meta.price}</span>
-                    </button>
+
+                      <div className="mt-3 grid grid-cols-2 gap-2">
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          fullWidth
+                          onClick={() => {
+                            setShowPlanPicker((current) =>
+                              current === subscription.id ? null : subscription.id,
+                            );
+                            setConfirmCancelSub(null);
+                          }}
+                          disabled={subBusy}
+                        >
+                          Change Plan
+                        </Button>
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          fullWidth
+                          className="text-text-tertiary"
+                          onClick={() => {
+                            setConfirmCancelSub(subscription.id);
+                            setShowPlanPicker(null);
+                          }}
+                          disabled={subBusy}
+                        >
+                          Cancel
+                        </Button>
+                      </div>
+
+                      {pickerOpen && renderPlanPicker(subscription)}
+
+                      {cancelOpen && (
+                        <div className="mt-3 rounded-lg border border-error/30 bg-error/5 p-3">
+                          <div className="flex items-start gap-2">
+                            <AlertTriangle
+                              size={16}
+                              className="mt-0.5 shrink-0 text-error"
+                            />
+                            <div className="min-w-0 flex-1">
+                              <p className="text-[13px] font-semibold text-text-primary">
+                                Cancel this membership?
+                              </p>
+                              <p className="mt-0.5 text-[12px] text-text-secondary">
+                                This immediately ends plan benefits and remaining
+                                visits for {location}. This cannot be undone in
+                                the app.
+                              </p>
+                              <div className="mt-2 flex flex-wrap gap-2">
+                                <Button
+                                  variant="danger"
+                                  size="sm"
+                                  onClick={() => handleCancelSub(subscription)}
+                                  disabled={subBusy}
+                                >
+                                  {subBusy ? "Cancelling…" : "Cancel now"}
+                                </Button>
+                                <Button
+                                  variant="ghost"
+                                  size="sm"
+                                  onClick={() => setConfirmCancelSub(null)}
+                                  disabled={subBusy}
+                                >
+                                  Keep membership
+                                </Button>
+                              </div>
+                            </div>
+                          </div>
+                        </div>
+                      )}
+                    </section>
                   );
                 })}
               </div>
-            )}
-
-            {/* Cancel confirmation */}
-            {confirmCancelSub && (
-              <div className="mt-3 rounded-lg border border-error/30 bg-error/5 p-3">
-                <div className="flex items-start gap-2">
-                  <AlertTriangle size={16} className="text-error mt-0.5 shrink-0" />
-                  <div className="flex-1">
-                    <p className="text-[13px] font-semibold text-text-primary">Cancel subscription?</p>
-                    <p className="text-[12px] text-text-secondary mt-0.5">
-                      You&apos;ll lose access to plan benefits at the end of this cycle.
-                    </p>
-                    <div className="mt-2 flex gap-2">
-                      <Button variant="danger" size="sm" onClick={handleCancelSub} disabled={subBusy}>
-                        {subBusy ? "Cancelling…" : "Yes, cancel"}
-                      </Button>
-                      <Button variant="ghost" size="sm" onClick={() => setConfirmCancelSub(false)} disabled={subBusy}>
-                        Keep
-                      </Button>
-                    </div>
-                  </div>
+            ) : (
+              <div>
+                <p className="text-[15px] font-semibold text-text-primary">No active membership</p>
+                <p className="mt-0.5 text-[13px] text-text-secondary">
+                  Contact MCQ to choose an annual plan for your home.
+                </p>
+                <div className="mt-3">
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    fullWidth
+                    onClick={() =>
+                      setShowPlanPicker((current) =>
+                        current === "new" ? null : "new",
+                      )
+                    }
+                    disabled={subBusy}
+                  >
+                    View Plans
+                  </Button>
                 </div>
+                {showPlanPicker === "new" && renderPlanPicker(null)}
               </div>
             )}
 
             {subMessage && (
-              <p className="mt-3 text-[12px] font-medium text-text-secondary">{subMessage}</p>
+              <p
+                role="status"
+                className="mt-3 text-[12px] font-medium text-text-secondary"
+              >
+                {subMessage}
+              </p>
             )}
           </Card>
         </div>
@@ -1000,16 +1230,12 @@ export default function AccountManagePage() {
                 <Phone size={16} className="text-text-secondary" />
                 <div>
                   <p className="text-[13px] font-semibold text-text-primary">Text notifications</p>
-                  <p className="text-[11px] text-text-tertiary">Booking confirmations &amp; reminders</p>
+                  <p className="text-[11px] text-text-tertiary">Not available</p>
                 </div>
               </div>
-              <button
-                onClick={() => togglePref("sms")}
-                disabled={loading}
-                className={`relative h-7 w-12 rounded-full transition-colors disabled:opacity-50 ${prefs.sms ? "bg-primary" : "bg-border"}`}
-              >
-                <div className={`absolute top-0.5 h-6 w-6 rounded-full bg-white shadow transition-transform ${prefs.sms ? "translate-x-5" : "translate-x-0.5"}`} />
-              </button>
+              <span className="rounded-full bg-surface-secondary px-2.5 py-1 text-[11px] font-semibold text-text-tertiary">
+                Not available
+              </span>
             </div>
             <div className="h-px bg-border" />
             <div className="flex items-center justify-between">
@@ -1020,13 +1246,12 @@ export default function AccountManagePage() {
                   <p className="text-[11px] text-text-tertiary">Booking confirmations &amp; visit updates</p>
                 </div>
               </div>
-              <button
-                onClick={() => togglePref("email")}
+              <ToggleSwitch
+                checked={prefs.email}
                 disabled={loading}
-                className={`relative h-7 w-12 rounded-full transition-colors disabled:opacity-50 ${prefs.email ? "bg-primary" : "bg-border"}`}
-              >
-                <div className={`absolute top-0.5 h-6 w-6 rounded-full bg-white shadow transition-transform ${prefs.email ? "translate-x-5" : "translate-x-0.5"}`} />
-              </button>
+                label="Email notifications"
+                onClick={() => togglePref("email")}
+              />
             </div>
             <div className="h-px bg-border" />
             <div className="flex items-center justify-between">
@@ -1037,30 +1262,12 @@ export default function AccountManagePage() {
                   <p className="text-[11px] text-text-tertiary">Before each appointment</p>
                 </div>
               </div>
-              <button
+              <ToggleSwitch
+                checked={prefs.jobReminders}
+                disabled={loading}
+                label="Job reminders"
                 onClick={() => togglePref("jobReminders")}
-                disabled={loading}
-                className={`relative h-7 w-12 rounded-full transition-colors disabled:opacity-50 ${prefs.jobReminders ? "bg-primary" : "bg-border"}`}
-              >
-                <div className={`absolute top-0.5 h-6 w-6 rounded-full bg-white shadow transition-transform ${prefs.jobReminders ? "translate-x-5" : "translate-x-0.5"}`} />
-              </button>
-            </div>
-            <div className="h-px bg-border" />
-            <div className="flex items-center justify-between">
-              <div className="flex items-center gap-3">
-                <Bell size={16} className="text-text-secondary" />
-                <div>
-                  <p className="text-[13px] font-semibold text-text-primary">Promotions</p>
-                  <p className="text-[11px] text-text-tertiary">Deals and feature updates</p>
-                </div>
-              </div>
-              <button
-                onClick={() => togglePref("promos")}
-                disabled={loading}
-                className={`relative h-7 w-12 rounded-full transition-colors disabled:opacity-50 ${prefs.promos ? "bg-primary" : "bg-border"}`}
-              >
-                <div className={`absolute top-0.5 h-6 w-6 rounded-full bg-white shadow transition-transform ${prefs.promos ? "translate-x-5" : "translate-x-0.5"}`} />
-              </button>
+              />
             </div>
             <div className="h-px bg-border" />
             {/* Appointment reminders ── master toggle + multi-select chips + channels */}
@@ -1073,14 +1280,12 @@ export default function AccountManagePage() {
                     <p className="text-[11px] text-text-tertiary">Pick when we&apos;ll nudge you before each visit</p>
                   </div>
                 </div>
-                <button
-                  onClick={() => updateReminders({ ...reminders, enabled: !reminders.enabled })}
+                <ToggleSwitch
+                  checked={reminders.enabled}
                   disabled={loading}
-                  aria-label={reminders.enabled ? "Disable appointment reminders" : "Enable appointment reminders"}
-                  className={`relative h-7 w-12 rounded-full transition-colors disabled:opacity-50 ${reminders.enabled ? "bg-primary" : "bg-border"}`}
-                >
-                  <div className={`absolute top-0.5 h-6 w-6 rounded-full bg-white shadow transition-transform ${reminders.enabled ? "translate-x-5" : "translate-x-0.5"}`} />
-                </button>
+                  label={reminders.enabled ? "Disable appointment reminders" : "Enable appointment reminders"}
+                  onClick={() => updateReminders({ ...reminders, enabled: !reminders.enabled })}
+                />
               </div>
 
               {reminders.enabled && (
@@ -1110,8 +1315,6 @@ export default function AccountManagePage() {
                     <div className="flex gap-2">
                       {([
                         { key: "email" as const, label: "Email" },
-                        { key: "sms" as const, label: "SMS" },
-                        { key: "push" as const, label: "Push" },
                       ]).map(({ key, label }) => {
                         const on = reminders.channels[key];
                         return (
@@ -1126,7 +1329,7 @@ export default function AccountManagePage() {
                             }
                             disabled={loading}
                             aria-pressed={on}
-                            className={`flex-1 rounded-lg border px-3 py-2 text-[12px] font-semibold transition-all disabled:opacity-50 ${
+                            className={`min-h-11 flex-1 rounded-lg border px-3 py-2 text-[12px] font-semibold transition-all disabled:opacity-50 ${
                               on
                                 ? "border-primary bg-primary text-white shadow-sm"
                                 : "border-border bg-surface text-text-secondary hover:border-primary/40 hover:text-primary"
@@ -1145,13 +1348,13 @@ export default function AccountManagePage() {
         </div>
 
         {/* Security */}
-        <div>
+        <div id="change-password" className="scroll-mt-6">
           <p className="mb-2 text-sm font-semibold uppercase tracking-wider text-text-secondary">Security</p>
           <Card className="space-y-3">
             <button
               type="button"
               onClick={() => setShowPasswordForm((v) => !v)}
-              className="flex w-full items-center justify-between py-1"
+              className="flex min-h-11 w-full items-center justify-between py-1"
             >
               <div className="flex items-center gap-3">
                 <Shield size={16} className="text-text-secondary" />
@@ -1167,7 +1370,7 @@ export default function AccountManagePage() {
                   value={pwCurrent}
                   onChange={(e) => setPwCurrent(e.target.value)}
                   required
-                  className="w-full rounded-lg border border-border bg-surface px-3 py-2 text-[13px] outline-none focus:border-primary"
+                  className="min-h-12 w-full rounded-lg border border-border bg-surface px-3 py-2 text-[13px] outline-none focus:border-primary"
                 />
                 <input
                   type="password"
@@ -1176,7 +1379,7 @@ export default function AccountManagePage() {
                   onChange={(e) => setPwNext(e.target.value)}
                   required
                   minLength={8}
-                  className="w-full rounded-lg border border-border bg-surface px-3 py-2 text-[13px] outline-none focus:border-primary"
+                  className="min-h-12 w-full rounded-lg border border-border bg-surface px-3 py-2 text-[13px] outline-none focus:border-primary"
                 />
                 <input
                   type="password"
@@ -1184,7 +1387,7 @@ export default function AccountManagePage() {
                   value={pwConfirm}
                   onChange={(e) => setPwConfirm(e.target.value)}
                   required
-                  className="w-full rounded-lg border border-border bg-surface px-3 py-2 text-[13px] outline-none focus:border-primary"
+                  className="min-h-12 w-full rounded-lg border border-border bg-surface px-3 py-2 text-[13px] outline-none focus:border-primary"
                 />
                 {pwError && <p className="text-[12px] text-error">{pwError}</p>}
                 {pwSuccess && <p className="text-[12px] text-success">Password updated</p>}
@@ -1197,7 +1400,7 @@ export default function AccountManagePage() {
             <button
               type="button"
               onClick={() => setShowDelete(true)}
-              className="flex w-full items-center justify-between py-1"
+              className="flex min-h-11 w-full items-center justify-between py-1"
             >
               <div className="flex items-center gap-3">
                 <Trash2 size={16} className="text-error" />
@@ -1221,10 +1424,63 @@ export default function AccountManagePage() {
 
       </div>
 
+      {showEmailChange && (
+        <div className="fixed inset-0 z-50 flex items-end justify-center bg-black/40 p-4 pb-[max(env(safe-area-inset-bottom),16px)] sm:items-center sm:p-4">
+          <form
+            onSubmit={handleEmailChange}
+            className="max-h-[90dvh] w-full max-w-sm overflow-y-auto rounded-2xl bg-white p-5 shadow-xl"
+          >
+            <h2 className="text-[18px] font-bold text-text-primary">Change email</h2>
+            <p className="mt-1 text-[12px] leading-relaxed text-text-secondary">
+              Enter your password to protect the account. We&apos;ll send a confirmation link to the new address before changing it.
+            </p>
+            <label className="mt-4 block text-[12px] font-semibold text-text-secondary">
+              New email
+              <input
+                type="email"
+                autoComplete="email"
+                required
+                value={newEmail}
+                onChange={(event) => setNewEmail(event.target.value)}
+                className="mt-1 min-h-12 w-full rounded-lg border border-border bg-surface px-3 py-2 text-[16px] font-normal text-text-primary outline-none focus:border-primary"
+              />
+            </label>
+            <label className="mt-3 block text-[12px] font-semibold text-text-secondary">
+              Current password
+              <input
+                type="password"
+                autoComplete="current-password"
+                required
+                value={emailPassword}
+                onChange={(event) => setEmailPassword(event.target.value)}
+                className="mt-1 min-h-12 w-full rounded-lg border border-border bg-surface px-3 py-2 text-[16px] font-normal text-text-primary outline-none focus:border-primary"
+              />
+            </label>
+            {emailChangeError && (
+              <p className="mt-3 text-[12px] text-error">{emailChangeError}</p>
+            )}
+            <div className="mt-5 flex flex-col gap-2">
+              <Button type="submit" fullWidth disabled={emailChangeBusy}>
+                {emailChangeBusy ? "Sending…" : "Send confirmation"}
+              </Button>
+              <Button
+                type="button"
+                variant="ghost"
+                fullWidth
+                disabled={emailChangeBusy}
+                onClick={() => setShowEmailChange(false)}
+              >
+                Cancel
+              </Button>
+            </div>
+          </form>
+        </div>
+      )}
+
       {/* Delete account modal */}
       {showDelete && (
-        <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-black/40 p-4">
-          <div className="w-full max-w-sm rounded-2xl bg-white p-5 shadow-xl">
+        <div className="fixed inset-0 z-50 flex items-end justify-center bg-black/40 p-4 pb-[max(env(safe-area-inset-bottom),16px)] sm:items-center sm:p-4">
+          <div className="max-h-[90dvh] w-full max-w-sm overflow-y-auto rounded-2xl bg-white p-5 shadow-xl">
             <div className="flex items-start gap-3 mb-4">
               <div className="flex h-10 w-10 items-center justify-center rounded-full bg-error/10">
                 <AlertTriangle size={20} className="text-error" />
@@ -1241,7 +1497,7 @@ export default function AccountManagePage() {
               value={deleteText}
               onChange={(e) => setDeleteText(e.target.value)}
               placeholder="Type DELETE"
-              className="w-full rounded-lg border border-border bg-surface px-3 py-2 text-[13px] outline-none focus:border-error"
+              className="min-h-12 w-full rounded-lg border border-border bg-surface px-3 py-2 text-[13px] outline-none focus:border-error"
             />
             <div className="mt-3 flex flex-col gap-2">
               <Button
@@ -1253,7 +1509,7 @@ export default function AccountManagePage() {
                   setShowDelete(false);
                   setDeleteText("");
                   if (typeof window !== "undefined") {
-                    window.location.href = "mailto:support@mcqhome.co?subject=Account%20deletion%20request";
+                    window.location.href = "/messages?topic=account-deletion";
                   }
                 }}
               >

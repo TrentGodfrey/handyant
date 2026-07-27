@@ -55,7 +55,7 @@ export default function HomeHeader(props: HomeHeaderProps) {
 
   return (
     <div className="bg-surface border-b border-border px-5 pt-14 pb-5">
-      <Link href="/account" className="mb-4 inline-flex items-center gap-1.5 text-[13px] font-medium text-text-secondary hover:text-text-primary transition-colors">
+      <Link href="/account" className="mb-4 inline-flex min-h-11 items-center gap-1.5 text-[13px] font-medium text-text-secondary hover:text-text-primary transition-colors">
         <ChevronLeft size={16} />
         Account
       </Link>
@@ -68,7 +68,7 @@ export default function HomeHeader(props: HomeHeaderProps) {
             <button
               type="button"
               onClick={() => setEditingAddress(true)}
-              className="mt-1.5 flex items-start gap-1.5 text-left text-text-tertiary hover:text-text-secondary transition-colors group"
+              className="group mt-1.5 flex min-h-11 items-start gap-1.5 text-left text-text-tertiary transition-colors hover:text-text-secondary"
             >
               <MapPin size={13} className="mt-0.5 shrink-0" />
               <span className="text-[13px]">{fmtAddress(home)}</span>
@@ -81,15 +81,15 @@ export default function HomeHeader(props: HomeHeaderProps) {
                 value={editAddress}
                 onChange={(e) => setEditAddress(e.target.value)}
                 placeholder="Street address"
-                className="w-full rounded-lg border border-border bg-surface px-3 py-2 text-[13px] outline-none focus:border-primary"
+                className="min-h-11 w-full rounded-lg border border-border bg-surface px-3 py-2 text-[13px] outline-none focus:border-primary"
               />
-              <div className="grid grid-cols-3 gap-2">
+              <div className="grid grid-cols-1 gap-2 min-[400px]:grid-cols-3">
                 <input
                   type="text"
                   value={editCity}
                   onChange={(e) => setEditCity(e.target.value)}
                   placeholder="City"
-                  className="rounded-lg border border-border bg-surface px-3 py-2 text-[13px] outline-none focus:border-primary"
+                  className="min-h-11 rounded-lg border border-border bg-surface px-3 py-2 text-[13px] outline-none focus:border-primary"
                 />
                 <input
                   type="text"
@@ -97,14 +97,14 @@ export default function HomeHeader(props: HomeHeaderProps) {
                   onChange={(e) => setEditState(e.target.value)}
                   placeholder="State"
                   maxLength={2}
-                  className="rounded-lg border border-border bg-surface px-3 py-2 text-[13px] outline-none focus:border-primary"
+                  className="min-h-11 rounded-lg border border-border bg-surface px-3 py-2 text-[13px] outline-none focus:border-primary"
                 />
                 <input
                   type="text"
                   value={editZip}
                   onChange={(e) => setEditZip(e.target.value)}
                   placeholder="ZIP"
-                  className="rounded-lg border border-border bg-surface px-3 py-2 text-[13px] outline-none focus:border-primary"
+                  className="min-h-11 rounded-lg border border-border bg-surface px-3 py-2 text-[13px] outline-none focus:border-primary"
                 />
               </div>
               <div className="flex gap-2">
@@ -155,7 +155,7 @@ export default function HomeHeader(props: HomeHeaderProps) {
             <button
               type="button"
               onClick={() => setEditingDetails(true)}
-              className="flex items-center gap-1 rounded-lg border border-dashed border-border bg-surface px-3 py-1.5 text-[11px] font-medium text-text-secondary hover:bg-surface-secondary"
+              className="flex min-h-11 items-center gap-1 rounded-lg border border-dashed border-border bg-surface px-3 py-1.5 text-[11px] font-medium text-text-secondary hover:bg-surface-secondary"
             >
               <Plus size={11} />
               {home.yearBuilt == null && home.waterHeaterYear == null && home.panelAmps == null ? "Add details" : "Edit"}
@@ -163,7 +163,7 @@ export default function HomeHeader(props: HomeHeaderProps) {
           </div>
         ) : (
           <div className="space-y-2 rounded-lg border border-border bg-surface-secondary p-3">
-            <div className="grid grid-cols-3 gap-2">
+            <div className="grid grid-cols-1 gap-2 min-[400px]:grid-cols-3">
               <div>
                 <label className="mb-1 block text-[10px] font-semibold uppercase tracking-wider text-text-tertiary">Built</label>
                 <input
@@ -171,7 +171,7 @@ export default function HomeHeader(props: HomeHeaderProps) {
                   value={editYearBuilt}
                   onChange={(e) => setEditYearBuilt(e.target.value)}
                   placeholder="2008"
-                  className="w-full rounded-md border border-border bg-surface px-2 py-1.5 text-[12px] outline-none focus:border-primary"
+                  className="min-h-11 w-full rounded-md border border-border bg-surface px-2 py-1.5 text-[12px] outline-none focus:border-primary"
                 />
               </div>
               <div>
@@ -181,7 +181,7 @@ export default function HomeHeader(props: HomeHeaderProps) {
                   value={editWaterHeaterYear}
                   onChange={(e) => setEditWaterHeaterYear(e.target.value)}
                   placeholder="2012"
-                  className="w-full rounded-md border border-border bg-surface px-2 py-1.5 text-[12px] outline-none focus:border-primary"
+                  className="min-h-11 w-full rounded-md border border-border bg-surface px-2 py-1.5 text-[12px] outline-none focus:border-primary"
                 />
               </div>
               <div>
@@ -191,7 +191,7 @@ export default function HomeHeader(props: HomeHeaderProps) {
                   value={editPanelAmps}
                   onChange={(e) => setEditPanelAmps(e.target.value)}
                   placeholder="200"
-                  className="w-full rounded-md border border-border bg-surface px-2 py-1.5 text-[12px] outline-none focus:border-primary"
+                  className="min-h-11 w-full rounded-md border border-border bg-surface px-2 py-1.5 text-[12px] outline-none focus:border-primary"
                 />
               </div>
             </div>

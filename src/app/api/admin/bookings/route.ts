@@ -2,6 +2,7 @@ import { NextRequest } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { decryptHomeAccess } from "@/lib/sensitive-data";
 import { requireTech, unauthorized } from "@/lib/session";
+import { bookingDateToDatabaseDate } from "@/lib/booking-time";
 
 export async function GET(req: NextRequest) {
   const tech = await requireTech();
@@ -12,10 +13,19 @@ export async function GET(req: NextRequest) {
   const to = req.nextUrl.searchParams.get("to");
 
   const where: Record<string, unknown> = status ? { status } : { status: { not: "cancelled" } };
+  if (!tech.isAdmin) where.techId = tech.id;
   if (from || to) {
     const dateRange: Record<string, Date> = {};
-    if (from) dateRange.gte = new Date(from);
-    if (to) dateRange.lte = new Date(to);
+    if (from) {
+      const value = bookingDateToDatabaseDate(from);
+      if (!value) return Response.json({ error: "Invalid from date" }, { status: 400 });
+      dateRange.gte = value;
+    }
+    if (to) {
+      const value = bookingDateToDatabaseDate(to);
+      if (!value) return Response.json({ error: "Invalid to date" }, { status: 400 });
+      dateRange.lt = value;
+    }
     where.scheduledDate = dateRange;
   }
 
@@ -35,6 +45,11 @@ export async function GET(req: NextRequest) {
 
   return Response.json(bookings.map((booking) => ({
     ...booking,
-    home: booking.home ? decryptHomeAccess(booking.home) : null,
+    estimatedCost: null,
+    finalCost: null,
+    home:
+      booking.home && booking.home.customerId === booking.customerId
+        ? decryptHomeAccess(booking.home)
+        : null,
   })));
 }

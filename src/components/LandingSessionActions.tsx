@@ -10,15 +10,15 @@ export function LandingHeaderActions() {
   if (session?.user) {
     const href = session.user.role === "tech" ? "/dashboard" : "/home";
     return (
-      <Link href={href} className="inline-flex items-center gap-1.5 rounded-full bg-primary px-4 py-2 text-[13px] font-semibold text-white shadow-[0_2px_8px_rgba(79,149,152,0.25)] hover:bg-primary-dark transition-colors">
+      <Link href={href} className="inline-flex min-h-11 items-center gap-1.5 rounded-full bg-primary px-4 py-2 text-[13px] font-semibold text-white shadow-[0_2px_8px_rgba(79,149,152,0.25)] hover:bg-primary-dark transition-colors">
         Open dashboard <ArrowRight size={14} />
       </Link>
     );
   }
   return (
     <div className="flex items-center gap-2">
-      <Link href="/login" className="hidden sm:inline-flex items-center px-4 py-2 text-[13px] font-semibold text-text-secondary hover:text-text-primary transition-colors">Sign in</Link>
-      <Link href="/signup" className="inline-flex items-center gap-1.5 rounded-full bg-primary px-4 py-2 text-[13px] font-semibold text-white shadow-[0_2px_8px_rgba(79,149,152,0.25)] hover:bg-primary-dark transition-colors">Get started <ArrowRight size={14} /></Link>
+      <Link href="/login" className="hidden min-h-11 items-center px-4 py-2 text-[13px] font-semibold text-text-secondary hover:text-text-primary transition-colors sm:inline-flex">Sign in</Link>
+      <Link href="/signup" className="inline-flex min-h-11 items-center gap-1.5 rounded-full bg-primary px-4 py-2 text-[13px] font-semibold text-white shadow-[0_2px_8px_rgba(79,149,152,0.25)] hover:bg-primary-dark transition-colors">Get started <ArrowRight size={14} /></Link>
     </div>
   );
 }

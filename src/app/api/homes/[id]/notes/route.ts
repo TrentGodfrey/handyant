@@ -1,6 +1,7 @@
 import { NextRequest } from "next/server";
 import { prisma } from "@/lib/prisma";
-import { requireTech, unauthorized, notFound, badRequest } from "@/lib/session";
+import { requireTech, unauthorized, notFound, badRequest, forbidden } from "@/lib/session";
+import { canAccessHome } from "@/lib/resource-access";
 
 export async function GET(_req: NextRequest, ctx: { params: Promise<{ id: string }> }) {
   const user = await requireTech();
@@ -9,6 +10,7 @@ export async function GET(_req: NextRequest, ctx: { params: Promise<{ id: string
 
   const home = await prisma.home.findUnique({ where: { id } });
   if (!home) return notFound("Home not found");
+  if (!(await canAccessHome(user, home))) return forbidden();
 
   const notes = await prisma.homeNote.findMany({
     where: { homeId: id },
@@ -24,6 +26,7 @@ export async function POST(req: NextRequest, ctx: { params: Promise<{ id: string
 
   const home = await prisma.home.findUnique({ where: { id } });
   if (!home) return notFound("Home not found");
+  if (!(await canAccessHome(user, home))) return forbidden();
 
   const body = await req.json();
   if (!body.title || typeof body.title !== "string") return badRequest("title required");

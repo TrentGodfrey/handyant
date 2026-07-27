@@ -2,10 +2,8 @@
 
 import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
-import { signOut } from "next-auth/react";
 import dynamic from "next/dynamic";
 import Card from "@/components/Card";
-import Button from "@/components/Button";
 import Spinner from "@/components/Spinner";
 import ChipMultiSelect from "@/components/ChipMultiSelect";
 import {
@@ -26,17 +24,12 @@ import {
   MapPin,
   Clock,
   Bell,
-  CreditCard,
-  Info,
   ToggleLeft,
   ToggleRight,
-  ChevronRight,
   Coffee,
   Search,
   Plus,
   Crosshair,
-  DollarSign,
-  Smartphone,
 } from "lucide-react";
 import { useDemoMode } from "@/lib/useDemoMode";
 import type { ServiceCity } from "@/components/ServiceAreaMap";
@@ -91,7 +84,7 @@ const TIME_OPTIONS = [
   "16:00", "16:30", "17:00", "17:30", "18:00", "18:30", "19:00", "20:00",
 ];
 
-type EditableField = "name" | "owner" | "phone" | "email" | null;
+type EditableField = "name" | "owner" | "phone" | null;
 
 type DayHours = { start: string; end: string; enabled: boolean };
 type LunchBreak = { enabled: boolean; start: string; end: string };
@@ -107,7 +100,7 @@ type NotifyPrefs = {
 
 const cityNameToId = new Map(DFW_CITIES.map((c) => [c.name.toLowerCase(), c.id]));
 
-const DEFAULT_LUNCH: LunchBreak = { enabled: true, start: "12:00", end: "13:00" };
+const DEFAULT_LUNCH: LunchBreak = { enabled: false, start: "12:00", end: "13:00" };
 
 const DEFAULT_HOURS: WorkingHours = {
   mon: { start: "08:00", end: "17:00", enabled: true },
@@ -160,7 +153,7 @@ export default function SettingsPage() {
   const [notifyPrefs, setNotifyPrefs] = useState<NotifyPrefs>({
     jobReminders: true,
     leadAlerts: true,
-    sms: true,
+    sms: false,
     email: true,
   });
 
@@ -171,46 +164,12 @@ export default function SettingsPage() {
   );
   const reminderSaveTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-  // Payment methods - backed by BusinessProfile
-  const [venmoHandle, setVenmoHandle] = useState("");
-  const [zelleHandle, setZelleHandle] = useState("");
-  const [cashappHandle, setCashappHandle] = useState("");
-  const [paypalEmail, setPaypalEmail] = useState("");
-  const venmoSavedRef = useRef("");
-  const zelleSavedRef = useRef("");
-  const cashappSavedRef = useRef("");
-  const paypalSavedRef = useRef("");
-  const [savedPayment, setSavedPayment] = useState<"venmo" | "zelle" | "cashapp" | "paypal" | null>(null);
-
-  // Delete-account flow
-  const [deleteOpen, setDeleteOpen] = useState(false);
-  const [deleteConfirmText, setDeleteConfirmText] = useState("");
-  const [deleting, setDeleting] = useState(false);
-  const [deleteError, setDeleteError] = useState<string | null>(null);
-
-  async function confirmDeleteAccount() {
-    if (deleteConfirmText.trim() !== "DELETE") return;
-    setDeleting(true);
-    setDeleteError(null);
-    try {
-      const res = await fetch("/api/me", { method: "DELETE" });
-      if (!res.ok) {
-        const body = await res.json().catch(() => ({}));
-        throw new Error(body?.error ?? `Failed (${res.status})`);
-      }
-      await signOut({ callbackUrl: "/login" });
-    } catch (err) {
-      setDeleteError(err instanceof Error ? err.message : "Could not delete account");
-      setDeleting(false);
-    }
-  }
-
   useEffect(() => {
     if (!mounted) return;
     if (isDemo) {
       setOwner("Anthony McQuade");
       setPhone("(214) 555-0199");
-      setEmail("anthony@handyant.com");
+      setEmail("anthony@mcqpropertycare.com");
       setActiveCities(new Set(DEFAULT_ACTIVE));
       setLoading(false);
       return;
@@ -265,14 +224,6 @@ export default function SettingsPage() {
               business.appointmentReminders as Partial<AppointmentReminders> | null,
             ),
           );
-          const v = business.venmoHandle ?? "";
-          const z = business.zelleHandle ?? "";
-          const c = business.cashappHandle ?? "";
-          const p = business.paypalEmail ?? "";
-          setVenmoHandle(v); venmoSavedRef.current = v;
-          setZelleHandle(z); zelleSavedRef.current = z;
-          setCashappHandle(c); cashappSavedRef.current = c;
-          setPaypalEmail(p); paypalSavedRef.current = p;
         } else if (me?.phone) {
           setPhone(me.phone);
         }
@@ -290,26 +241,25 @@ export default function SettingsPage() {
 
   async function saveEdit() {
     const field = editing;
-    const value = draft;
+    const value = draft.trim();
     if (!field) return;
-
-    if (field === "name")  setBizName(value);
-    if (field === "owner") setOwner(value);
-    if (field === "phone") setPhone(value);
-    if (field === "email") setEmail(value);
-    setEditing(null);
+    if ((field === "name" || field === "owner") && !value) {
+      toast.error("This field cannot be empty");
+      return;
+    }
 
     if (!isDemo) {
       try {
+        let responses: Response[];
         if (field === "name") {
-          await fetch("/api/admin/business", {
+          responses = [await fetch("/api/admin/business", {
             method: "PATCH",
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify({ businessName: value }),
-          });
+          })];
         } else if (field === "phone") {
           // Persist to both User.phone and BusinessProfile.phone
-          await Promise.all([
+          responses = await Promise.all([
             fetch("/api/me", {
               method: "PATCH",
               headers: { "Content-Type": "application/json" },
@@ -322,18 +272,30 @@ export default function SettingsPage() {
             }),
           ]);
         } else {
-          const patchKey = field === "owner" ? "name" : field;
-          await fetch("/api/me", {
+          responses = [await fetch("/api/me", {
             method: "PATCH",
             headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ [patchKey]: value }),
-          });
+            body: JSON.stringify({ name: value }),
+          })];
         }
-      } catch {
-        /* swallow - UI keeps optimistic value */
+        const failed = responses.find((response) => !response.ok);
+        if (failed) {
+          const body = await failed.json().catch(() => ({}));
+          throw new Error(body.error ?? `HTTP ${failed.status}`);
+        }
+      } catch (error) {
+        toast.error(
+          "Couldn't save this setting: " +
+            (error instanceof Error ? error.message : String(error)),
+        );
+        return;
       }
     }
 
+    if (field === "name") setBizName(value);
+    if (field === "owner") setOwner(value);
+    if (field === "phone") setPhone(value);
+    setEditing(null);
     setSavedField(field);
     setTimeout(() => setSavedField(null), 1800);
   }
@@ -637,45 +599,6 @@ export default function SettingsPage() {
     }, 500);
   }
 
-  async function savePaymentField(
-    key: "venmo" | "zelle" | "cashapp" | "paypal",
-    raw: string,
-  ) {
-    const trimmed = raw.trim();
-    const refMap = {
-      venmo: venmoSavedRef,
-      zelle: zelleSavedRef,
-      cashapp: cashappSavedRef,
-      paypal: paypalSavedRef,
-    } as const;
-    const apiKey =
-      key === "venmo" ? "venmoHandle"
-      : key === "zelle" ? "zelleHandle"
-      : key === "cashapp" ? "cashappHandle"
-      : "paypalEmail";
-
-    if (refMap[key].current === trimmed) return; // no-op
-    if (isDemo) {
-      refMap[key].current = trimmed;
-      setSavedPayment(key);
-      setTimeout(() => setSavedPayment(null), 1800);
-      return;
-    }
-    try {
-      const res = await fetch("/api/admin/business", {
-        method: "PATCH",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ [apiKey]: trimmed || null }),
-      });
-      if (!res.ok) throw new Error(`HTTP ${res.status}`);
-      refMap[key].current = trimmed;
-      setSavedPayment(key);
-      setTimeout(() => setSavedPayment(null), 1800);
-    } catch (e) {
-      toast.error("Couldn't save payment handle: " + (e instanceof Error ? e.message : String(e)));
-    }
-  }
-
   const labelCls = "block text-[12px] font-semibold uppercase tracking-wider text-text-secondary mb-1.5";
   const allMapCities: ServiceCity[] = [...DFW_CITIES, ...customCities];
   const activeCityList = allMapCities.filter((c) => activeCities.has(c.id));
@@ -703,7 +626,7 @@ export default function SettingsPage() {
       <div className="bg-surface border-b border-border px-5 pt-14 pb-5">
         <Link
           href="/dashboard"
-          className="mb-4 inline-flex items-center gap-1.5 text-[13px] font-medium text-text-secondary hover:text-text-primary transition-colors"
+          className="-ml-2 mb-2 inline-flex min-h-11 items-center gap-1.5 rounded-lg px-2 text-[13px] font-medium text-text-secondary transition-colors hover:text-text-primary"
         >
           <ChevronLeft size={16} />
           Dashboard
@@ -721,14 +644,20 @@ export default function SettingsPage() {
             <h2 className="text-[12px] font-bold uppercase tracking-wider text-text-secondary">Business Info</h2>
           </div>
           <Card padding="md" className="space-y-0 divide-y divide-border">
-            {[
-              { field: "name" as const,  label: "Business Name", value: bizName,  icon: Building2, placeholder: "Business name" },
-              { field: "owner" as const, label: "Owner",          value: owner,   icon: User,      placeholder: "Your name" },
-              { field: "phone" as const, label: "Phone",          value: phone,   icon: Phone,     placeholder: "(214) 555-0000" },
-              { field: "email" as const, label: "Email",          value: email,   icon: Mail,      placeholder: "you@example.com" },
-            ].map(({ field, label, value, icon: Icon, placeholder }) => (
-              <div key={field} className="py-3.5 first:pt-0 last:pb-0">
-                {editing === field ? (
+            {([
+              { field: "name" as const,  label: "Business Name", value: bizName, icon: Building2, placeholder: "Business name" },
+              { field: "owner" as const, label: "Owner", value: owner, icon: User, placeholder: "Your name" },
+              { field: "phone" as const, label: "Phone", value: phone, icon: Phone, placeholder: "(214) 555-0000" },
+              { field: null, label: "Sign-in & notification email", value: email, icon: Mail, placeholder: "" },
+            ] satisfies Array<{
+              field: Exclude<EditableField, null> | null;
+              label: string;
+              value: string;
+              icon: typeof Building2;
+              placeholder: string;
+            }>).map(({ field, label, value, icon: Icon, placeholder }) => (
+              <div key={label} className="py-3.5 first:pt-0 last:pb-0">
+                {field !== null && editing === field ? (
                   <div className="animate-fade-in">
                     <label className={labelCls}>{label}</label>
                     <div className="flex gap-2">
@@ -740,10 +669,10 @@ export default function SettingsPage() {
                         placeholder={placeholder}
                         onKeyDown={(e) => { if (e.key === "Enter") saveEdit(); if (e.key === "Escape") setEditing(null); }}
                       />
-                      <button onClick={saveEdit} className="flex h-10 w-10 items-center justify-center rounded-xl bg-primary text-white shrink-0">
+                      <button type="button" aria-label={`Save ${label}`} onClick={saveEdit} className="flex h-11 w-11 items-center justify-center rounded-xl bg-primary text-white shrink-0">
                         <Check size={16} />
                       </button>
-                      <button onClick={() => setEditing(null)} className="flex h-10 w-10 items-center justify-center rounded-xl bg-surface-secondary text-text-secondary shrink-0">
+                      <button type="button" aria-label={`Cancel editing ${label}`} onClick={() => setEditing(null)} className="flex h-11 w-11 items-center justify-center rounded-xl bg-surface-secondary text-text-secondary shrink-0">
                         <X size={16} />
                       </button>
                     </div>
@@ -757,16 +686,27 @@ export default function SettingsPage() {
                       <p className="text-[11px] text-text-tertiary">{label}</p>
                       <p className="text-[14px] font-semibold text-text-primary truncate">{value || "-"}</p>
                     </div>
-                    <button
-                      onClick={() => startEdit(field, value)}
-                      className="flex h-8 w-8 items-center justify-center rounded-lg bg-surface-secondary hover:bg-border active:bg-border transition-colors shrink-0"
-                    >
-                      {savedField === field ? (
-                        <Check size={13} className="text-success" />
-                      ) : (
-                        <Pencil size={13} className="text-text-secondary" />
-                      )}
-                    </button>
+                    {field !== null ? (
+                      <button
+                        type="button"
+                        aria-label={`Edit ${label}`}
+                        onClick={() => startEdit(field, value)}
+                        className="flex h-11 w-11 items-center justify-center rounded-lg bg-surface-secondary hover:bg-border active:bg-border transition-colors shrink-0"
+                      >
+                        {savedField === field ? (
+                          <Check size={15} className="text-success" />
+                        ) : (
+                          <Pencil size={15} className="text-text-secondary" />
+                        )}
+                      </button>
+                    ) : (
+                      <Link
+                        href="/account/manage#email-security"
+                        className="flex min-h-11 max-w-[9rem] items-center text-right text-[11px] font-semibold leading-tight text-primary"
+                      >
+                        Change securely in Manage Account
+                      </Link>
+                    )}
                   </div>
                 )}
               </div>
@@ -818,14 +758,16 @@ export default function SettingsPage() {
                     {city.name}
                     {city.custom && <span className="text-[9px] opacity-70">(custom)</span>}
                     <button
+                      type="button"
                       onClick={() => removeCity(city.id)}
-                      className={`flex h-3.5 w-3.5 items-center justify-center rounded-full transition-colors ${
+                      aria-label={`Remove ${city.name} from service area`}
+                      className={`flex h-11 w-11 shrink-0 items-center justify-center rounded-full transition-colors ${
                         city.custom
                           ? "bg-purple-300/40 hover:bg-purple-300/70"
                           : "bg-primary/20 hover:bg-primary/40"
                       }`}
                     >
-                      <X size={9} className={city.custom ? "text-purple-700" : "text-primary"} strokeWidth={2.5} />
+                      <X size={16} className={city.custom ? "text-purple-700" : "text-primary"} strokeWidth={2.5} />
                     </button>
                   </span>
                 ))}
@@ -841,14 +783,14 @@ export default function SettingsPage() {
                   value={citySearch}
                   onChange={(e) => { setCitySearch(e.target.value); setSearchError(null); }}
                   placeholder="Add a city (e.g. Lewisville)"
-                  className="w-full rounded-xl border border-border bg-surface pl-9 pr-3 py-2.5 text-[13px] text-text-primary focus:outline-none focus:border-primary"
+                  className="min-h-11 w-full rounded-xl border border-border bg-surface pl-9 pr-3 py-2.5 text-[13px] text-text-primary focus:outline-none focus:border-primary"
                   disabled={searching}
                 />
               </div>
               <button
                 type="submit"
                 disabled={searching || !citySearch.trim()}
-                className="flex items-center gap-1.5 rounded-xl bg-primary px-4 text-[13px] font-semibold text-white shadow-sm hover:bg-primary-dark disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                className="flex min-h-11 items-center gap-1.5 rounded-xl bg-primary px-4 text-[13px] font-semibold text-white shadow-sm hover:bg-primary-dark disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
               >
                 {searching ? (
                   <div className="h-3.5 w-3.5 border-2 border-white border-t-transparent rounded-full animate-spin" />
@@ -869,7 +811,7 @@ export default function SettingsPage() {
                 setDropPinMode((v) => !v);
                 setSearchError(null);
               }}
-              className={`mt-2 w-full flex items-center justify-center gap-2 rounded-xl border-2 border-dashed py-2.5 text-[13px] font-semibold transition-colors ${
+              className={`mt-2 flex min-h-11 w-full items-center justify-center gap-2 rounded-xl border-2 border-dashed py-2.5 text-[13px] font-semibold transition-colors ${
                 dropPinMode
                   ? "border-primary bg-primary-50 text-primary"
                   : "border-border bg-surface text-text-secondary hover:border-primary/30 hover:text-primary"
@@ -883,11 +825,11 @@ export default function SettingsPage() {
           {/* Pending pin naming dialog */}
           {pendingPin && (
             <div
-              className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 px-5 animate-fade-in"
+              className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4 pt-[max(env(safe-area-inset-top),16px)] pb-[max(env(safe-area-inset-bottom),16px)] animate-fade-in"
               onClick={cancelPendingPin}
             >
               <div
-                className="w-full max-w-sm rounded-2xl bg-surface p-5 shadow-2xl"
+                className="max-h-[calc(100dvh-2rem)] w-full max-w-sm overflow-y-auto rounded-2xl bg-surface p-5 shadow-2xl"
                 onClick={(e) => e.stopPropagation()}
               >
                 <div className="flex items-center gap-2 mb-3">
@@ -911,19 +853,19 @@ export default function SettingsPage() {
                     if (e.key === "Escape") cancelPendingPin();
                   }}
                   placeholder="e.g. North Dallas"
-                  className="w-full rounded-xl border border-border bg-surface px-3 py-2.5 text-[14px] text-text-primary focus:outline-none focus:border-primary"
+                  className="min-h-11 w-full rounded-xl border border-border bg-surface px-3 py-2.5 text-[14px] text-text-primary focus:outline-none focus:border-primary"
                 />
                 <div className="mt-3 flex gap-2">
                   <button
                     onClick={cancelPendingPin}
-                    className="flex-1 rounded-xl bg-surface-secondary px-3 py-2.5 text-[13px] font-semibold text-text-secondary hover:bg-border transition-colors"
+                    className="min-h-11 flex-1 rounded-xl bg-surface-secondary px-3 py-2.5 text-[13px] font-semibold text-text-secondary hover:bg-border transition-colors"
                   >
                     Cancel
                   </button>
                   <button
                     onClick={confirmPendingPin}
                     disabled={!pendingPinName.trim()}
-                    className="flex-1 rounded-xl bg-primary px-3 py-2.5 text-[13px] font-semibold text-white hover:bg-primary-dark disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                    className="min-h-11 flex-1 rounded-xl bg-primary px-3 py-2.5 text-[13px] font-semibold text-white hover:bg-primary-dark disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
                   >
                     Add Pin
                   </button>
@@ -931,125 +873,6 @@ export default function SettingsPage() {
               </div>
             </div>
           )}
-        </section>
-
-        {/* ── SECTION: Payment Methods ── */}
-        <section className="hidden" aria-hidden="true">
-          <div className="flex items-center gap-2 mb-3">
-            <CreditCard size={15} className="text-text-tertiary" />
-            <h2 className="text-[12px] font-bold uppercase tracking-wider text-text-secondary">Payment Methods</h2>
-          </div>
-          <Card padding="md" className="space-y-4">
-            <p className="text-[12px] text-text-secondary -mt-1">
-              These appear on invoices so customers know how to pay you. Leave blank to hide.
-            </p>
-
-            {/* Venmo */}
-            <div>
-              <label className={labelCls}>Venmo</label>
-              <div className="flex items-center gap-2">
-                <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-[#E8F4FC] text-[#3D95CE]">
-                  <Smartphone size={16} />
-                </div>
-                <div className="flex-1 relative">
-                  <span className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-[14px] font-semibold text-text-tertiary">@</span>
-                  <input
-                    type="text"
-                    value={venmoHandle.replace(/^@/, "")}
-                    onChange={(e) => setVenmoHandle(e.target.value.replace(/^@/, ""))}
-                    onBlur={(e) => savePaymentField("venmo", e.target.value.replace(/^@/, ""))}
-                    placeholder="username"
-                    autoCapitalize="none"
-                    autoCorrect="off"
-                    spellCheck={false}
-                    className="w-full rounded-xl border border-border bg-surface pl-7 pr-9 py-2.5 text-[14px] text-text-primary placeholder:text-text-tertiary focus:outline-none focus:border-primary"
-                  />
-                  {savedPayment === "venmo" && (
-                    <Check size={14} className="absolute right-3 top-1/2 -translate-y-1/2 text-success" />
-                  )}
-                </div>
-              </div>
-            </div>
-
-            {/* Zelle */}
-            <div>
-              <label className={labelCls}>Zelle</label>
-              <div className="flex items-center gap-2">
-                <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-[#F3EAFD] text-[#6D1ED4]">
-                  <DollarSign size={16} />
-                </div>
-                <div className="flex-1 relative">
-                  <input
-                    type="text"
-                    value={zelleHandle}
-                    onChange={(e) => setZelleHandle(e.target.value)}
-                    onBlur={(e) => savePaymentField("zelle", e.target.value)}
-                    placeholder="email or phone"
-                    autoCapitalize="none"
-                    autoCorrect="off"
-                    spellCheck={false}
-                    className="w-full rounded-xl border border-border bg-surface px-3 pr-9 py-2.5 text-[14px] text-text-primary placeholder:text-text-tertiary focus:outline-none focus:border-primary"
-                  />
-                  {savedPayment === "zelle" && (
-                    <Check size={14} className="absolute right-3 top-1/2 -translate-y-1/2 text-success" />
-                  )}
-                </div>
-              </div>
-            </div>
-
-            {/* Cash App */}
-            <div>
-              <label className={labelCls}>Cash App</label>
-              <div className="flex items-center gap-2">
-                <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-success-light text-success">
-                  <DollarSign size={16} />
-                </div>
-                <div className="flex-1 relative">
-                  <span className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-[14px] font-semibold text-text-tertiary">$</span>
-                  <input
-                    type="text"
-                    value={cashappHandle.replace(/^\$/, "")}
-                    onChange={(e) => setCashappHandle(e.target.value.replace(/^\$/, ""))}
-                    onBlur={(e) => savePaymentField("cashapp", e.target.value.replace(/^\$/, ""))}
-                    placeholder="cashtag"
-                    autoCapitalize="none"
-                    autoCorrect="off"
-                    spellCheck={false}
-                    className="w-full rounded-xl border border-border bg-surface pl-7 pr-9 py-2.5 text-[14px] text-text-primary placeholder:text-text-tertiary focus:outline-none focus:border-primary"
-                  />
-                  {savedPayment === "cashapp" && (
-                    <Check size={14} className="absolute right-3 top-1/2 -translate-y-1/2 text-success" />
-                  )}
-                </div>
-              </div>
-            </div>
-
-            {/* PayPal */}
-            <div>
-              <label className={labelCls}>PayPal</label>
-              <div className="flex items-center gap-2">
-                <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-[#E8F4FC] text-[#0070BA]">
-                  <Mail size={16} />
-                </div>
-                <div className="flex-1 relative">
-                  <input
-                    type="email"
-                    value={paypalEmail}
-                    onChange={(e) => setPaypalEmail(e.target.value)}
-                    onBlur={(e) => savePaymentField("paypal", e.target.value)}
-                    placeholder="you@example.com"
-                    autoCapitalize="none"
-                    autoCorrect="off"
-                    spellCheck={false}
-                    className="w-full rounded-xl border border-border bg-surface px-3 pr-9 py-2.5 text-[14px] text-text-primary placeholder:text-text-tertiary focus:outline-none focus:border-primary"
-                  />
-                  {savedPayment === "paypal" && (
-                    <Check size={14} className="absolute right-3 top-1/2 -translate-y-1/2 text-success" />
-                  )}
-                </div>
-              </div>
-            </div>
-          </Card>
         </section>
 
         {/* ── SECTION: Availability ── */}
@@ -1062,17 +885,18 @@ export default function SettingsPage() {
             {/* Days of week */}
             <div>
               <label className={labelCls}>Working Days</label>
-              <div className="flex gap-1.5">
+              <div className="flex gap-1.5 overflow-x-auto overscroll-x-contain pb-1">
                 {WEEK_DAYS.map(({ key, label }) => {
                   const day = workingHours[key];
                   const on = day?.enabled ?? false;
                   return (
                     <button
+                      type="button"
                       key={key}
                       onClick={() => toggleDay(key)}
                       aria-pressed={on}
                       title={on ? `${label}: ${format12h(day?.start ?? "08:00")} – ${format12h(day?.end ?? "17:00")}` : `${label}: off`}
-                      className={`group relative flex flex-1 flex-col items-center justify-center gap-0.5 rounded-xl py-3 text-center transition-all duration-200 border ${
+                      className={`group relative flex min-h-11 min-w-11 flex-1 flex-col items-center justify-center gap-0.5 rounded-xl py-3 text-center transition-all duration-200 border ${
                         on
                           ? "border-primary bg-primary text-white"
                           : "border-border bg-surface text-text-tertiary opacity-70 hover:opacity-100 hover:border-primary/40 hover:bg-primary-50 hover:text-primary"
@@ -1142,8 +966,9 @@ export default function SettingsPage() {
                   </div>
                 </div>
                 <button
+                  type="button"
                   onClick={toggleLunch}
-                  className="shrink-0 transition-colors"
+                  className="flex h-11 w-12 shrink-0 items-center justify-center transition-colors"
                   aria-label="Toggle lunch break"
                 >
                   {lunch.enabled ? (
@@ -1161,7 +986,7 @@ export default function SettingsPage() {
                     <select
                       value={lunch.start}
                       onChange={(e) => updateLunchTime("start", e.target.value)}
-                      className="w-full rounded-xl border border-border bg-surface px-3 py-2.5 text-[14px] font-semibold text-text-primary focus:outline-none focus:border-primary"
+                      className="min-h-11 w-full rounded-xl border border-border bg-surface px-3 py-2.5 text-[14px] font-semibold text-text-primary focus:outline-none focus:border-primary"
                     >
                       {TIME_OPTIONS.map((t) => (
                         <option key={t} value={t}>{format12h(t)}</option>
@@ -1173,7 +998,7 @@ export default function SettingsPage() {
                     <select
                       value={lunch.end}
                       onChange={(e) => updateLunchTime("end", e.target.value)}
-                      className="w-full rounded-xl border border-border bg-surface px-3 py-2.5 text-[14px] font-semibold text-text-primary focus:outline-none focus:border-primary"
+                      className="min-h-11 w-full rounded-xl border border-border bg-surface px-3 py-2.5 text-[14px] font-semibold text-text-primary focus:outline-none focus:border-primary"
                     >
                       {TIME_OPTIONS.map((t) => (
                         <option key={t} value={t}>{format12h(t)}</option>
@@ -1195,19 +1020,9 @@ export default function SettingsPage() {
           <Card padding="md" className="divide-y divide-border space-y-0">
             {[
               {
-                key: "sms" as const,
-                label: "SMS Reminders",
-                sub: "Get a text 1 hour before each job",
-              },
-              {
                 key: "email" as const,
-                label: "Email Summaries",
-                sub: "Daily recap of jobs and schedule changes",
-              },
-              {
-                key: "leadAlerts" as const,
-                label: "New Booking Alerts",
-                sub: "Instant notification when a client books",
+                label: "Email Updates",
+                sub: "Booking, message, task, and appointment updates",
               },
               {
                 key: "jobReminders" as const,
@@ -1222,7 +1037,12 @@ export default function SettingsPage() {
                     <p className="text-[14px] font-semibold text-text-primary">{label}</p>
                     <p className="text-[12px] text-text-tertiary mt-0.5">{sub}</p>
                   </div>
-                  <button onClick={() => toggleNotifPref(key)} className="shrink-0 transition-colors">
+                  <button
+                    type="button"
+                    onClick={() => toggleNotifPref(key)}
+                    aria-label={`${value ? "Disable" : "Enable"} ${label}`}
+                    className="flex h-11 w-12 shrink-0 items-center justify-center transition-colors"
+                  >
                     {value ? (
                       <ToggleRight size={32} className="text-primary" />
                     ) : (
@@ -1241,9 +1061,10 @@ export default function SettingsPage() {
                   <p className="text-[12px] text-text-tertiary mt-0.5">When to remind you about upcoming jobs</p>
                 </div>
                 <button
+                  type="button"
                   onClick={() => updateReminders({ ...reminders, enabled: !reminders.enabled })}
                   aria-label={reminders.enabled ? "Disable appointment reminders" : "Enable appointment reminders"}
-                  className="shrink-0 transition-colors"
+                  className="flex h-11 w-12 shrink-0 items-center justify-center transition-colors"
                 >
                   {reminders.enabled ? (
                     <ToggleRight size={32} className="text-primary" />
@@ -1278,8 +1099,6 @@ export default function SettingsPage() {
                     <div className="flex gap-2">
                       {([
                         { key: "email" as const, label: "Email" },
-                        { key: "sms" as const, label: "SMS" },
-                        { key: "push" as const, label: "Push" },
                       ]).map(({ key, label }) => {
                         const on = reminders.channels[key];
                         return (
@@ -1293,7 +1112,7 @@ export default function SettingsPage() {
                               })
                             }
                             aria-pressed={on}
-                            className={`flex-1 rounded-lg border px-3 py-2 text-[12px] font-semibold transition-all ${
+                            className={`min-h-11 flex-1 rounded-lg border px-3 py-2 text-[12px] font-semibold transition-all ${
                               on
                                 ? "border-primary bg-primary text-white shadow-sm"
                                 : "border-border bg-surface text-text-secondary hover:border-primary/40 hover:text-primary"
@@ -1311,123 +1130,7 @@ export default function SettingsPage() {
           </Card>
         </section>
 
-        {/* ── SECTION: Subscription / Billing - demo only ── */}
-        {false && isDemo && (
-          <section>
-            <div className="flex items-center gap-2 mb-3">
-              <CreditCard size={15} className="text-text-tertiary" />
-              <h2 className="text-[12px] font-bold uppercase tracking-wider text-text-secondary">Subscription</h2>
-            </div>
-            <Card padding="md">
-              <div className="flex items-start justify-between gap-3 mb-4">
-                <div>
-                  <div className="flex items-center gap-2">
-                    <span className="text-[18px] font-bold text-text-primary">Pro Plan</span>
-                    <span className="rounded-full bg-primary px-2.5 py-0.5 text-[10px] font-bold text-white uppercase tracking-wider">
-                      Active
-                    </span>
-                  </div>
-                  <p className="mt-1 text-[13px] text-text-secondary">$49 / month · Billed monthly</p>
-                </div>
-                <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-primary-50 shrink-0">
-                  <CreditCard size={20} className="text-primary" />
-                </div>
-              </div>
-
-              <div className="space-y-2.5">
-                {[
-                  { label: "Next billing date", value: "April 15, 2026" },
-                  { label: "Payment method", value: "Visa ···· 4242" },
-                  { label: "Plan includes", value: "Unlimited clients, invoicing, scheduling" },
-                ].map(({ label, value }) => (
-                  <div key={label} className="flex items-start justify-between gap-2">
-                    <span className="text-[12px] text-text-tertiary shrink-0">{label}</span>
-                    <span className="text-[12px] font-medium text-text-primary text-right">{value}</span>
-                  </div>
-                ))}
-              </div>
-
-              <div className="mt-4 border-t border-border pt-4 flex gap-2">
-                <Button variant="outline" size="sm" icon={<ChevronRight size={13} />}>
-                  Manage Plan
-                </Button>
-                <Button variant="ghost" size="sm" icon={<Info size={13} />}>
-                  View Invoices
-                </Button>
-              </div>
-            </Card>
-          </section>
-        )}
-
-        {/* ── Danger zone ── */}
-        <section>
-          <Card padding="md" variant="outlined" className="border-error/20">
-            <p className="text-[13px] font-semibold text-error mb-0.5">Danger Zone</p>
-            <p className="text-[12px] text-text-tertiary mb-3">
-              These actions are permanent and cannot be undone.
-            </p>
-            <Button
-              variant="danger"
-              size="sm"
-              onClick={() => {
-                setDeleteOpen(true);
-                setDeleteConfirmText("");
-                setDeleteError(null);
-              }}
-            >
-              Delete Account
-            </Button>
-          </Card>
-        </section>
       </div>
-
-      {/* Delete-account confirmation modal */}
-      {deleteOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 px-4">
-          <button
-            aria-label="Close"
-            className="absolute inset-0 cursor-default"
-            onClick={() => !deleting && setDeleteOpen(false)}
-          />
-          <div className="relative w-full max-w-md rounded-2xl bg-white shadow-xl p-6">
-            <h2 className="text-[18px] font-bold text-text-primary">Delete Account</h2>
-            <p className="mt-2 text-[13px] text-text-secondary">
-              This permanently removes your account and signs you out. To confirm, type
-              <span className="font-bold text-error"> DELETE </span>
-              below.
-            </p>
-            <input
-              type="text"
-              value={deleteConfirmText}
-              onChange={(e) => setDeleteConfirmText(e.target.value)}
-              autoFocus
-              placeholder="Type DELETE to confirm"
-              className="mt-4 w-full rounded-xl border border-border bg-surface px-4 py-2.5 text-[14px] text-text-primary placeholder:text-text-tertiary focus:border-error focus:outline-none"
-            />
-            {deleteError && (
-              <p className="mt-2 text-[12px] text-error">{deleteError}</p>
-            )}
-            <div className="mt-5 flex gap-2 justify-end">
-              <Button
-                variant="ghost"
-                size="sm"
-                onClick={() => setDeleteOpen(false)}
-                disabled={deleting}
-              >
-                Cancel
-              </Button>
-              <Button
-                variant="danger"
-                size="sm"
-                onClick={confirmDeleteAccount}
-                disabled={deleting || deleteConfirmText.trim() !== "DELETE"}
-              >
-                {deleting ? "Deleting…" : "Delete account"}
-              </Button>
-            </div>
-          </div>
-        </div>
-      )}
     </div>
   );
 }

@@ -18,11 +18,13 @@ interface HomeOverviewProps {
   setGateCodeVisible: (v: boolean | ((p: boolean) => boolean)) => void;
   onOpenEdit: () => void;
   onCustomerSaved: () => Promise<void>;
+  canManageAccounts: boolean;
 }
 
 export default function HomeOverview({
   home, openTasks, totalVisits, fullAddress,
   gateCodeVisible, setGateCodeVisible, onOpenEdit, onCustomerSaved,
+  canManageAccounts,
 }: HomeOverviewProps) {
   const [editingEmail, setEditingEmail] = useState(false);
   const [email, setEmail] = useState(home.customer.email ?? "");
@@ -240,7 +242,7 @@ export default function HomeOverview({
             {home.gateCode && (
               <button
                 onClick={() => setGateCodeVisible((v) => !v)}
-                className="text-[10px] font-medium text-primary active:opacity-70"
+                className="-my-2 flex min-h-11 items-center px-2 text-[10px] font-medium text-primary active:opacity-70"
               >
                 {gateCodeVisible ? "Hide" : "Show"}
               </button>
@@ -281,7 +283,7 @@ export default function HomeOverview({
               {phoneHref && (
                 <a
                   href={phoneHref}
-                  className="flex h-7 w-7 items-center justify-center rounded-full bg-success-light active:bg-success transition-colors"
+                  className="flex h-11 w-11 items-center justify-center rounded-full bg-success-light active:bg-success transition-colors"
                 >
                   <Phone size={12} className="text-success" />
                 </a>
@@ -299,7 +301,7 @@ export default function HomeOverview({
                 </p>
                 {!home.customer.hasLogin && (
                   <div className="mt-0.5">
-                    {editingEmail ? (
+                    {editingEmail && canManageAccounts ? (
                       <div className="space-y-2">
                         <input
                           type="email"
@@ -310,8 +312,8 @@ export default function HomeOverview({
                         />
                         {emailError && <p className="text-[10px] font-medium text-error">{emailError}</p>}
                         <div className="flex gap-2">
-                          <button type="button" disabled={savingEmail} onClick={() => setEditingEmail(false)} className="min-h-10 rounded-lg border border-border px-3 text-[11px] font-semibold text-text-secondary">Cancel</button>
-                          <button type="button" disabled={savingEmail || !email.trim()} onClick={saveCustomerEmail} className="min-h-10 rounded-lg bg-primary px-3 text-[11px] font-bold text-white disabled:opacity-50">{savingEmail ? "Saving…" : "Save email"}</button>
+                          <button type="button" disabled={savingEmail} onClick={() => setEditingEmail(false)} className="min-h-11 rounded-lg border border-border px-3 text-[11px] font-semibold text-text-secondary">Cancel</button>
+                          <button type="button" disabled={savingEmail || !email.trim()} onClick={saveCustomerEmail} className="min-h-11 rounded-lg bg-primary px-3 text-[11px] font-bold text-white disabled:opacity-50">{savingEmail ? "Saving…" : "Save email"}</button>
                         </div>
                       </div>
                     ) : (
@@ -319,16 +321,20 @@ export default function HomeOverview({
                         <p className="break-words text-[10px] leading-relaxed text-text-secondary">
                           {home.customer.email
                             ? `Anthony sets up the home, plan, and tasks first. ${home.customer.name.split(" ")[0]} then uses a private link to choose their own password. It expires after 7 days and works once.`
-                            : "Add their email first, then create a secure signup invitation."}
+                            : canManageAccounts
+                              ? "Add their email first, then create a secure signup invitation."
+                              : "Ask the account owner to add their signup email first."}
                         </p>
                         {home.customer.email && (
                           <button type="button" disabled={creatingInvite} onClick={createInvitation} className="mt-2 min-h-11 w-full rounded-lg bg-primary px-3 text-[11px] font-bold text-white disabled:opacity-50">
                             {creatingInvite ? "Creating…" : home.pendingInvitation ? "Replace secure invite" : "Create secure invite"}
                           </button>
                         )}
-                        <button type="button" onClick={() => setEditingEmail(true)} className="mt-1.5 min-h-10 rounded-lg border border-warning/30 bg-surface px-3 text-[11px] font-bold text-text-primary">
-                          {home.customer.email ? "Change signup email" : "Add signup email"}
-                        </button>
+                        {canManageAccounts && (
+                          <button type="button" onClick={() => setEditingEmail(true)} className="mt-1.5 min-h-11 rounded-lg border border-warning/30 bg-surface px-3 text-[11px] font-bold text-text-primary">
+                            {home.customer.email ? "Change signup email" : "Add signup email"}
+                          </button>
+                        )}
                         {home.pendingInvitation && (
                           <p className="mt-1.5 text-[10px] text-text-tertiary">
                             Invite pending until {new Date(home.pendingInvitation.expiresAt).toLocaleDateString()}.

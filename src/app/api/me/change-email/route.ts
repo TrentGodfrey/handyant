@@ -5,12 +5,16 @@ import { prisma } from "@/lib/prisma";
 import { requireUser, unauthorized, badRequest } from "@/lib/session";
 import { sendEmail, emailShell, escapeHtml } from "@/lib/email";
 import { hashSecurityToken } from "@/lib/security-tokens";
+import { rateLimited, takeRateLimit } from "@/lib/rate-limit";
+import { MAX_PASSWORD_LENGTH } from "@/lib/login-security";
 
 const VERIFY_TTL_MS = 24 * 60 * 60 * 1000; // 24 hours
 
 export async function POST(req: NextRequest) {
   const session = await requireUser();
   if (!session) return unauthorized();
+  const limit = takeRateLimit(`account-email-change:${session.id}`, 5, 60 * 60 * 1000);
+  if (!limit.allowed) return rateLimited(limit.retryAfterSeconds);
 
   let body: { newEmail?: unknown; currentPassword?: unknown };
   try {
@@ -29,6 +33,9 @@ export async function POST(req: NextRequest) {
   }
   if (!currentPassword) {
     return badRequest("currentPassword required to change email");
+  }
+  if (currentPassword.length > MAX_PASSWORD_LENGTH) {
+    return badRequest("Incorrect password");
   }
 
   const user = await prisma.user.findUnique({
@@ -71,7 +78,7 @@ export async function POST(req: NextRequest) {
     },
   });
 
-  const baseUrl = process.env.NEXTAUTH_URL ?? "";
+  const baseUrl = (process.env.NEXTAUTH_URL ?? "https://mcqpropertycare.com").replace(/\/$/, "");
   const verifyUrl = `${baseUrl}/verify-email?token=${token}`;
   const safeName = escapeHtml(user.name ?? "there");
   const safeUrl = escapeHtml(verifyUrl);
@@ -92,13 +99,31 @@ export async function POST(req: NextRequest) {
     `,
   });
 
-  await sendEmail({
+  const delivery = await sendEmail({
     to: newEmail,
     subject: "Confirm your new MCQ Property Care email address",
     html,
     text: `Confirm your new MCQ Property Care email: ${verifyUrl}\n\nThis link expires in 24 hours. If you didn't request this change, you can ignore it.`,
     sensitive: true,
   });
+  if (!delivery.ok) {
+    await prisma.user.updateMany({
+      where: {
+        id: user.id,
+        pendingEmail: newEmail,
+        emailVerificationToken: hashSecurityToken(token),
+      },
+      data: {
+        pendingEmail: null,
+        emailVerificationToken: null,
+        emailVerificationExpires: null,
+      },
+    });
+    return Response.json(
+      { error: "We could not send the verification email. Please try again." },
+      { status: 503 },
+    );
+  }
 
   return Response.json({ ok: true, pendingVerification: true });
 }

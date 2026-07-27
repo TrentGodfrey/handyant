@@ -1,13 +1,13 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useSession, signOut } from "next-auth/react";
 import {
   Home, Wrench, CalendarPlus, User, LayoutDashboard, Calendar,
   ClipboardList, Building2, MessageCircle, Settings, LogOut, Users,
-  ListChecks, MoreHorizontal,
+  ListChecks, MoreHorizontal, X,
 } from "lucide-react";
 
 const customerTabs = [
@@ -52,6 +52,10 @@ const adminMoreTabs = [
   { href: "/settings", icon: Settings, label: "Settings" },
 ];
 
+const customerTechMoreTabs = [
+  { href: "/account", icon: User, label: "Account" },
+];
+
 function isTabActive(pathname: string, href: string) {
   return (
     pathname === href ||
@@ -63,11 +67,27 @@ export default function BottomNav({ variant = "customer" }: { variant?: "custome
   const pathname = usePathname();
   const { data: session } = useSession();
   const isAdmin = variant === "admin";
-  const tabs = isAdmin ? adminTabs : customerTabs;
-  const mobileTabs = isAdmin ? adminMobileTabs : customerMobileTabs;
+  const isOwner = session?.user?.isAdmin === true;
+  const isTech = session?.user?.role === "tech";
+  const tabs = isAdmin
+    ? adminTabs.filter((tab) => tab.href !== "/settings" || isOwner)
+    : customerTabs;
+  const mobileTabs = isAdmin
+    ? adminMobileTabs
+    : isTech
+      ? customerMobileTabs.filter((tab) => tab.href !== "/account")
+      : customerMobileTabs;
+  const moreTabs = isAdmin
+    ? adminMoreTabs.filter((tab) => tab.href !== "/settings" || isOwner)
+    : isTech
+      ? customerTechMoreTabs
+      : [];
+  const showMobileMore = isAdmin || isTech;
 
   const [moreOpen, setMoreOpen] = useState(false);
-  const moreActive = adminMoreTabs.some((tab) => isTabActive(pathname, tab.href));
+  const moreButtonRef = useRef<HTMLButtonElement>(null);
+  const moreMenuRef = useRef<HTMLDivElement>(null);
+  const moreActive = moreTabs.some((tab) => isTabActive(pathname, tab.href));
 
   // Close the sheet whenever navigation happens
   useEffect(() => {
@@ -76,14 +96,48 @@ export default function BottomNav({ variant = "customer" }: { variant?: "custome
 
   useEffect(() => {
     if (!moreOpen) return;
+    const previouslyFocused = document.activeElement;
+    const previousOverflow = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+    const frame = window.requestAnimationFrame(() => {
+      moreMenuRef.current
+        ?.querySelector<HTMLElement>("a[href], button:not([disabled])")
+        ?.focus();
+    });
+
     function onKey(e: KeyboardEvent) {
-      if (e.key === "Escape") setMoreOpen(false);
+      if (e.key === "Escape") {
+        setMoreOpen(false);
+        return;
+      }
+      if (e.key !== "Tab" || !moreMenuRef.current) return;
+
+      const focusable = Array.from(
+        moreMenuRef.current.querySelectorAll<HTMLElement>(
+          "a[href], button:not([disabled])",
+        ),
+      );
+      const first = focusable[0];
+      const last = focusable[focusable.length - 1];
+      if (!first || !last) return;
+      if (e.shiftKey && document.activeElement === first) {
+        e.preventDefault();
+        last.focus();
+      } else if (!e.shiftKey && document.activeElement === last) {
+        e.preventDefault();
+        first.focus();
+      }
     }
     document.addEventListener("keydown", onKey);
-    return () => document.removeEventListener("keydown", onKey);
+    return () => {
+      window.cancelAnimationFrame(frame);
+      document.removeEventListener("keydown", onKey);
+      document.body.style.overflow = previousOverflow;
+      if (previouslyFocused instanceof HTMLElement && document.contains(previouslyFocused)) {
+        previouslyFocused.focus();
+      }
+    };
   }, [moreOpen]);
-
-  const isTech = session?.user?.role === "tech";
 
   const userName = session?.user?.name || "User";
   const userInitials = userName
@@ -96,7 +150,7 @@ export default function BottomNav({ variant = "customer" }: { variant?: "custome
   return (
     <>
       {/* ── Mobile bottom nav (hidden on lg+) ─────────────────────────── */}
-      <nav className="lg:hidden fixed bottom-0 left-0 right-0 z-50 border-t border-border bg-white/95 backdrop-blur-lg">
+      <nav aria-label={isAdmin ? "Staff navigation" : "Customer navigation"} className="lg:hidden fixed bottom-0 left-0 right-0 z-40 border-t border-border bg-white/95 backdrop-blur-lg">
         <div className="mx-auto flex max-w-lg items-stretch pb-[env(safe-area-inset-bottom)]">
           {mobileTabs.map((tab) => {
             const isActive = isTabActive(pathname, tab.href);
@@ -105,7 +159,7 @@ export default function BottomNav({ variant = "customer" }: { variant?: "custome
                 key={tab.href}
                 href={tab.href}
                 aria-current={isActive ? "page" : undefined}
-                className={`flex flex-1 min-w-0 flex-col items-center gap-1 pt-2 pb-2.5 transition-colors ${
+                className={`flex min-h-14 flex-1 min-w-0 flex-col items-center justify-center gap-1 pt-2 pb-2.5 transition-colors ${
                   isActive ? "text-primary" : "text-text-tertiary active:text-text-secondary"
                 }`}
               >
@@ -117,12 +171,15 @@ export default function BottomNav({ variant = "customer" }: { variant?: "custome
             );
           })}
 
-          {isAdmin && (
+          {showMobileMore && (
             <button
+              ref={moreButtonRef}
               type="button"
               onClick={() => setMoreOpen((v) => !v)}
               aria-expanded={moreOpen}
-              className={`flex flex-1 min-w-0 flex-col items-center gap-1 pt-2 pb-2.5 transition-colors ${
+              aria-controls="mobile-more-menu"
+              aria-label={moreOpen ? "Close more navigation options" : "Open more navigation options"}
+              className={`flex min-h-14 flex-1 min-w-0 flex-col items-center justify-center gap-1 pt-2 pb-2.5 transition-colors ${
                 moreActive || moreOpen ? "text-primary" : "text-text-tertiary active:text-text-secondary"
               }`}
             >
@@ -135,26 +192,44 @@ export default function BottomNav({ variant = "customer" }: { variant?: "custome
         </div>
       </nav>
 
-      {/* ── "More" sheet (admin, mobile only) ─────────────────────────── */}
-      {isAdmin && moreOpen && (
+      {/* ── "More" sheet (staff account actions, mobile only) ─────────── */}
+      {showMobileMore && moreOpen && (
         <div className="lg:hidden fixed inset-0 z-[60]">
           <button
             type="button"
-            aria-label="Close menu"
+            aria-hidden="true"
+            tabIndex={-1}
             onClick={() => setMoreOpen(false)}
             className="absolute inset-0 bg-black/30"
           />
-          <div className="absolute bottom-0 left-0 right-0 rounded-t-2xl bg-surface pb-[max(env(safe-area-inset-bottom),12px)] animate-slide-in-bottom">
-            <div className="mx-auto mt-2.5 mb-1 h-1 w-9 rounded-full bg-border" />
+          <div
+            ref={moreMenuRef}
+            id="mobile-more-menu"
+            role="dialog"
+            aria-modal="true"
+            aria-label="More navigation options"
+            className="absolute inset-x-0 bottom-0 max-h-[calc(100dvh-1rem)] overflow-y-auto rounded-t-2xl bg-surface pb-[max(env(safe-area-inset-bottom),12px)] animate-slide-in-bottom"
+          >
+            <div className="flex min-h-12 items-center justify-between border-b border-border px-3">
+              <span className="px-2 text-[14px] font-semibold text-text-primary">More</span>
+              <button
+                type="button"
+                onClick={() => setMoreOpen(false)}
+                aria-label="Close more navigation options"
+                className="flex h-11 w-11 items-center justify-center rounded-xl text-text-secondary active:bg-surface-secondary"
+              >
+                <X size={19} />
+              </button>
+            </div>
             <div className="px-3 pt-2 pb-1">
-              {adminMoreTabs.map((tab) => {
+              {moreTabs.map((tab) => {
                 const isActive = isTabActive(pathname, tab.href);
                 return (
                   <Link
                     key={tab.href}
                     href={tab.href}
                     aria-current={isActive ? "page" : undefined}
-                    className={`flex items-center gap-3 rounded-xl px-3 py-3 ${
+                    className={`flex min-h-11 items-center gap-3 rounded-xl px-3 py-3 ${
                       isActive
                         ? "bg-primary-50 text-primary"
                         : "text-text-primary active:bg-surface-secondary"
@@ -167,10 +242,21 @@ export default function BottomNav({ variant = "customer" }: { variant?: "custome
                   </Link>
                 );
               })}
+              {isTech && (
+                <Link
+                  href={isAdmin ? "/home" : "/dashboard"}
+                  className="flex min-h-11 items-center gap-3 rounded-xl px-3 py-3 text-text-primary active:bg-surface-secondary"
+                >
+                  {isAdmin ? <User size={20} strokeWidth={1.8} /> : <Wrench size={20} strokeWidth={1.8} />}
+                  <span className="text-[15px] font-medium">
+                    {isAdmin ? "Customer view" : "Staff view"}
+                  </span>
+                </Link>
+              )}
               <button
                 type="button"
                 onClick={() => signOut({ callbackUrl: "/login" })}
-                className="flex w-full items-center gap-3 rounded-xl px-3 py-3 text-text-secondary active:bg-surface-secondary"
+                className="flex min-h-11 w-full items-center gap-3 rounded-xl px-3 py-3 text-text-secondary active:bg-surface-secondary"
               >
                 <LogOut size={20} strokeWidth={1.8} />
                 <span className="text-[15px] font-medium">Sign out</span>
@@ -188,7 +274,7 @@ export default function BottomNav({ variant = "customer" }: { variant?: "custome
             <div className="relative flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-primary shadow-[0_2px_8px_rgba(79,149,152,0.30)]">
               <span className="text-[10px] font-black tracking-[-0.05em] text-white">MCQ</span>
             </div>
-            <span className="text-[16px] font-black tracking-tight text-text-primary">MCQ Home Co.</span>
+            <span className="text-[16px] font-black tracking-tight text-text-primary">MCQ Property Care</span>
           </div>
 
           {/* Role Switcher - only for tech users */}
@@ -196,7 +282,7 @@ export default function BottomNav({ variant = "customer" }: { variant?: "custome
             <div className="flex rounded-full bg-gray-100 p-1">
               <a
                 href="/home"
-                className={`flex flex-1 items-center justify-center gap-1.5 rounded-full px-3 py-1.5 text-[12px] font-semibold transition-all no-underline ${
+                className={`flex min-h-11 flex-1 items-center justify-center gap-1.5 rounded-full px-3 py-1.5 text-[12px] font-semibold transition-all no-underline ${
                   !isAdmin
                     ? "bg-white text-primary shadow-sm"
                     : "text-gray-400 hover:text-gray-600"
@@ -207,7 +293,7 @@ export default function BottomNav({ variant = "customer" }: { variant?: "custome
               </a>
               <a
                 href="/dashboard"
-                className={`flex flex-1 items-center justify-center gap-1.5 rounded-full px-3 py-1.5 text-[12px] font-semibold transition-all no-underline ${
+                className={`flex min-h-11 flex-1 items-center justify-center gap-1.5 rounded-full px-3 py-1.5 text-[12px] font-semibold transition-all no-underline ${
                   isAdmin
                     ? "bg-white text-primary shadow-sm"
                     : "text-gray-400 hover:text-gray-600"
@@ -229,7 +315,7 @@ export default function BottomNav({ variant = "customer" }: { variant?: "custome
                 <Link
                   key={tab.href}
                   href={tab.href}
-                  className={`flex items-center gap-3 rounded-xl px-3 py-2.5 transition-all ${
+                  className={`flex min-h-11 items-center gap-3 rounded-xl px-3 py-2.5 transition-all ${
                     isActive
                       ? "bg-primary text-white shadow-[0_2px_8px_rgba(79,149,152,0.20)]"
                       : "text-gray-500 hover:bg-gray-50 hover:text-gray-900"
@@ -256,8 +342,10 @@ export default function BottomNav({ variant = "customer" }: { variant?: "custome
               <p className="text-[10px] text-text-tertiary">{isTech ? "Technician" : "Customer"}</p>
             </div>
             <button
+              type="button"
               onClick={() => signOut({ callbackUrl: "/login" })}
-              className="flex h-8 w-8 items-center justify-center rounded-lg text-gray-400 hover:bg-gray-200 hover:text-gray-600 transition-colors"
+              aria-label="Sign out"
+              className="flex h-11 w-11 shrink-0 items-center justify-center rounded-lg text-gray-400 transition-colors hover:bg-gray-200 hover:text-gray-600"
               title="Sign out"
             >
               <LogOut size={15} />

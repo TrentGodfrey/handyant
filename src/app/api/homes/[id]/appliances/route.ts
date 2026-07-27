@@ -1,26 +1,7 @@
 import { NextRequest } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { requireUser, unauthorized, notFound, forbidden, badRequest } from "@/lib/session";
-
-/**
- * Owner-or-tech access check (same pattern as /api/homes/[id]).
- * Tech can access any home; customer can only access their own.
- */
-async function canAccessHome(
-  user: { id: string; role: "customer" | "tech" },
-  home: { id: string; customerId: string }
-): Promise<boolean> {
-  if (home.customerId === user.id) return true;
-  if (user.role !== "tech") return false;
-  const booking = await prisma.booking.findFirst({
-    where: {
-      techId: user.id,
-      OR: [{ homeId: home.id }, { customerId: home.customerId }],
-    },
-    select: { id: true },
-  });
-  return Boolean(booking);
-}
+import { canAccessHome } from "@/lib/resource-access";
 
 export async function GET(_req: NextRequest, ctx: { params: Promise<{ id: string }> }) {
   const user = await requireUser();

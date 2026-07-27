@@ -28,7 +28,7 @@ export default function AddHomeForm({
   return (
     <div className="min-h-screen bg-background pb-28">
       <div className="bg-surface border-b border-border px-5 pt-14 pb-5">
-        <Link href="/account" className="mb-4 inline-flex items-center gap-1.5 text-[13px] font-medium text-text-secondary hover:text-text-primary transition-colors">
+        <Link href="/account" className="mb-4 inline-flex min-h-11 items-center gap-1.5 text-[13px] font-medium text-text-secondary hover:text-text-primary transition-colors">
           <ChevronLeft size={16} />
           Account
         </Link>
@@ -45,11 +45,11 @@ export default function AddHomeForm({
                 value={addHome.address}
                 onChange={(e) => setAddHome((s) => ({ ...s, address: e.target.value }))}
                 placeholder="123 Main St"
-                className="w-full rounded-lg border border-border bg-surface px-3 py-2.5 text-[14px] outline-none focus:border-primary"
+                className="min-h-11 w-full rounded-lg border border-border bg-surface px-3 py-2.5 text-[14px] outline-none focus:border-primary"
                 required
               />
             </div>
-            <div className="grid grid-cols-2 gap-2">
+            <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
               <div>
                 <label className="mb-1 block text-[11px] font-semibold uppercase tracking-wider text-text-tertiary">City</label>
                 <input
@@ -57,7 +57,7 @@ export default function AddHomeForm({
                   value={addHome.city}
                   onChange={(e) => setAddHome((s) => ({ ...s, city: e.target.value }))}
                   placeholder="Plano"
-                  className="w-full rounded-lg border border-border bg-surface px-3 py-2.5 text-[14px] outline-none focus:border-primary"
+                  className="min-h-11 w-full rounded-lg border border-border bg-surface px-3 py-2.5 text-[14px] outline-none focus:border-primary"
                 />
               </div>
               <div className="grid grid-cols-2 gap-2">
@@ -69,7 +69,7 @@ export default function AddHomeForm({
                     onChange={(e) => setAddHome((s) => ({ ...s, state: e.target.value }))}
                     placeholder="TX"
                     maxLength={2}
-                    className="w-full rounded-lg border border-border bg-surface px-3 py-2.5 text-[14px] outline-none focus:border-primary"
+                    className="min-h-11 w-full rounded-lg border border-border bg-surface px-3 py-2.5 text-[14px] outline-none focus:border-primary"
                   />
                 </div>
                 <div>
@@ -79,7 +79,7 @@ export default function AddHomeForm({
                     value={addHome.zip}
                     onChange={(e) => setAddHome((s) => ({ ...s, zip: e.target.value }))}
                     placeholder="75024"
-                    className="w-full rounded-lg border border-border bg-surface px-3 py-2.5 text-[14px] outline-none focus:border-primary"
+                    className="min-h-11 w-full rounded-lg border border-border bg-surface px-3 py-2.5 text-[14px] outline-none focus:border-primary"
                   />
                 </div>
               </div>
@@ -90,7 +90,7 @@ export default function AddHomeForm({
                 type="text"
                 value={addHome.gateCode}
                 onChange={(e) => setAddHome((s) => ({ ...s, gateCode: e.target.value }))}
-                className="w-full rounded-lg border border-border bg-surface px-3 py-2.5 text-[14px] outline-none focus:border-primary"
+                className="min-h-11 w-full rounded-lg border border-border bg-surface px-3 py-2.5 text-[14px] outline-none focus:border-primary"
               />
             </div>
             <div>

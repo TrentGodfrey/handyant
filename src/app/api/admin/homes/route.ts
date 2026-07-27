@@ -1,6 +1,7 @@
 import { NextRequest } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { requireTech, unauthorized } from "@/lib/session";
+import { homeRosterWhere } from "@/lib/resource-access";
 
 export async function GET(req: NextRequest) {
   const tech = await requireTech();
@@ -9,6 +10,7 @@ export async function GET(req: NextRequest) {
   const search = req.nextUrl.searchParams.get("q")?.toLowerCase();
 
   const homes = await prisma.home.findMany({
+    where: homeRosterWhere(tech),
     include: {
       customer: {
         select: {
@@ -25,6 +27,7 @@ export async function GET(req: NextRequest) {
         take: 1,
       },
       bookings: {
+        where: tech.isAdmin ? {} : { techId: tech.id },
         select: {
           id: true,
           status: true,

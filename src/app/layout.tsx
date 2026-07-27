@@ -1,15 +1,7 @@
 import type { Metadata, Viewport } from "next";
-import { Inter } from "next/font/google";
-import RoleSwitcher from "@/components/RoleSwitcher";
 import Providers from "@/components/Providers";
 import Toaster from "@/components/Toaster";
 import "./globals.css";
-
-const inter = Inter({
-  variable: "--font-inter",
-  subsets: ["latin"],
-  display: "swap",
-});
 
 export const metadata: Metadata = {
   title: "MCQ Property Care | DFW Home Services",
@@ -24,6 +16,7 @@ export const metadata: Metadata = {
 export const viewport: Viewport = {
   width: "device-width",
   initialScale: 1,
+  viewportFit: "cover",
   themeColor: "#FFFFFF",
 };
 
@@ -33,10 +26,9 @@ export default function RootLayout({
   children: React.ReactNode;
 }>) {
   return (
-    <html lang="en" className={`${inter.variable} h-full`}>
+    <html lang="en" className="h-full">
       <body className="min-h-full flex flex-col bg-background">
         <Providers>
-          <RoleSwitcher />
           {children}
           <Toaster />
         </Providers>

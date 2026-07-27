@@ -25,6 +25,7 @@ import { toast } from "@/components/Toaster";
 import { demoCustomerBy } from "@/lib/demoData";
 import Spinner from "@/components/Spinner";
 import { bookingDateToLocalDate, formatBookingTime } from "@/lib/booking-time";
+import { businessDateString } from "@/lib/booking-policy";
 
 // ── Types ────────────────────────────────────────────────────────────────────
 
@@ -70,8 +71,7 @@ function uiStatusToApi(status: PipelineStage): string {
 }
 
 function bucketDate(date: Date): "today" | "this-week" | "future" | "past" {
-  const now = new Date();
-  const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+  const today = bookingDateToLocalDate(businessDateString());
   const target = new Date(date.getFullYear(), date.getMonth(), date.getDate());
   const diffDays = Math.round((target.getTime() - today.getTime()) / 86400000);
   if (diffDays === 0) return "today";
@@ -82,8 +82,8 @@ function bucketDate(date: Date): "today" | "this-week" | "future" | "past" {
 
 function formatJobDate(dateIso: string, timeIso: string): string {
   const d = bookingDateToLocalDate(dateIso);
-  const now = new Date();
-  const isToday = d.toDateString() === now.toDateString();
+  const today = bookingDateToLocalDate(businessDateString());
+  const isToday = d.toDateString() === today.toDateString();
   const timeStr = formatBookingTime(timeIso);
   if (isToday) return `Today, ${timeStr}`;
   return `${d.toLocaleDateString("en-US", { month: "short", day: "numeric" })}, ${timeStr}`;
@@ -126,7 +126,7 @@ const DEMO_JOBS: Job[] = [
     id: "1",
     client: demoCustomerBy("1")!.name,
     address: "4821 Oak Hollow Dr, Plano",
-    date: "Today, 9:00 AM",
+    date: "Today, 8:00 AM",
     dateGroup: "today",
     tasks: ["Replace kitchen faucet", "Fix garage door sensor"],
     status: "confirmed",
@@ -181,7 +181,7 @@ const DEMO_JOBS: Job[] = [
     id: "6",
     client: "Derek Nguyen",
     address: "350 Creekside Blvd, Allen",
-    date: "Apr 5, 9:00 AM",
+    date: "Apr 5, 8:00 AM",
     dateGroup: "future",
     tasks: ["Fence gate repair", "Power wash driveway"],
     status: "scheduled",
@@ -205,7 +205,7 @@ const DEMO_JOBS: Job[] = [
     id: "8",
     client: "Kevin Bradley",
     address: "2905 Pecan Valley Dr, Plano",
-    date: "Mar 28, 9:00 AM",
+    date: "Mar 28, 8:00 AM",
     dateGroup: "past",
     tasks: ["Garbage disposal install", "Fix leaky P-trap"],
     status: "completed",
@@ -321,7 +321,7 @@ function StatusDropdown({
           e.stopPropagation();
           setOpen((v) => !v);
         }}
-        className="flex items-center gap-1 rounded-lg border border-border bg-surface px-2.5 py-1 text-[11px] font-semibold text-text-secondary hover:bg-surface-secondary hover:border-gray-300 transition-colors"
+        className="flex min-h-11 items-center gap-1 rounded-lg border border-border bg-surface px-2.5 py-1 text-[11px] font-semibold text-text-secondary hover:bg-surface-secondary hover:border-gray-300 transition-colors"
       >
         Status
         <ChevronDown size={12} />
@@ -340,7 +340,7 @@ function StatusDropdown({
                 onStatusChange(stage.key);
                 setOpen(false);
               }}
-              className="flex w-full items-center gap-2 px-3 py-2 text-[12px] text-text-primary hover:bg-surface-secondary transition-colors"
+              className="flex min-h-11 w-full items-center gap-2 px-3 py-2 text-[12px] text-text-primary hover:bg-surface-secondary transition-colors"
             >
               <span className={`h-2 w-2 rounded-full ${stage.dotClass}`} />
               {stage.label}
@@ -370,7 +370,7 @@ function PipelineSummary({
       <div className="flex flex-1 gap-2 overflow-x-auto pb-1 no-scrollbar">
         <button
           onClick={() => onStageClick("all")}
-          className={`flex shrink-0 items-center gap-1.5 rounded-full px-3.5 py-1.5 text-[12px] font-semibold transition-all duration-150 ${
+          className={`flex min-h-11 shrink-0 items-center gap-1.5 rounded-full px-3.5 py-1.5 text-[12px] font-semibold transition-all duration-150 ${
             activeStage === "all"
               ? "bg-text-primary text-white shadow-sm"
               : "border border-border bg-surface text-text-secondary hover:border-gray-300"
@@ -386,7 +386,7 @@ function PipelineSummary({
           <button
             key={stage.key}
             onClick={() => onStageClick(stage.key)}
-            className={`flex shrink-0 items-center gap-1.5 rounded-full px-3.5 py-1.5 text-[12px] font-semibold transition-all duration-150 ${
+            className={`flex min-h-11 shrink-0 items-center gap-1.5 rounded-full px-3.5 py-1.5 text-[12px] font-semibold transition-all duration-150 ${
               activeStage === stage.key
                 ? "text-white shadow-sm"
                 : "border border-border bg-surface text-text-secondary hover:border-gray-300"
@@ -809,7 +809,7 @@ export default function JobsPage() {
         <div className="flex items-center gap-1 rounded-lg border border-border bg-surface p-0.5">
           <button
             onClick={() => setView("list")}
-            className={`flex items-center gap-1.5 rounded-md px-2.5 py-1.5 text-[12px] font-semibold transition-colors ${
+            className={`flex min-h-11 items-center gap-1.5 rounded-md px-2.5 py-1.5 text-[12px] font-semibold transition-colors ${
               view === "list" ? "bg-primary text-white shadow-sm" : "text-text-secondary hover:bg-surface-secondary"
             }`}
           >
@@ -818,7 +818,7 @@ export default function JobsPage() {
           </button>
           <button
             onClick={() => setView("board")}
-            className={`flex items-center gap-1.5 rounded-md px-2.5 py-1.5 text-[12px] font-semibold transition-colors ${
+            className={`flex min-h-11 items-center gap-1.5 rounded-md px-2.5 py-1.5 text-[12px] font-semibold transition-colors ${
               view === "board" ? "bg-primary text-white shadow-sm" : "text-text-secondary hover:bg-surface-secondary"
             }`}
           >
@@ -830,7 +830,7 @@ export default function JobsPage() {
 
       {/* Search Bar */}
       <div className="mb-3 flex gap-2">
-        <div className="flex flex-1 items-center gap-2.5 rounded-xl border border-border bg-surface px-3.5 py-2.5 shadow-[0_1px_2px_rgba(0,0,0,0.04)]">
+        <div className="flex min-h-12 flex-1 items-center gap-2.5 rounded-xl border border-border bg-surface px-3.5 py-2.5 shadow-[0_1px_2px_rgba(0,0,0,0.04)]">
           <Search size={16} className="shrink-0 text-text-tertiary" />
           <input
             type="text"
@@ -867,14 +867,14 @@ export default function JobsPage() {
               {activeFilterCount > 0 && (
                 <button
                   onClick={clearAllFilters}
-                  className="text-[12px] font-semibold text-text-secondary hover:text-text-primary"
+                  className="min-h-11 px-2 text-[12px] font-semibold text-text-secondary hover:text-text-primary"
                 >
                   Clear all
                 </button>
               )}
               <button
                 onClick={() => setShowFilterPanel(false)}
-                className="text-[12px] font-semibold text-primary"
+                className="min-h-11 px-2 text-[12px] font-semibold text-primary"
               >
                 Done
               </button>
@@ -891,7 +891,7 @@ export default function JobsPage() {
                     <button
                       key={s.key}
                       onClick={() => toggleFilterStatus(s.key)}
-                      className={`rounded-full border px-3 py-1 text-[11px] font-semibold transition-colors ${
+                      className={`min-h-11 rounded-full border px-3 py-1 text-[11px] font-semibold transition-colors ${
                         active
                           ? "border-primary bg-primary text-white"
                           : "border-border bg-surface text-text-secondary hover:border-primary/40"
@@ -913,7 +913,7 @@ export default function JobsPage() {
                     <button
                       key={b.key}
                       onClick={() => toggleFilterDateBucket(b.key)}
-                      className={`rounded-full border px-3 py-1 text-[11px] font-semibold transition-colors ${
+                      className={`min-h-11 rounded-full border px-3 py-1 text-[11px] font-semibold transition-colors ${
                         active
                           ? "border-primary bg-primary text-white"
                           : "border-border bg-surface text-text-secondary hover:border-primary/40"
@@ -930,7 +930,7 @@ export default function JobsPage() {
               <p className="mb-1.5 text-[10px] font-bold uppercase tracking-widest text-text-tertiary">Other</p>
               <button
                 onClick={() => setFilterPartsOnly((v) => !v)}
-                className={`rounded-full border px-3 py-1 text-[11px] font-semibold transition-colors ${
+                className={`min-h-11 rounded-full border px-3 py-1 text-[11px] font-semibold transition-colors ${
                   filterPartsOnly
                     ? "border-accent-amber bg-accent-amber text-white"
                     : "border-border bg-surface text-text-secondary hover:border-accent-amber/40"
@@ -954,7 +954,7 @@ export default function JobsPage() {
           <button
             type="button"
             onClick={() => setReloadKey((k) => k + 1)}
-            className="shrink-0 inline-flex items-center gap-1.5 rounded-lg bg-error px-3 py-1.5 text-[12px] font-semibold text-white hover:bg-red-700 transition-colors"
+            className="inline-flex min-h-11 shrink-0 items-center gap-1.5 rounded-lg bg-error px-3 py-1.5 text-[12px] font-semibold text-white hover:bg-red-700 transition-colors"
           >
             <RotateCw size={12} />
             Retry

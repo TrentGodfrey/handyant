@@ -1,5 +1,7 @@
 // Shared types + constants for the customer Home Profile page and its sub-components.
 
+import { formatBookingDate } from "@/lib/booking-time";
+
 export type Priority = "high" | "medium" | "low";
 export type PartStatus = "Purchased" | "Needs Purchase" | "Tech to Purchase" | null;
 
@@ -109,9 +111,11 @@ export const PRIORITY_CONFIG: Record<Priority, { dot: string; label: string; rin
 };
 
 export function formatVisitDate(iso: string): string {
-  const d = new Date(iso);
-  if (Number.isNaN(d.getTime())) return iso;
-  return d.toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" });
+  return formatBookingDate(iso, {
+    month: "short",
+    day: "numeric",
+    year: "numeric",
+  });
 }
 
 export function formatHours(minutes: number | null): string {

@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useState } from "react";
+import Link from "next/link";
 import Card from "@/components/Card";
 import { useDemoMode } from "@/lib/useDemoMode";
 import { toast } from "@/components/Toaster";
@@ -133,6 +134,7 @@ export default function TodoPage() {
 
 function RealTodoPage() {
   const [homes, setHomes] = useState<ApiHome[]>([]);
+  const [selectedHomeId, setSelectedHomeId] = useState<string | null>(null);
   const [todos, setTodos] = useState<EnrichedTodo[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -140,7 +142,7 @@ function RealTodoPage() {
   const [filter, setFilter] = useState<FilterMode>("open");
   const [savingTask, setSavingTask] = useState(false);
 
-  const primaryHome = homes[0] ?? null;
+  const selectedHome = homes.find((home) => home.id === selectedHomeId) ?? homes[0] ?? null;
 
   const refresh = useCallback(async () => {
     setLoading(true);
@@ -150,6 +152,9 @@ function RealTodoPage() {
       if (!homesRes.ok) throw new Error("Failed to load homes");
       const homesData = (await homesRes.json()) as ApiHome[];
       setHomes(homesData);
+      setSelectedHomeId((current) =>
+        homesData.some((home) => home.id === current) ? current : homesData[0]?.id ?? null,
+      );
 
       if (!homesData.length) {
         setTodos([]);
@@ -246,13 +251,13 @@ function RealTodoPage() {
   }
 
   async function handleAddTask(payload: NewTaskPayload) {
-    if (!primaryHome) {
+    if (!selectedHome) {
       toast.error("Add a home first");
       return;
     }
     setSavingTask(true);
     try {
-      const res = await fetch(`/api/homes/${primaryHome.id}/todos`, {
+      const res = await fetch(`/api/homes/${selectedHome.id}/todos`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(payload),
@@ -271,14 +276,18 @@ function RealTodoPage() {
     }
   }
 
+  const selectedTodos = useMemo(
+    () => todos.filter((todo) => todo.homeId === selectedHome?.id),
+    [todos, selectedHome?.id],
+  );
   const filtered = useMemo(() => {
-    if (filter === "open") return todos.filter((t) => !t.done);
-    if (filter === "done") return todos.filter((t) => t.done);
-    return todos;
-  }, [todos, filter]);
+    if (filter === "open") return selectedTodos.filter((t) => !t.done);
+    if (filter === "done") return selectedTodos.filter((t) => t.done);
+    return selectedTodos;
+  }, [selectedTodos, filter]);
 
-  const openCount = todos.filter((t) => !t.done).length;
-  const doneCount = todos.filter((t) => t.done).length;
+  const openCount = selectedTodos.filter((t) => !t.done).length;
+  const doneCount = selectedTodos.filter((t) => t.done).length;
 
   if (loading) {
     return (
@@ -299,7 +308,7 @@ function RealTodoPage() {
               <p className="text-[12px] text-text-secondary mt-1">{error}</p>
               <button
                 onClick={refresh}
-                className="mt-3 rounded-lg border border-border bg-white px-3 py-1.5 text-[12px] font-semibold text-text-primary hover:bg-surface-secondary"
+                className="mt-3 min-h-11 rounded-lg border border-border bg-white px-3 py-1.5 text-[12px] font-semibold text-text-primary hover:bg-surface-secondary"
               >
                 Retry
               </button>
@@ -313,7 +322,7 @@ function RealTodoPage() {
   return (
     <TodoPageView
       todos={filtered}
-      totalCount={todos.length}
+      totalCount={selectedTodos.length}
       openCount={openCount}
       doneCount={doneCount}
       filter={filter}
@@ -321,12 +330,15 @@ function RealTodoPage() {
       showAdd={showAdd}
       setShowAdd={setShowAdd}
       handleAddTask={handleAddTask}
-      homeIdForUpload={primaryHome?.id ?? null}
+      homeIdForUpload={selectedHome?.id ?? null}
       savingTask={savingTask}
       onToggleDone={toggleDone}
       onDelete={deleteTodo}
-      hasHome={!!primaryHome}
+      hasHome={!!selectedHome}
       demoMode={false}
+      homes={homes}
+      selectedHomeId={selectedHome?.id ?? null}
+      onSelectHome={setSelectedHomeId}
     />
   );
 }
@@ -407,6 +419,9 @@ function DemoTodoPage() {
       onDelete={deleteTodo}
       hasHome
       demoMode
+      homes={[]}
+      selectedHomeId={null}
+      onSelectHome={() => undefined}
     />
   );
 }
@@ -429,6 +444,9 @@ interface ViewProps {
   onDelete: (t: EnrichedTodo) => void;
   hasHome: boolean;
   demoMode: boolean;
+  homes: ApiHome[];
+  selectedHomeId: string | null;
+  onSelectHome: (homeId: string) => void;
 }
 
 function TodoPageView(props: ViewProps) {
@@ -438,6 +456,7 @@ function TodoPageView(props: ViewProps) {
     showAdd, setShowAdd, handleAddTask, homeIdForUpload, savingTask,
     onToggleDone, onDelete,
     hasHome, demoMode,
+    homes, selectedHomeId, onSelectHome,
   } = props;
 
   return (
@@ -460,13 +479,33 @@ function TodoPageView(props: ViewProps) {
           {!showAdd && hasHome && (
             <button
               onClick={() => setShowAdd(true)}
-              className="flex items-center gap-1.5 rounded-xl bg-primary px-3.5 py-2 text-[12px] font-semibold text-white shadow-sm active:opacity-90 transition-opacity"
+              className="flex min-h-11 items-center gap-1.5 rounded-xl bg-primary px-3.5 py-2 text-[12px] font-semibold text-white shadow-sm active:opacity-90 transition-opacity"
             >
               <Plus size={14} />
               Add Task
             </button>
           )}
         </div>
+
+        {homes.length > 1 && (
+          <div className="mb-3">
+            <label htmlFor="todo-home-selector" className="mb-1.5 block text-[11px] font-semibold text-text-secondary">
+              Home
+            </label>
+            <select
+              id="todo-home-selector"
+              value={selectedHomeId ?? ""}
+              onChange={(event) => onSelectHome(event.target.value)}
+              className="min-h-11 w-full rounded-xl border border-border bg-surface px-3 text-[13px] font-semibold text-text-primary"
+            >
+              {homes.map((home) => (
+                <option key={home.id} value={home.id}>
+                  {home.address}{home.city ? `, ${home.city}` : ""}
+                </option>
+              ))}
+            </select>
+          </div>
+        )}
 
         {/* Filter tabs */}
         <div className="inline-flex rounded-full bg-surface-secondary p-1">
@@ -477,7 +516,7 @@ function TodoPageView(props: ViewProps) {
               <button
                 key={f}
                 onClick={() => setFilter(f)}
-                className={`rounded-full px-3 py-1.5 text-[12px] font-semibold transition-all ${
+                className={`min-h-11 rounded-full px-3 py-1.5 text-[12px] font-semibold transition-all ${
                   filter === f
                     ? "bg-white text-primary shadow-sm"
                     : "text-text-secondary"
@@ -568,18 +607,20 @@ function TodoRow({
         {/* Checkbox */}
         <button
           onClick={onToggleDone}
-          className={`mt-0.5 flex h-5 w-5 shrink-0 items-center justify-center rounded-md border-2 transition-all ${
-            todo.done
-              ? "border-primary bg-primary text-white"
-              : "border-border bg-surface hover:border-primary"
-          }`}
+          className="mt-[-0.5rem] flex h-11 w-11 shrink-0 items-center justify-center"
           aria-label={todo.done ? "Mark as not done" : "Mark as done"}
         >
-          {todo.done && (
-            <svg width="11" height="11" viewBox="0 0 12 12" fill="none">
-              <path d="M2.5 6.5L4.5 8.5L9.5 3.5" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
-            </svg>
-          )}
+          <span className={`flex h-5 w-5 items-center justify-center rounded-md border-2 transition-all ${
+              todo.done
+                ? "border-primary bg-primary text-white"
+                : "border-border bg-surface hover:border-primary"
+            }`}>
+            {todo.done && (
+              <svg width="11" height="11" viewBox="0 0 12 12" fill="none">
+                <path d="M2.5 6.5L4.5 8.5L9.5 3.5" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
+              </svg>
+            )}
+          </span>
         </button>
 
         <div className="flex-1 min-w-0">
@@ -588,17 +629,20 @@ function TodoRow({
               {!todo.done && (
                 <div className={`mt-1.5 h-2 w-2 shrink-0 rounded-full ${PRIORITY_DOT[todo.priority] ?? "bg-text-tertiary"}`} />
               )}
-              <p
+              <Link
+                href={`/task/${todo.id}`}
                 className={`text-[14px] font-semibold leading-snug ${
-                  todo.done ? "line-through text-text-tertiary" : "text-text-primary"
+                  todo.done
+                    ? "line-through text-text-tertiary"
+                    : "text-text-primary hover:text-primary"
                 }`}
               >
                 {todo.task}
-              </p>
+              </Link>
             </div>
             <button
               onClick={onDelete}
-              className="shrink-0 flex h-7 w-7 items-center justify-center rounded-lg text-text-tertiary hover:bg-error-light hover:text-error transition-colors"
+              className="mt-[-0.5rem] flex h-11 w-11 shrink-0 items-center justify-center rounded-lg text-text-tertiary hover:bg-error-light hover:text-error transition-colors"
               aria-label="Delete task"
             >
               <Trash2 size={13} />

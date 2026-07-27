@@ -1,0 +1,19 @@
+[Unit]
+Description=Send due MCQ appointment reminder emails
+Wants=network-online.target
+After=network-online.target
+
+[Service]
+Type=oneshot
+User=webapps
+Group=webapps
+WorkingDirectory=/var/www/handyant
+Environment=NODE_ENV=production
+EnvironmentFile=/var/www/handyant/.env
+ExecStart=/var/www/handyant/node_modules/.bin/tsx /var/www/handyant/scripts/process-reminders.ts
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectHome=true
+ProtectSystem=strict
+ReadOnlyPaths=/var/www/handyant
+RestrictAddressFamilies=AF_UNIX AF_INET AF_INET6

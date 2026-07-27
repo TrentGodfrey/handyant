@@ -3,8 +3,8 @@ import BottomNav from "@/components/BottomNav";
 export default function CustomerLayout({ children }: { children: React.ReactNode }) {
   return (
     <>
-      <main className="flex-1 lg:pb-8 lg:ml-64">
-        <div className="lg:max-w-3xl lg:mx-auto">
+      <main className="app-shell min-w-0 w-full flex-1 lg:ml-64 lg:w-auto lg:pb-8">
+        <div className="min-w-0 w-full lg:mx-auto lg:max-w-3xl">
           {children}
         </div>
       </main>

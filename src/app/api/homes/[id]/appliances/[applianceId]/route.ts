@@ -1,22 +1,7 @@
 import { NextRequest } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { requireUser, unauthorized, notFound, forbidden, badRequest } from "@/lib/session";
-
-async function canAccessHome(
-  user: { id: string; role: "customer" | "tech" },
-  home: { id: string; customerId: string }
-): Promise<boolean> {
-  if (home.customerId === user.id) return true;
-  if (user.role !== "tech") return false;
-  const booking = await prisma.booking.findFirst({
-    where: {
-      techId: user.id,
-      OR: [{ homeId: home.id }, { customerId: home.customerId }],
-    },
-    select: { id: true },
-  });
-  return Boolean(booking);
-}
+import { canAccessHome } from "@/lib/resource-access";
 
 export async function PATCH(req: NextRequest, ctx: { params: Promise<{ id: string; applianceId: string }> }) {
   const user = await requireUser();

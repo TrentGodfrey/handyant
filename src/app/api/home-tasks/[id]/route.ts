@@ -1,16 +1,28 @@
 import { NextRequest } from "next/server";
 import { prisma } from "@/lib/prisma";
-import { badRequest, forbidden, notFound, requireUser, unauthorized } from "@/lib/session";
+import {
+  badRequest,
+  forbidden,
+  notFound,
+  requireUser,
+  unauthorized,
+  verificationRequired,
+} from "@/lib/session";
 import { sendHomeTaskEmail } from "@/lib/task-email";
-
-const ALLOWED_FIELDS = new Set(["task", "description", "priority", "status", "partsDescription", "partsBuyer", "notes", "photoIds", "hasPhoto"]);
+import { canAccessHome } from "@/lib/resource-access";
+import { rateLimited, takeRateLimit } from "@/lib/rate-limit";
+import {
+  TEXT_LIMITS,
+  optionalBoundedText,
+  requiredBoundedText,
+} from "@/lib/text-input";
 
 async function findAccessibleTask(id: string) {
   const user = await requireUser();
   if (!user) return { error: unauthorized() } as const;
   const task = await prisma.homeTodo.findUnique({ where: { id }, include: { home: { select: { id: true, customerId: true, address: true } } } });
   if (!task) return { error: notFound("Task not found") } as const;
-  if (task.home.customerId !== user.id && user.role !== "tech") return { error: forbidden() } as const;
+  if (!(await canAccessHome(user, task.home))) return { error: forbidden() } as const;
   return { user, task } as const;
 }
 
@@ -33,18 +45,63 @@ export async function PATCH(req: NextRequest, ctx: { params: Promise<{ id: strin
   const { id } = await ctx.params;
   const access = await findAccessibleTask(id);
   if ("error" in access) return access.error;
+  if (access.user.role === "customer" && !access.user.emailVerified) {
+    return verificationRequired();
+  }
+  const limit = takeRateLimit(`home-task-update:${access.user.id}`, 120, 60 * 60 * 1000);
+  if (!limit.allowed) return rateLimited(limit.retryAfterSeconds);
   const body = await req.json().catch(() => null);
   if (!body || typeof body !== "object") return badRequest("Invalid body");
   const data: Record<string, unknown> = {};
-  for (const [key, value] of Object.entries(body)) if (ALLOWED_FIELDS.has(key)) data[key] = value;
-  if (typeof data.task === "string") data.task = data.task.trim();
-  if (data.task === "") return badRequest("Task name is required");
-  if (Array.isArray(data.photoIds)) {
-    const requested = data.photoIds.filter((value): value is string => typeof value === "string");
+  if ("task" in body) {
+    const task = requiredBoundedText(body.task, "Task", TEXT_LIMITS.taskTitle);
+    if (!task.ok) return badRequest(task.message);
+    data.task = task.value;
+  }
+  const optionalTextFields = [
+    ["description", "Description", TEXT_LIMITS.taskDescription],
+    ["partsDescription", "Parts details", TEXT_LIMITS.partsDescription],
+    ["partsBuyer", "Parts buyer", TEXT_LIMITS.partsBuyer],
+    ["notes", "Notes", TEXT_LIMITS.taskNotes],
+  ] as const;
+  for (const [key, label, maxLength] of optionalTextFields) {
+    if (!(key in body)) continue;
+    const value = optionalBoundedText(body[key], label, maxLength);
+    if (!value.ok) return badRequest(value.message);
+    data[key] = value.value;
+  }
+  if ("priority" in body) {
+    if (!["low", "medium", "high"].includes(body.priority as string)) {
+      return badRequest("Priority must be low, medium, or high");
+    }
+    data.priority = body.priority;
+  }
+  if ("status" in body) {
+    if (typeof body.status !== "string" || !body.status.trim() || body.status.trim().length > 40) {
+      return badRequest("Invalid task status");
+    }
+    data.status = body.status.trim();
+  }
+  if ("photoIds" in body) {
+    if (!Array.isArray(body.photoIds)) return badRequest("photoIds must be a list");
+    const requested: string[] = [...new Set<string>(
+      (body.photoIds as unknown[]).filter(
+        (value: unknown): value is string =>
+          typeof value === "string" &&
+          /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(value),
+      ),
+    )];
+    if (requested.length !== body.photoIds.length || requested.length > 12) {
+      return badRequest("One or more task photos are invalid");
+    }
     const valid = await prisma.photo.findMany({ where: { id: { in: requested }, homeId: access.task.homeId }, select: { id: true } });
+    if (valid.length !== requested.length) {
+      return badRequest("One or more task photos do not belong to this home");
+    }
     data.photoIds = valid.map((photo) => photo.id);
     data.hasPhoto = valid.length > 0;
   }
+  if (Object.keys(data).length === 0) return badRequest("No valid task updates were provided");
   const updated = await prisma.homeTodo.update({ where: { id }, data, include: { home: { select: { id: true, address: true } } } });
   await sendHomeTaskEmail({
     homeId: access.task.homeId,

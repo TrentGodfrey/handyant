@@ -3,8 +3,10 @@ import type { NextConfig } from "next";
 const scriptSrc = process.env.NODE_ENV === "development"
   ? "script-src 'self' 'unsafe-inline' 'unsafe-eval'"
   : "script-src 'self' 'unsafe-inline'";
+const isProduction = process.env.NODE_ENV === "production";
 
 const nextConfig: NextConfig = {
+  allowedDevOrigins: ["127.0.0.1", "192.168.50.29", "localhost"],
   async headers() {
     return [
       {
@@ -17,16 +19,18 @@ const nextConfig: NextConfig = {
             key: "Permissions-Policy",
             value: "camera=(self), microphone=(), geolocation=(self)",
           },
-          {
-            key: "Strict-Transport-Security",
-            value: "max-age=63072000; includeSubDomains; preload",
-          },
+          ...(isProduction
+            ? [{
+                key: "Strict-Transport-Security",
+                value: "max-age=63072000; includeSubDomains; preload",
+              }]
+            : []),
           {
             key: "Content-Security-Policy",
             value: [
               "default-src 'self'",
               "base-uri 'self'",
-              "form-action 'self' https://square.link https://checkout.square.site",
+              "form-action 'self'",
               "frame-ancestors 'none'",
               "object-src 'none'",
               scriptSrc,
@@ -34,7 +38,7 @@ const nextConfig: NextConfig = {
               "img-src 'self' data: blob: https://*.tile.openstreetmap.org https://lh3.googleusercontent.com",
               "font-src 'self' data:",
               "connect-src 'self'",
-              "upgrade-insecure-requests",
+              ...(isProduction ? ["upgrade-insecure-requests"] : []),
             ].join("; "),
           },
         ],

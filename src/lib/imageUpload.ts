@@ -7,6 +7,7 @@
  */
 
 export const MAX_IMAGE_BYTES = 5 * 1024 * 1024; // 5 MB
+export const MAX_IMAGE_REQUEST_BYTES = 7 * 1024 * 1024; // base64 + JSON overhead
 
 export const MIME_EXT: Record<string, string> = {
   "image/jpeg": "jpg",
@@ -20,6 +21,13 @@ export interface ParsedImage {
   ext: string;
   buffer: Buffer;
   mime: string;
+}
+
+export function imageRequestExceedsLimit(request: Request): boolean {
+  const rawLength = request.headers.get("content-length");
+  if (!rawLength) return false;
+  const length = Number(rawLength);
+  return Number.isFinite(length) && length > MAX_IMAGE_REQUEST_BYTES;
 }
 
 /**

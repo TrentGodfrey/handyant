@@ -1,23 +1,10 @@
 import { NextRequest } from "next/server";
 import { prisma } from "@/lib/prisma";
-import { requireUser, unauthorized, notFound, forbidden } from "@/lib/session";
+import { requireAdmin, requireUser, unauthorized, notFound, forbidden } from "@/lib/session";
 import { decryptHomeAccess, encryptSensitiveValue } from "@/lib/sensitive-data";
 import { isConfirmedHomeHistoryDeletion } from "@/lib/home-deletion";
 import { deleteLocalUploadFiles } from "@/lib/upload-storage";
-
-/**
- * Returns true if `user` is allowed to read/edit this home:
- * - The customer who owns it.
- * - Any authenticated tech. The staff Homes screen is the business-wide client list,
- *   including newly added homes that do not have a booking yet.
- */
-async function canAccessHome(
-  user: { id: string; role: "customer" | "tech" },
-  home: { id: string; customerId: string }
-): Promise<boolean> {
-  if (home.customerId === user.id) return true;
-  return user.role === "tech";
-}
+import { canAccessHome } from "@/lib/resource-access";
 
 export async function GET(_req: NextRequest, ctx: { params: Promise<{ id: string }> }) {
   const user = await requireUser();
@@ -72,12 +59,19 @@ export async function GET(_req: NextRequest, ctx: { params: Promise<{ id: string
   const { passwordHash, googleId, ...customer } = home.customer;
   const responseHome = {
     ...decryptHomeAccess(home),
-    bookings: home.bookings.map((booking) => user.role === "tech" ? booking : { ...booking, techNotes: null }),
+    bookings: home.bookings
+      .filter((booking) => user.role !== "tech" || user.isAdmin || booking.techId === user.id)
+      .map((booking) => ({
+        ...booking,
+        techNotes: user.role === "tech" ? booking.techNotes : null,
+        estimatedCost: null,
+        finalCost: null,
+      })),
     techNotes: user.role === "tech" ? home.techNotes : [],
     customer: { ...customer, hasLogin: Boolean(passwordHash || googleId) },
     activeSubscription: home.subscriptions[0] ?? null,
     subscriptions: undefined,
-    pendingInvitation: user.role === "tech" ? home.invitations[0] ?? null : null,
+    pendingInvitation: user.isAdmin ? home.invitations[0] ?? null : null,
     invitations: undefined,
   };
 
@@ -99,7 +93,12 @@ export async function GET(_req: NextRequest, ctx: { params: Promise<{ id: string
         },
       });
       if (orphanBookings.length) {
-        const sanitizedOrphans = orphanBookings.map((booking) => ({ ...booking, techNotes: null }));
+        const sanitizedOrphans = orphanBookings.map((booking) => ({
+          ...booking,
+          techNotes: null,
+          estimatedCost: null,
+          finalCost: null,
+        }));
         const merged = [...responseHome.bookings, ...sanitizedOrphans].sort(
           (a, b) => new Date(b.scheduledDate).getTime() - new Date(a.scheduledDate).getTime(),
         );
@@ -122,11 +121,7 @@ export async function PATCH(req: NextRequest, ctx: { params: Promise<{ id: strin
 
   const body = await req.json();
   const data: Record<string, unknown> = {};
-  for (const key of [
-    "address",
-    "city",
-    "state",
-    "zip",
+  const staffSafeKeys = [
     "notes",
     "gateCode",
     "wifiName",
@@ -136,7 +131,11 @@ export async function PATCH(req: NextRequest, ctx: { params: Promise<{ id: strin
     "panelAmps",
     "lat",
     "lng",
-  ]) {
+  ];
+  const ownerKeys = ["address", "city", "state", "zip", ...staffSafeKeys];
+  const allowedKeys =
+    user.role === "tech" && !user.isAdmin ? staffSafeKeys : ownerKeys;
+  for (const key of allowedKeys) {
     if (body[key] !== undefined) data[key] = body[key];
   }
   if (body.gateCode !== undefined) data.gateCode = encryptSensitiveValue(body.gateCode);
@@ -168,6 +167,7 @@ export async function DELETE(req: NextRequest, ctx: { params: Promise<{ id: stri
   });
   if (!home) return notFound("Home not found");
   if (!(await canAccessHome(user, home))) return forbidden();
+  if (user.role === "tech" && !user.isAdmin) return forbidden();
 
   const hasHistory =
     home.bookings.length > 0 ||
@@ -184,15 +184,15 @@ export async function DELETE(req: NextRequest, ctx: { params: Promise<{ id: stri
   if (hasHistory && !deleteHistory) {
     return Response.json(
       {
-        error: "This home has visit or payment history. Staff can permanently delete it using the history confirmation.",
+        error: "This home has visit or membership history. The account owner can permanently delete it using the history confirmation.",
         code: "HOME_HAS_HISTORY",
-        canDeleteHistory: user.role === "tech",
+        canDeleteHistory: user.isAdmin,
       },
       { status: 409 },
     );
   }
 
-  if (deleteHistory && user.role !== "tech") return forbidden();
+  if (deleteHistory && !(await requireAdmin())) return forbidden();
 
   const photoUrls = [
     ...home.photos.map((photo) => photo.url),
