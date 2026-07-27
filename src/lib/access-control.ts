@@ -1,4 +1,9 @@
 export const PRIVILEGED_SESSION_MAX_AGE_MS = 8 * 60 * 60 * 1000;
+export const ACTIVE_HOME_ASSIGNMENT_STATUSES = [
+  "pending",
+  "confirmed",
+  "in_progress",
+] as const;
 
 export interface SessionSecurityClaims {
   role: "customer" | "tech";
@@ -54,6 +59,16 @@ export function canAccessBookingResource(
   return (
     booking.customerId === user.id ||
     (user.role === "tech" && (user.isAdmin || booking.techId === user.id))
+  );
+}
+
+export function canMutateSharedHomeNote(
+  user: { id: string; role: "customer" | "tech"; isAdmin: boolean },
+  authorId: string | null,
+): boolean {
+  return (
+    user.role === "tech" &&
+    (user.isAdmin || (authorId !== null && authorId === user.id))
   );
 }
 

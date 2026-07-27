@@ -3,6 +3,7 @@ import test from "node:test";
 import {
   PRIVILEGED_SESSION_MAX_AGE_MS,
   canAccessBookingResource,
+  canMutateSharedHomeNote,
   canAccessWhilePasswordChangeRequired,
   hasAdminAccess,
   isPrivilegedSessionActive,
@@ -62,6 +63,44 @@ test("booking resources are limited to the customer, owner, or assigned technici
     canAccessBookingResource(
       { id: "other-customer", role: "customer", isAdmin: false },
       booking,
+    ),
+    false,
+  );
+});
+
+test("ordinary technicians can mutate only their own shared home notes", () => {
+  assert.equal(
+    canMutateSharedHomeNote(
+      { id: "tech-1", role: "tech", isAdmin: false },
+      "tech-1",
+    ),
+    true,
+  );
+  assert.equal(
+    canMutateSharedHomeNote(
+      { id: "tech-1", role: "tech", isAdmin: false },
+      "tech-2",
+    ),
+    false,
+  );
+  assert.equal(
+    canMutateSharedHomeNote(
+      { id: "tech-1", role: "tech", isAdmin: false },
+      null,
+    ),
+    false,
+  );
+  assert.equal(
+    canMutateSharedHomeNote(
+      { id: "owner", role: "tech", isAdmin: true },
+      null,
+    ),
+    true,
+  );
+  assert.equal(
+    canMutateSharedHomeNote(
+      { id: "customer", role: "customer", isAdmin: false },
+      "customer",
     ),
     false,
   );

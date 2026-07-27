@@ -2,6 +2,7 @@ import { NextRequest } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { requireUser, unauthorized, notFound, forbidden } from "@/lib/session";
 import { canAccessHome } from "@/lib/resource-access";
+import { canMutateSharedHomeNote } from "@/lib/access-control";
 
 const ALLOWED_FIELDS = ["title", "body", "severity"];
 
@@ -20,6 +21,7 @@ export async function PATCH(
 
   const note = await prisma.homeNote.findUnique({ where: { id: noteId } });
   if (!note || note.homeId !== id) return notFound("Note not found");
+  if (!canMutateSharedHomeNote(user, note.authorId)) return forbidden();
 
   const body = await req.json();
   const data: Record<string, unknown> = {};
@@ -46,6 +48,7 @@ export async function DELETE(
 
   const note = await prisma.homeNote.findUnique({ where: { id: noteId } });
   if (!note || note.homeId !== id) return notFound("Note not found");
+  if (!canMutateSharedHomeNote(user, note.authorId)) return forbidden();
 
   await prisma.homeNote.delete({ where: { id: noteId } });
   return Response.json({ ok: true });

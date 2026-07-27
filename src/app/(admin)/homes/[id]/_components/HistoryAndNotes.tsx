@@ -188,11 +188,12 @@ interface NotesProps {
   savingNote: boolean;
   addNote: () => void;
   deleteNote: (id: string) => void;
+  canDeleteNote: (note: ApiTechNote) => boolean;
 }
 
 export function HandymanNotes({
   notes, showAddNote, setShowAddNote,
-  newNoteText, setNewNoteText, savingNote, addNote, deleteNote,
+  newNoteText, setNewNoteText, savingNote, addNote, deleteNote, canDeleteNote,
 }: NotesProps) {
   return (
     <section className="mb-8">
@@ -251,15 +252,17 @@ export function HandymanNotes({
                     {note.authorName && <span>· {note.authorName}</span>}
                   </p>
                 </div>
-                <button
-                  type="button"
-                  onClick={() => deleteNote(note.id)}
-                  className="shrink-0 flex h-11 w-11 items-center justify-center rounded-full text-text-tertiary active:bg-error-light active:text-error transition-colors"
-                  aria-label={`Delete note: ${note.title}`}
-                  title="Delete note"
-                >
-                  <Trash2 size={11} />
-                </button>
+                {canDeleteNote(note) && (
+                  <button
+                    type="button"
+                    onClick={() => deleteNote(note.id)}
+                    className="shrink-0 flex h-11 w-11 items-center justify-center rounded-full text-text-tertiary active:bg-error-light active:text-error transition-colors"
+                    aria-label={`Delete note: ${note.title}`}
+                    title="Delete note"
+                  >
+                    <Trash2 size={11} />
+                  </button>
+                )}
               </div>
             ))}
           </div>

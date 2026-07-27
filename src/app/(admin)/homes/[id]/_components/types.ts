@@ -64,6 +64,7 @@ export interface ApiTechNote {
   title: string;
   body: string | null;
   severity: string | null;
+  authorId: string | null;
   authorName: string | null;
   createdAt: string;
 }

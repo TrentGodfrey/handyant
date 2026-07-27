@@ -1,6 +1,9 @@
 import { prisma } from "@/lib/prisma";
 import type { SessionUser } from "@/lib/session";
-import { canAccessBookingResource } from "@/lib/access-control";
+import {
+  ACTIVE_HOME_ASSIGNMENT_STATUSES,
+  canAccessBookingResource,
+} from "@/lib/access-control";
 
 type ResourceUser = Pick<SessionUser, "id" | "role" | "isAdmin">;
 
@@ -26,7 +29,11 @@ export async function canAccessHome(
   if (user.isAdmin) return true;
 
   const assignedBooking = await prisma.booking.findFirst({
-    where: { homeId: home.id, techId: user.id },
+    where: {
+      homeId: home.id,
+      techId: user.id,
+      status: { in: [...ACTIVE_HOME_ASSIGNMENT_STATUSES] },
+    },
     select: { id: true },
   });
   return Boolean(assignedBooking);
@@ -37,12 +44,26 @@ export function customerRosterWhere(user: ResourceUser) {
     role: "customer" as const,
     ...(user.isAdmin
       ? {}
-      : { bookingsAsCustomer: { some: { techId: user.id } } }),
+      : {
+          bookingsAsCustomer: {
+            some: {
+              techId: user.id,
+              status: { in: [...ACTIVE_HOME_ASSIGNMENT_STATUSES] },
+            },
+          },
+        }),
   };
 }
 
 export function homeRosterWhere(user: ResourceUser) {
   return user.isAdmin
     ? {}
-    : { bookings: { some: { techId: user.id } } };
+    : {
+        bookings: {
+          some: {
+            techId: user.id,
+            status: { in: [...ACTIVE_HOME_ASSIGNMENT_STATUSES] },
+          },
+        },
+      };
 }

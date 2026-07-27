@@ -244,6 +244,7 @@ export default function HomeDetailPage({ params }: { params: Promise<{ id: strin
               title,
               body: null,
               severity: "info",
+              authorId: session?.user?.id ?? null,
               authorName: null,
               createdAt: new Date().toISOString(),
             },
@@ -260,12 +261,21 @@ export default function HomeDetailPage({ params }: { params: Promise<{ id: strin
 
   async function deleteNote(noteId: string) {
     if (!home) return;
-    // Optimistic
-    setHome({ ...home, techNotes: home.techNotes.filter((n) => n.id !== noteId) });
-    if (!isDemo) {
-      await fetch(`/api/homes/${id}/notes/${noteId}`, { method: "DELETE" }).catch((e) => {
-        toast.error("Failed to delete note: " + (e instanceof Error ? e.message : String(e)));
+    if (isDemo) {
+      setHome({ ...home, techNotes: home.techNotes.filter((n) => n.id !== noteId) });
+      return;
+    }
+    try {
+      const response = await fetch(`/api/homes/${id}/notes/${noteId}`, {
+        method: "DELETE",
       });
+      if (!response.ok) throw new Error("You can only delete your own notes.");
+      setHome({ ...home, techNotes: home.techNotes.filter((n) => n.id !== noteId) });
+    } catch (e) {
+      toast.error(
+        "Failed to delete note: " +
+          (e instanceof Error ? e.message : String(e)),
+      );
     }
   }
 
@@ -579,6 +589,11 @@ export default function HomeDetailPage({ params }: { params: Promise<{ id: strin
         savingNote={savingNote}
         addNote={addNote}
         deleteNote={deleteNote}
+        canDeleteNote={(note) =>
+          isDemo ||
+          canManageOwnerControls ||
+          note.authorId === session?.user?.id
+        }
       />
 
       {(canManageOwnerControls || home.bookings.length === 0) && (
