@@ -4,7 +4,9 @@
  * phone clip by a third and blow past request-body limits).
  */
 
-export const MAX_VIDEO_BYTES = 100 * 1024 * 1024; // 100 MB
+// Kept under Cloudflare's 100 MB request-body cap so oversized clips fail
+// with our friendly client-side message instead of a Cloudflare 413 page.
+export const MAX_VIDEO_BYTES = 95 * 1024 * 1024; // 95 MB
 export const MAX_VIDEO_MB = Math.floor(MAX_VIDEO_BYTES / (1024 * 1024));
 
 export const VIDEO_MIME_EXT: Record<string, string> = {
