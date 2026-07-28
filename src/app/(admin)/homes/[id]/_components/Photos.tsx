@@ -4,6 +4,7 @@ import Card from "@/components/Card";
 import { ImagePlus, Loader2, Plus, Trash2, X } from "lucide-react";
 import type { ApiPhoto } from "./types";
 import type { ChangeEvent } from "react";
+import { isVideoUrl } from "@/lib/media";
 
 interface PhotosProps {
   photos: ApiPhoto[];
@@ -118,12 +119,23 @@ export default function Photos({
               key={photo.id}
               className="relative aspect-square overflow-hidden rounded-xl border border-border bg-surface-secondary"
             >
-              {/* eslint-disable-next-line @next/next/no-img-element */}
+              {isVideoUrl(photo.url) ? (
+                <video
+                  src={photo.url}
+                  controls
+                  playsInline
+                  preload="metadata"
+                  className="h-full w-full object-cover"
+                  aria-label={photo.label || "Home video"}
+                />
+              ) : (
+              /* eslint-disable-next-line @next/next/no-img-element */
               <img
                 src={photo.url}
                 alt={photo.label || "Home photo"}
                 className="h-full w-full object-cover"
               />
+              )}
               <button
                 type="button"
                 onClick={() => deletePhoto(photo.id)}

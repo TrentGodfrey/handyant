@@ -8,7 +8,7 @@ import StatusBadge from "@/components/StatusBadge";
 import {
   ChevronLeft, MapPin, Clock, Phone, MessageCircle, Navigation,
   CheckSquare, Square, Camera,
-  Plus, AlertTriangle, Check, Package, Star, Trash2,
+  Plus, AlertTriangle, Check, Package, Pencil, Star, Trash2,
 } from "lucide-react";
 import { useDemoMode } from "@/lib/useDemoMode";
 import { prepareImageForUpload } from "@/lib/client-image-upload";
@@ -17,6 +17,7 @@ import { demoCustomerBy } from "@/lib/demoData";
 import Spinner from "@/components/Spinner";
 import { bookingDateToLocalDate, formatBookingTime } from "@/lib/booking-time";
 import { businessDateString } from "@/lib/booking-policy";
+import { normalizePartsBuyer } from "@/lib/parts-status";
 
 // ── Types ────────────────────────────────────────────────────────────────────
 
@@ -41,7 +42,7 @@ interface JobDetail {
   time: string;
   status: UiStatus;
   tasks: { id: string; label: string; done: boolean; notes?: string }[];
-  parts: { item: string; qty: number; status: "purchased" | "needed" | "ordered" }[];
+  parts: { id?: string; item: string; qty: number; status: "purchased" | "needed" | "ordered"; buyer?: "customer" | "tech" | null }[];
   photos: { id: string; label: string; url?: string }[];
   techNotes: string;
   customerNotes: string;
@@ -118,7 +119,7 @@ interface ApiBooking {
   customer: { id: string; name: string; phone: string | null } | null;
   home: { address: string; city: string | null; state: string | null; zip: string | null } | null;
   tasks: { id: string; label: string; done: boolean | null; notes: string | null }[];
-  parts: { id: string; item: string; qty: number | null; status: string | null }[];
+  parts: { id: string; item: string; qty: number | null; status: string | null; buyer: string | null }[];
   photos: { id: string; label: string | null; url: string }[];
 }
 
@@ -151,9 +152,11 @@ function bookingToDetail(b: ApiBooking): JobDetail {
       notes: t.notes ?? undefined,
     })),
     parts: (b.parts ?? []).map((p) => ({
+      id: p.id,
       item: p.item,
       qty: p.qty ?? 1,
       status: ((p.status ?? "needed") as "purchased" | "needed" | "ordered"),
+      buyer: normalizePartsBuyer(p.buyer),
     })),
     photos: (b.photos ?? []).map((p) => ({ id: p.id, label: p.label ?? "photo", url: p.url })),
     techNotes: b.techNotes ?? "",
@@ -189,6 +192,11 @@ export default function JobDetailPage({ params }: { params: Promise<{ id: string
   const [newTaskNotes, setNewTaskNotes] = useState("");
   const [savingTask, setSavingTask] = useState(false);
   const [addTaskError, setAddTaskError] = useState<string | null>(null);
+  const [editingTaskId, setEditingTaskId] = useState<string | null>(null);
+  const [editTaskLabel, setEditTaskLabel] = useState("");
+  const [editTaskNotes, setEditTaskNotes] = useState("");
+  const [savingTaskEdit, setSavingTaskEdit] = useState(false);
+  const [editTaskError, setEditTaskError] = useState<string | null>(null);
   const fileInputRef = useRef<HTMLInputElement | null>(null);
   const tasksRef = useRef<HTMLDivElement | null>(null);
 
@@ -302,6 +310,103 @@ export default function JobDetailPage({ params }: { params: Promise<{ id: string
       toast.error("Failed to update task: " + (e instanceof Error ? e.message : String(e)));
       // revert on failure
       setTasks((prev) => prev.map((t) => t.id === taskId ? { ...t, done: !newDone } : t));
+    }
+  }
+
+  function startEditTask(task: JobDetail["tasks"][number]) {
+    setEditingTaskId(task.id);
+    setEditTaskLabel(task.label);
+    setEditTaskNotes(task.notes ?? "");
+    setEditTaskError(null);
+  }
+
+  function cancelEditTask() {
+    setEditingTaskId(null);
+    setEditTaskLabel("");
+    setEditTaskNotes("");
+    setEditTaskError(null);
+  }
+
+  async function saveEditTask() {
+    if (!editingTaskId) return;
+    const label = editTaskLabel.trim();
+    if (!label) return;
+    const notesValue = editTaskNotes.trim();
+    setEditTaskError(null);
+
+    if (isDemo || editingTaskId.startsWith("demo-")) {
+      setTasks((prev) => prev.map((t) => t.id === editingTaskId
+        ? { ...t, label, notes: notesValue || undefined }
+        : t));
+      cancelEditTask();
+      return;
+    }
+
+    setSavingTaskEdit(true);
+    try {
+      const res = await fetch(`/api/tasks/${editingTaskId}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ label, notes: notesValue || null }),
+      });
+      if (!res.ok) {
+        const body = await res.json().catch(() => ({}));
+        throw new Error(body.error ?? `HTTP ${res.status}`);
+      }
+      setTasks((prev) => prev.map((t) => t.id === editingTaskId
+        ? { ...t, label, notes: notesValue || undefined }
+        : t));
+      cancelEditTask();
+    } catch (e) {
+      setEditTaskError(e instanceof Error ? e.message : "Task could not be saved");
+    } finally {
+      setSavingTaskEdit(false);
+    }
+  }
+
+  async function deleteChecklistTask(taskId: string) {
+    const removed = tasks.find((t) => t.id === taskId);
+    setTasks((prev) => prev.filter((t) => t.id !== taskId));
+    if (editingTaskId === taskId) cancelEditTask();
+    if (isDemo || taskId.startsWith("demo-")) return;
+    try {
+      const res = await fetch(`/api/tasks/${taskId}`, { method: "DELETE" });
+      if (!res.ok) {
+        const body = await res.json().catch(() => ({}));
+        throw new Error(body.error ?? `HTTP ${res.status}`);
+      }
+    } catch (e) {
+      toast.error("Failed to delete task: " + (e instanceof Error ? e.message : String(e)));
+      if (removed) setTasks((prev) => [...prev, removed]);
+    }
+  }
+
+  async function togglePartStatus(index: number) {
+    if (!job) return;
+    const part = job.parts[index];
+    if (!part) return;
+    const next = part.status === "purchased" ? "needed" : "purchased";
+    setJob((prev) => prev ? {
+      ...prev,
+      parts: prev.parts.map((p, i) => (i === index ? { ...p, status: next } : p)),
+    } : prev);
+    if (isDemo || !part.id) return;
+    try {
+      const response = await fetch(`/api/parts/${part.id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ status: next }),
+      });
+      if (!response.ok) {
+        const body = await response.json().catch(() => ({}));
+        throw new Error(body.error ?? `HTTP ${response.status}`);
+      }
+    } catch (e) {
+      toast.error("Failed to update part: " + (e instanceof Error ? e.message : String(e)));
+      setJob((prev) => prev ? {
+        ...prev,
+        parts: prev.parts.map((p, i) => (i === index ? { ...p, status: part.status } : p)),
+      } : prev);
     }
   }
 
@@ -699,23 +804,80 @@ export default function JobDetailPage({ params }: { params: Promise<{ id: string
               <p className="py-3 text-[13px] text-text-tertiary text-center">No tasks for this job yet.</p>
             )}
             {tasks.map((task) => (
-              <button
-                key={task.id}
-                onClick={() => toggleTask(task.id)}
-                className="flex w-full items-start gap-3 py-3.5 text-left transition-colors"
-              >
-                {task.done
-                  ? <CheckSquare size={20} className="shrink-0 text-primary mt-0.5" />
-                  : <Square size={20} className="shrink-0 text-text-tertiary mt-0.5" />}
-                <div className="flex-1 min-w-0">
-                  <p className={`text-[14px] font-medium leading-snug ${task.done ? "line-through text-text-tertiary" : "text-text-primary"}`}>
-                    {task.label}
-                  </p>
-                  {task.notes && (
-                    <p className="mt-0.5 text-[11px] text-text-tertiary">{task.notes}</p>
+              editingTaskId === task.id ? (
+                <div key={task.id} className="py-3 space-y-2">
+                  <input
+                    autoFocus
+                    type="text"
+                    value={editTaskLabel}
+                    onChange={(e) => setEditTaskLabel(e.target.value)}
+                    placeholder="Task label (required)"
+                    className="min-h-12 w-full rounded-lg border border-border bg-surface-secondary px-3 py-2.5 text-[13px] text-text-primary placeholder:text-text-tertiary focus:outline-none focus:border-primary"
+                  />
+                  <input
+                    type="text"
+                    value={editTaskNotes}
+                    onChange={(e) => setEditTaskNotes(e.target.value)}
+                    placeholder="Notes (optional)"
+                    className="min-h-12 w-full rounded-lg border border-border bg-surface-secondary px-3 py-2.5 text-[13px] text-text-primary placeholder:text-text-tertiary focus:outline-none focus:border-primary"
+                  />
+                  {editTaskError && (
+                    <p className="text-[12px] text-error">{editTaskError}</p>
                   )}
+                  <div className="flex gap-2">
+                    <Button
+                      variant="primary"
+                      size="sm"
+                      onClick={saveEditTask}
+                      disabled={savingTaskEdit || !editTaskLabel.trim()}
+                    >
+                      {savingTaskEdit ? "Saving…" : "Save"}
+                    </Button>
+                    <Button variant="ghost" size="sm" onClick={cancelEditTask} disabled={savingTaskEdit}>
+                      Cancel
+                    </Button>
+                  </div>
                 </div>
-              </button>
+              ) : (
+              <div key={task.id} className="flex w-full items-start gap-3 py-3.5">
+                <button
+                  onClick={() => toggleTask(task.id)}
+                  className="flex flex-1 items-start gap-3 text-left transition-colors min-w-0"
+                >
+                  {task.done
+                    ? <CheckSquare size={20} className="shrink-0 text-primary mt-0.5" />
+                    : <Square size={20} className="shrink-0 text-text-tertiary mt-0.5" />}
+                  <span className="flex-1 min-w-0">
+                    <span className={`block text-[14px] font-medium leading-snug ${task.done ? "line-through text-text-tertiary" : "text-text-primary"}`}>
+                      {task.label}
+                    </span>
+                    {task.notes && (
+                      <span className="mt-0.5 block text-[11px] text-text-tertiary">{task.notes}</span>
+                    )}
+                  </span>
+                </button>
+                <div className="flex shrink-0 items-center gap-0.5">
+                  <button
+                    type="button"
+                    onClick={() => startEditTask(task)}
+                    className="flex h-11 w-11 items-center justify-center rounded-full text-text-tertiary active:bg-surface-secondary active:text-text-secondary transition-colors"
+                    aria-label={`Edit ${task.label}`}
+                    title="Edit task"
+                  >
+                    <Pencil size={13} />
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => deleteChecklistTask(task.id)}
+                    className="flex h-11 w-11 items-center justify-center rounded-full text-text-tertiary active:bg-error-light active:text-error transition-colors"
+                    aria-label={`Delete ${task.label}`}
+                    title="Delete task"
+                  >
+                    <Trash2 size={13} />
+                  </button>
+                </div>
+              </div>
+              )
             ))}
             {showAddTask && (
               <div className="py-3 space-y-2">
@@ -774,7 +936,7 @@ export default function JobDetailPage({ params }: { params: Promise<{ id: string
             <p className="mb-2 text-sm font-semibold uppercase tracking-wider text-text-secondary">Parts</p>
             <Card className="divide-y divide-border-light">
               {job.parts.map((part, i) => (
-                <div key={i} className="flex items-center gap-3 py-3">
+                <div key={part.id ?? i} className="flex items-center gap-3 py-3">
                   <div className={`flex h-8 w-8 shrink-0 items-center justify-center rounded-lg ${
                     part.status === "purchased" ? "bg-success-light" :
                     part.status === "ordered" ? "bg-[#EAF4F4]" : "bg-warning-light"
@@ -786,14 +948,23 @@ export default function JobDetailPage({ params }: { params: Promise<{ id: string
                   </div>
                   <div className="flex-1 min-w-0">
                     <p className="text-[13px] font-medium text-text-primary truncate">{part.item}</p>
-                    <p className="text-[11px] text-text-tertiary">Qty: {part.qty}</p>
+                    <p className="text-[11px] text-text-tertiary">
+                      Qty: {part.qty}
+                      {part.buyer === "tech" ? " · Anthony buys" : part.buyer === "customer" ? " · Customer buys" : ""}
+                    </p>
                   </div>
-                  <span className={`rounded-full px-2.5 py-0.5 text-[10px] font-semibold capitalize ${
-                    part.status === "purchased" ? "bg-success-light text-success" :
-                    part.status === "ordered" ? "bg-[#EAF4F4] text-info" : "bg-warning-light text-accent-amber"
-                  }`}>
+                  <button
+                    type="button"
+                    onClick={() => togglePartStatus(i)}
+                    className={`min-h-11 rounded-full px-2.5 py-0.5 text-[10px] font-semibold capitalize transition-opacity active:opacity-70 ${
+                      part.status === "purchased" ? "bg-success-light text-success" :
+                      part.status === "ordered" ? "bg-[#EAF4F4] text-info" : "bg-warning-light text-accent-amber"
+                    }`}
+                    aria-label={`Mark ${part.item} as ${part.status === "purchased" ? "needed" : "purchased"}`}
+                    title="Tap to toggle purchased"
+                  >
                     {part.status}
-                  </span>
+                  </button>
                 </div>
               ))}
             </Card>

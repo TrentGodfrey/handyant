@@ -74,6 +74,39 @@ test("allows only future canonical slots on enabled working days", () => {
   );
 });
 
+test("allowPastVisit lets staff log recent past visits within the backdate bound", () => {
+  const now = new Date("2026-07-27T14:00:00Z");
+  const backdated = validateBookingWindow({
+    date: "2026-07-20",
+    time: "08:00",
+    visitCount: 1,
+    now,
+    allowPastVisit: true,
+  });
+  assert.equal(backdated.ok, true);
+  assert.deepEqual(
+    validateBookingWindow({
+      date: "2025-07-21", // a Monday, well past the 180-day bound
+      time: "08:00",
+      visitCount: 1,
+      now,
+      allowPastVisit: true,
+    }),
+    { ok: false, message: "Visits can be logged up to 180 days back" },
+  );
+  // Working-hours rules still apply to backdated visits.
+  assert.deepEqual(
+    validateBookingWindow({
+      date: "2026-07-19",
+      time: "08:00",
+      visitCount: 1,
+      now,
+      allowPastVisit: true,
+    }),
+    { ok: false, message: "MCQ is closed on that day" },
+  );
+});
+
 test("rejects past and out-of-hours multi-block visits", () => {
   assert.deepEqual(
     validateBookingWindow({

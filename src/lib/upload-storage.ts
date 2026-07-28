@@ -2,9 +2,9 @@ import { stat, unlink } from "node:fs/promises";
 import path from "node:path";
 
 const LOCAL_UPLOAD_PATTERN =
-  /^\/(?:api\/)?uploads\/([a-zA-Z0-9-]+\.(?:jpe?g|png|webp|gif))(?:\?v=\d+)?$/;
+  /^\/(?:api\/)?uploads\/([a-zA-Z0-9-]+\.(?:jpe?g|png|webp|gif|mp4|mov|webm))(?:\?v=\d+)?$/;
 const LOCAL_UPLOAD_FILENAME_PATTERN =
-  /^[a-zA-Z0-9-]+\.(?:jpe?g|png|webp|gif)$/;
+  /^[a-zA-Z0-9-]+\.(?:jpe?g|png|webp|gif|mp4|mov|webm)$/;
 
 export function getLocalUploadFilename(url: string): string | null {
   return LOCAL_UPLOAD_PATTERN.exec(url)?.[1] ?? null;

@@ -16,6 +16,10 @@ import {
   optionalBoundedText,
   requiredBoundedText,
 } from "@/lib/text-input";
+import {
+  optionalPartPurchaseStatus,
+  optionalPartsBuyer,
+} from "@/lib/parts-status";
 
 async function ensureAccess(homeId: string) {
   const user = await requireUser();
@@ -55,9 +59,7 @@ export async function PATCH(
   const optionalTextFields = [
     ["description", "Description", TEXT_LIMITS.taskDescription],
     ["parts", "Parts", TEXT_LIMITS.partsDescription],
-    ["partStatus", "Parts status", TEXT_LIMITS.partsBuyer],
     ["partsDescription", "Parts details", TEXT_LIMITS.partsDescription],
-    ["partsBuyer", "Parts buyer", TEXT_LIMITS.partsBuyer],
     ["notes", "Notes", TEXT_LIMITS.taskNotes],
   ] as const;
   for (const [key, label, maxLength] of optionalTextFields) {
@@ -65,6 +67,16 @@ export async function PATCH(
     const value = optionalBoundedText(body[key], label, maxLength);
     if (!value.ok) return badRequest(value.message);
     data[key] = value.value;
+  }
+  if (body.partsBuyer !== undefined) {
+    const partsBuyer = optionalPartsBuyer(body.partsBuyer);
+    if (!partsBuyer.ok) return badRequest(partsBuyer.message);
+    data.partsBuyer = partsBuyer.value;
+  }
+  if (body.partStatus !== undefined) {
+    const partStatus = optionalPartPurchaseStatus(body.partStatus);
+    if (!partStatus.ok) return badRequest(partStatus.message);
+    data.partStatus = partStatus.value;
   }
   if (body.priority !== undefined) {
     if (!["low", "medium", "high"].includes(body.priority)) {

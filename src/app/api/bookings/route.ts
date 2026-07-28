@@ -161,6 +161,8 @@ export async function POST(req: NextRequest) {
     visitCount,
     workingHours: businessProfile?.workingHours,
     allowBeyondAdvanceHorizon: user.isAdmin,
+    // Staff can log visits for days already worked.
+    allowPastVisit: isTechCreating,
   });
   if (!policy.ok) return badRequest(policy.message);
 
@@ -244,6 +246,8 @@ export async function POST(req: NextRequest) {
           notes: true,
           parts: true,
           partsDescription: true,
+          partsBuyer: true,
+          partStatus: true,
         },
       })
     : [];
@@ -338,7 +342,13 @@ export async function POST(req: NextRequest) {
             ? { create: categoryIds.map((categoryId) => ({ categoryId })) }
             : undefined,
           parts: bookingPartItems.length
-            ? { create: bookingPartItems.map((item) => ({ item })) }
+            ? {
+                create: bookingPartItems.map((part) => ({
+                  item: part.item,
+                  buyer: part.buyer,
+                  status: part.status,
+                })),
+              }
             : undefined,
           tasks: selectedTodos.length
             ? {

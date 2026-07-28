@@ -18,7 +18,7 @@ import TodoList from "./_components/TodoList";
 import VisitsAndNotes from "./_components/VisitsAndNotes";
 import Appliances from "./_components/Appliances";
 import AddHomeForm, { type AddHomeState } from "./_components/AddHomeForm";
-import { prepareImageForUpload } from "@/lib/client-image-upload";
+import { uploadMediaFile } from "@/lib/client-image-upload";
 import { toast } from "@/components/Toaster";
 
 // =====================================================================
@@ -329,14 +329,7 @@ function RealHomeProfile() {
     if (!todoId) return;
     setPhotoUploadingId(todoId);
     try {
-      const dataUrl = await prepareImageForUpload(file);
-      const photoRes = await fetch("/api/photos", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ homeId: home.id, dataUrl, type: "before" }),
-      });
-      const photo = await photoRes.json().catch(() => ({}));
-      if (!photoRes.ok || !photo.id) throw new Error(photo.error ?? "Photo upload failed");
+      const photo = await uploadMediaFile(file, { homeId: home.id, type: "before" });
       const todo = home.todos.find((item) => item.id === todoId);
       const existingPhotoIds = Array.isArray(todo?.photoIds) ? todo.photoIds : [];
       const updateRes = await fetch(`/api/homes/${home.id}/todos/${todoId}`, {
@@ -412,7 +405,7 @@ function RealHomeProfile() {
 
   return (
     <div className="min-h-screen bg-background pb-[calc(7rem+env(safe-area-inset-bottom))]">
-      <input ref={photoInputRef} type="file" accept="image/*" className="hidden" onChange={handlePhotoFile} />
+      <input ref={photoInputRef} type="file" accept="image/*,video/mp4,video/quicktime,video/webm" className="hidden" onChange={handlePhotoFile} />
 
       {homes.length > 1 && (
         <div className="border-b border-border bg-surface px-4 pb-3 pt-[calc(0.75rem+env(safe-area-inset-top))] sm:px-6">

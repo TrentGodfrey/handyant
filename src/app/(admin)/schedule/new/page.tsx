@@ -28,6 +28,10 @@ import {
   businessDateTimeToInstant,
 } from "@/lib/booking-policy";
 import { bookingDateToLocalDate } from "@/lib/booking-time";
+import {
+  normalizePartPurchaseStatus,
+  normalizePartsBuyer,
+} from "@/lib/parts-status";
 
 type Mode = "job" | "block";
 
@@ -103,8 +107,9 @@ function startOfWeekSunday(d: Date): Date {
   return out;
 }
 
-function buildLiveCalendar(today: Date): CalendarDay[] {
+function buildLiveCalendar(today: Date, weekOffset = 0): CalendarDay[] {
   const start = startOfWeekSunday(today);
+  start.setDate(start.getDate() + weekOffset * 7);
   const result: CalendarDay[] = [];
   for (let i = 0; i < 35; i++) {
     const d = new Date(start);
@@ -174,11 +179,47 @@ function ScheduleNewPageInner() {
   // Calendar: demo mode uses fixed March 2026 grid; live mode anchors to today.
   // Build inside the component so "today" follows MCQ's Chicago business day,
   // even when the browser happens to be in another timezone.
+  // Staff can page back to earlier weeks to log visits already worked
+  // (server accepts up to 180 days back, so clamp at 25 weeks each way).
+  const MAX_CALENDAR_WEEK_OFFSET = 25;
+  const [calendarWeekOffset, setCalendarWeekOffset] = useState(0);
   const businessToday = bookingDateToLocalDate(businessDateString());
-  const calendarDays: CalendarDay[] = isDemo ? DEMO_CALENDAR : buildLiveCalendar(businessToday);
+  const calendarDays: CalendarDay[] = isDemo
+    ? DEMO_CALENDAR
+    : buildLiveCalendar(businessToday, calendarWeekOffset);
   const calendarAnchor: Date = isDemo ? DEMO_ANCHOR : startOfWeekSunday(businessToday);
   const calendarOffset: number = calendarAnchor.getDay();
   const todayMidnight = businessToday;
+  const calendarRangeStart = calendarDays[0]?.date;
+  const calendarRangeEnd = calendarDays[calendarDays.length - 1]?.date;
+  const calendarLabel = calendarRangeStart && calendarRangeEnd
+    ? calendarRangeStart.getMonth() === calendarRangeEnd.getMonth()
+      ? calendarRangeStart.toLocaleString("default", { month: "long", year: "numeric" })
+      : `${calendarRangeStart.toLocaleString("default", { month: "short" })} – ${calendarRangeEnd.toLocaleString("default", { month: "short", year: "numeric" })}`
+    : "";
+  const calendarNav = !isDemo && (
+    <div className="mb-2 flex items-center justify-between">
+      <button
+        type="button"
+        onClick={() => setCalendarWeekOffset((v) => Math.max(v - 1, -MAX_CALENDAR_WEEK_OFFSET))}
+        disabled={calendarWeekOffset <= -MAX_CALENDAR_WEEK_OFFSET}
+        className="flex h-11 w-11 items-center justify-center rounded-full text-text-secondary hover:bg-surface-secondary transition-colors disabled:opacity-40"
+        aria-label="Earlier weeks"
+      >
+        <ChevronLeft size={16} />
+      </button>
+      <span className="text-[12px] font-semibold text-text-primary">{calendarLabel}</span>
+      <button
+        type="button"
+        onClick={() => setCalendarWeekOffset((v) => Math.min(v + 1, MAX_CALENDAR_WEEK_OFFSET))}
+        disabled={calendarWeekOffset >= MAX_CALENDAR_WEEK_OFFSET}
+        className="flex h-11 w-11 items-center justify-center rounded-full text-text-secondary hover:bg-surface-secondary transition-colors disabled:opacity-40"
+        aria-label="Later weeks"
+      >
+        <ChevronRight size={16} />
+      </button>
+    </div>
+  );
 
   // Job mode
   const [clients, setClients] = useState<ClientView[]>([]);
@@ -199,6 +240,7 @@ function ScheduleNewPageInner() {
     partsDescription?: string | null;
     parts?: string | null;
     partsBuyer?: string | null;
+    partStatus?: string | null;
   }[]>([]);
   const [selectedTodoIds, setSelectedTodoIds] = useState<string[]>([]);
   const [description, setDescription] = useState("");
@@ -270,6 +312,7 @@ function ScheduleNewPageInner() {
               partsDescription?: string | null;
               parts?: string | null;
               partsBuyer?: string | null;
+              partStatus?: string | null;
             }) => ({
               id: todo.id,
               task: todo.task,
@@ -277,6 +320,7 @@ function ScheduleNewPageInner() {
               partsDescription: todo.partsDescription ?? null,
               parts: todo.parts ?? null,
               partsBuyer: todo.partsBuyer ?? null,
+              partStatus: todo.partStatus ?? null,
             })),
         );
       })
@@ -622,6 +666,7 @@ function ScheduleNewPageInner() {
                 </span>
               </label>
               <Card padding="sm">
+                {calendarNav}
                 <div className="grid grid-cols-7 gap-1 mb-2">
                   {["Su", "Mo", "Tu", "We", "Th", "Fr", "Sa"].map((d) => (
                     <div key={d} className="text-center text-[10px] font-bold text-text-tertiary py-1">
@@ -639,19 +684,20 @@ function ScheduleNewPageInner() {
                     const isToday = isDemo
                       ? day.date.toDateString() === DEMO_ANCHOR.toDateString()
                       : day.date.toDateString() === todayMidnight.toDateString();
+                    // Past days stay selectable so Anthony can log work he
+                    // already did; they just render muted.
                     const isPast = !isDemo && day.date < todayMidnight;
                     return (
                       <button
                         key={day.date.toDateString()}
-                        onClick={() => !isPast && setSelectedDate(day.date)}
-                        disabled={isPast}
+                        onClick={() => setSelectedDate(day.date)}
                         className={`aspect-square min-h-11 rounded-xl text-[13px] font-semibold transition-all duration-150 flex flex-col items-center justify-center ${
-                          isPast
-                            ? "text-text-tertiary/40 cursor-not-allowed"
-                            : isSelected
+                          isSelected
                             ? "bg-primary text-white shadow-[0_2px_8px_rgba(79,149,152,0.30)]"
                             : isToday
                             ? "border-2 border-primary text-primary bg-primary-50"
+                            : isPast
+                            ? "text-text-tertiary hover:bg-surface-secondary active:bg-border"
                             : "text-text-primary hover:bg-surface-secondary active:bg-border"
                         }`}
                       >
@@ -666,6 +712,9 @@ function ScheduleNewPageInner() {
                 {selectedDate && (
                   <p className="mt-3 text-center text-[12px] font-semibold text-primary border-t border-border pt-3">
                     {formatDate(selectedDate)}
+                    {selectedDate < todayMidnight && !isDemo && (
+                      <span className="ml-1.5 rounded-full bg-surface-secondary px-2 py-0.5 text-[10px] font-semibold text-text-secondary">Past visit</span>
+                    )}
                   </p>
                 )}
               </Card>
@@ -776,11 +825,14 @@ function ScheduleNewPageInner() {
                           {(todo.partsDescription || todo.parts) && (
                             <span className="mt-0.5 block truncate text-[11px] text-text-tertiary">
                               Parts: {todo.partsDescription ?? todo.parts}
-                              {todo.partsBuyer === "tech"
+                              {normalizePartsBuyer(todo.partsBuyer, todo.partStatus) === "tech"
                                 ? " · Anthony buys"
-                                : todo.partsBuyer === "customer"
+                                : normalizePartsBuyer(todo.partsBuyer, todo.partStatus) === "customer"
                                   ? " · Customer buys"
                                   : ""}
+                              {normalizePartPurchaseStatus(todo.partStatus) === "purchased"
+                                ? " · Purchased"
+                                : " · Needs purchase"}
                             </span>
                           )}
                         </span>
@@ -890,6 +942,7 @@ function ScheduleNewPageInner() {
                 </span>
               </label>
               <Card padding="sm">
+                {calendarNav}
                 <div className="grid grid-cols-7 gap-1 mb-2">
                   {["Su", "Mo", "Tu", "We", "Th", "Fr", "Sa"].map((d) => (
                     <div key={d} className="text-center text-[10px] font-bold text-text-tertiary py-1">
@@ -910,15 +963,14 @@ function ScheduleNewPageInner() {
                     return (
                       <button
                         key={day.date.toDateString()}
-                        onClick={() => !isPast && setBlockDate(day.date)}
-                        disabled={isPast}
+                        onClick={() => setBlockDate(day.date)}
                         className={`aspect-square min-h-11 rounded-xl text-[13px] font-semibold transition-all duration-150 flex flex-col items-center justify-center ${
-                          isPast
-                            ? "text-text-tertiary/40 cursor-not-allowed"
-                            : isSelected
+                          isSelected
                             ? "bg-text-primary text-white shadow-sm"
                             : isToday
                             ? "border-2 border-border text-text-primary bg-surface-secondary"
+                            : isPast
+                            ? "text-text-tertiary hover:bg-surface-secondary active:bg-border"
                             : "text-text-primary hover:bg-surface-secondary active:bg-border"
                         }`}
                       >

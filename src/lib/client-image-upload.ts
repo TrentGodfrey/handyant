@@ -1,3 +1,5 @@
+import { MAX_VIDEO_BYTES, MAX_VIDEO_MB, VIDEO_MIME_EXT } from "@/lib/media";
+
 // Keep the encoded request comfortably below reverse-proxy limits. A base64
 // payload is roughly 33% larger than the original file, so sending a raw 5 MB
 // phone photo can exceed an otherwise reasonable request-body limit.
@@ -71,4 +73,68 @@ export async function prepareImageForUpload(file: File): Promise<string> {
     if (decodedDataUrlSize(dataUrl) <= MAX_UPLOAD_BYTES) return dataUrl;
   }
   throw new Error("That photo is still too large. Try a different photo.");
+}
+
+export interface UploadTarget {
+  homeId?: string | null;
+  bookingId?: string | null;
+  label?: string | null;
+  type?: string;
+}
+
+export interface UploadedMedia {
+  id: string;
+  url: string;
+  label: string | null;
+  type: string | null;
+}
+
+/**
+ * Upload a photo or a short video to /api/photos.
+ *
+ * Photos keep the existing resize-then-JSON-data-URL path. Videos are sent
+ * as multipart/form-data because base64 would inflate a phone clip by ~33%.
+ */
+export async function uploadMediaFile(
+  file: File,
+  target: UploadTarget,
+): Promise<UploadedMedia> {
+  if (file.type.toLowerCase().startsWith("video/")) {
+    if (!VIDEO_MIME_EXT[file.type.toLowerCase()]) {
+      throw new Error("Use an MP4, MOV, or WEBM video.");
+    }
+    if (file.size > MAX_VIDEO_BYTES) {
+      throw new Error(`That video is too large (max ${MAX_VIDEO_MB}MB). Try a shorter clip.`);
+    }
+    const form = new FormData();
+    form.append("file", file);
+    if (target.homeId) form.append("homeId", target.homeId);
+    if (target.bookingId) form.append("bookingId", target.bookingId);
+    if (target.label) form.append("label", target.label);
+    form.append("type", target.type ?? "general");
+    const response = await fetch("/api/photos", { method: "POST", body: form });
+    const body = await response.json().catch(() => null);
+    if (!response.ok || !body?.id) {
+      throw new Error(body?.error ?? "Video upload failed");
+    }
+    return body as UploadedMedia;
+  }
+
+  const dataUrl = await prepareImageForUpload(file);
+  const response = await fetch("/api/photos", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      homeId: target.homeId ?? undefined,
+      bookingId: target.bookingId ?? undefined,
+      label: target.label ?? undefined,
+      type: target.type ?? "general",
+      dataUrl,
+    }),
+  });
+  const body = await response.json().catch(() => null);
+  if (!response.ok || !body?.id) {
+    throw new Error(body?.error ?? "Photo upload failed");
+  }
+  return body as UploadedMedia;
 }

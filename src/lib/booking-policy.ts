@@ -11,6 +11,7 @@ import {
 
 export const BUSINESS_TIME_ZONE = "America/Chicago";
 export const MAX_BOOKING_ADVANCE_DAYS = 180;
+export const MAX_BOOKING_BACKDATE_DAYS = 180;
 export const MAX_PENDING_BOOKINGS_PER_CUSTOMER = 8;
 export const MAX_FUTURE_BOOKINGS_PER_CUSTOMER = 24;
 
@@ -185,6 +186,8 @@ export function validateBookingWindow(params: {
   workingHours?: unknown;
   now?: Date;
   allowBeyondAdvanceHorizon?: boolean;
+  /** Staff may log visits for days already worked (bounded backdating). */
+  allowPastVisit?: boolean;
 }): BookingPolicyResult {
   const {
     date,
@@ -193,6 +196,7 @@ export function validateBookingWindow(params: {
     workingHours,
     now = new Date(),
     allowBeyondAdvanceHorizon = false,
+    allowPastVisit = false,
   } = params;
   const dateValue = businessDateTimeToInstant(date, time);
   if (!dateValue) return { ok: false, message: "Choose a valid date and time" };
@@ -238,8 +242,20 @@ export function validateBookingWindow(params: {
   }
 
   const endAt = new Date(dateValue.getTime() + visitDurationMinutes(visitCount) * 60_000);
-  if (dateValue.getTime() <= now.getTime()) {
+  if (!allowPastVisit && dateValue.getTime() <= now.getTime()) {
     return { ok: false, message: "Choose a future visit time" };
+  }
+  if (allowPastVisit) {
+    const earliestDate = addDaysToDateString(
+      businessDateString(now),
+      -MAX_BOOKING_BACKDATE_DAYS,
+    );
+    if (earliestDate && date < earliestDate) {
+      return {
+        ok: false,
+        message: `Visits can be logged up to ${MAX_BOOKING_BACKDATE_DAYS} days back`,
+      };
+    }
   }
   const latestDate = addDaysToDateString(
     businessDateString(now),

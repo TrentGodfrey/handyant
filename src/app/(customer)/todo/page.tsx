@@ -7,6 +7,11 @@ import { useDemoMode } from "@/lib/useDemoMode";
 import { toast } from "@/components/Toaster";
 import AddTaskForm, { type NewTaskPayload } from "@/components/AddTaskForm";
 import {
+  normalizePartPurchaseStatus,
+  normalizePartsBuyer,
+} from "@/lib/parts-status";
+import { isVideoUrl } from "@/lib/media";
+import {
   Loader2, ListChecks, Plus, Trash2, ShoppingCart,
   Camera, AlertCircle,
 } from "lucide-react";
@@ -662,25 +667,38 @@ function TodoRow({
                 <span className="font-semibold">Parts:</span>{" "}
                 {todo.partsDescription ?? todo.parts}
               </span>
-              {todo.partStatus && (
+              {normalizePartsBuyer(todo.partsBuyer, todo.partStatus) && (
                 <span className={`text-[10px] font-semibold shrink-0 ${
-                  todo.partsBuyer === "tech" || todo.partStatus.includes("Anthony")
+                  normalizePartsBuyer(todo.partsBuyer, todo.partStatus) === "tech"
                     ? "text-primary"
                     : "text-accent-amber"
                 }`}>
-                  {todo.partsBuyer === "tech"
-                    ? "Anthony"
-                    : todo.partsBuyer === "customer"
-                    ? "Me"
-                    : todo.partStatus}
+                  {normalizePartsBuyer(todo.partsBuyer, todo.partStatus) === "tech" ? "Anthony" : "Me"}
                 </span>
               )}
+              <span className={`rounded-full px-2 py-0.5 text-[10px] font-semibold shrink-0 ${
+                normalizePartPurchaseStatus(todo.partStatus) === "purchased"
+                  ? "bg-success-light text-success"
+                  : "bg-warning-light text-accent-amber"
+              }`}>
+                {normalizePartPurchaseStatus(todo.partStatus) === "purchased" ? "Purchased" : "Needs purchase"}
+              </span>
             </div>
           )}
 
           {inlinePhotos.length > 0 && (
             <div className="mt-2 flex items-center gap-1.5">
               {inlinePhotos.map((p) => (
+                isVideoUrl(p.url) ? (
+                  <video
+                    key={p.id}
+                    src={p.url}
+                    muted
+                    playsInline
+                    preload="metadata"
+                    className="h-10 w-10 rounded-md object-cover border border-border"
+                  />
+                ) : (
                 /* eslint-disable-next-line @next/next/no-img-element */
                 <img
                   key={p.id}
@@ -688,6 +706,7 @@ function TodoRow({
                   alt="Task photo"
                   className="h-10 w-10 rounded-md object-cover border border-border"
                 />
+                )
               ))}
               {remaining > 0 && (
                 <div className="flex h-10 w-10 items-center justify-center rounded-md bg-surface-secondary text-[10px] font-semibold text-text-secondary border border-border">

@@ -6,10 +6,12 @@ import Button from "@/components/Button";
 import {
   Camera, Loader2, X, ShoppingCart, AlignLeft, Flag,
 } from "lucide-react";
-import { prepareImageForUpload } from "@/lib/client-image-upload";
+import { uploadMediaFile } from "@/lib/client-image-upload";
+import { isVideoUrl } from "@/lib/media";
+import type { PartPurchaseStatus, PartsBuyer } from "@/lib/parts-status";
 
 export type Priority = "high" | "medium" | "low";
-export type PartsBuyer = "customer" | "tech";
+export type { PartsBuyer } from "@/lib/parts-status";
 
 export interface NewTaskPayload {
   task: string;
@@ -20,7 +22,7 @@ export interface NewTaskPayload {
   photoIds: string[];
   // Derived field for convenience: combined parts label (back-compat)
   parts: string | null;
-  partStatus: string | null;
+  partStatus: PartPurchaseStatus | null;
 }
 
 interface AddTaskFormProps {
@@ -66,6 +68,7 @@ export default function AddTaskForm({
   const [priority, setPriority] = useState<Priority>("medium");
   const [partsDescription, setPartsDescription] = useState("");
   const [partsBuyer, setPartsBuyer] = useState<PartsBuyer>("customer");
+  const [partStatus, setPartStatus] = useState<PartPurchaseStatus>("needed");
   const [photos, setPhotos] = useState<{ id: string; url: string }[]>([]);
   const [uploadingPhoto, setUploadingPhoto] = useState(false);
   const [photoError, setPhotoError] = useState<string | null>(null);
@@ -80,6 +83,7 @@ export default function AddTaskForm({
     setPriority("medium");
     setPartsDescription("");
     setPartsBuyer("customer");
+    setPartStatus("needed");
     setPhotos([]);
     setPhotoError(null);
     setSubmitError(null);
@@ -104,18 +108,8 @@ export default function AddTaskForm({
 
     setUploadingPhoto(true);
     try {
-      const dataUrl = await prepareImageForUpload(file);
-      const res = await fetch("/api/photos", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ homeId, dataUrl, type: "before" }),
-      });
-      if (!res.ok) {
-        const err = await res.json().catch(() => ({}));
-        throw new Error(err.error ?? "Upload failed");
-      }
-      const photo = await res.json();
-      setPhotos((p) => [...p, { id: photo.id, url: photo.url }]);
+      const media = await uploadMediaFile(file, { homeId, type: "before" });
+      setPhotos((p) => [...p, { id: media.id, url: media.url }]);
     } catch (err: unknown) {
       setPhotoError(err instanceof Error ? err.message : "Upload failed");
     } finally {
@@ -133,7 +127,6 @@ export default function AddTaskForm({
   async function handleSubmit() {
     if (!task.trim()) return;
     const trimmedParts = partsDescription.trim();
-    const partsBuyerLabel = partsBuyer === "tech" ? "Anthony to Purchase" : "Customer to Purchase";
 
     const payload: NewTaskPayload = {
       task: task.trim(),
@@ -144,7 +137,7 @@ export default function AddTaskForm({
       photoIds: photos.map((p) => p.id),
       // Back-compat fields used by existing TodoList rendering:
       parts: trimmedParts || null,
-      partStatus: trimmedParts ? partsBuyerLabel : null,
+      partStatus: trimmedParts ? partStatus : null,
     };
 
     setSubmitError(null);
@@ -234,35 +227,60 @@ export default function AddTaskForm({
         className="min-h-12 w-full rounded-xl border border-border bg-surface px-4 py-2.5 text-[13px] text-text-primary placeholder:text-text-tertiary focus:border-primary focus:outline-none mb-2.5"
       />
       {partsDescription.trim() && (
-        <div className="mb-3">
-          <p className="text-[11px] font-medium text-text-secondary mb-1.5">Who buys the parts?</p>
-          <div className="inline-flex rounded-full bg-white p-1 border border-border">
-            <button
-              type="button"
-              onClick={() => setPartsBuyer("customer")}
-              className={`min-h-11 rounded-full px-3 py-1 text-[11px] font-semibold transition-all ${
-                partsBuyer === "customer" ? "bg-primary text-white shadow-sm" : "text-text-secondary"
-              }`}
-            >
-              {partsBuyerLabels.customer}
-            </button>
-            <button
-              type="button"
-              onClick={() => setPartsBuyer("tech")}
-              className={`min-h-11 rounded-full px-3 py-1 text-[11px] font-semibold transition-all ${
-                partsBuyer === "tech" ? "bg-primary text-white shadow-sm" : "text-text-secondary"
-              }`}
-            >
-              {partsBuyerLabels.tech}
-            </button>
+        <div className="mb-3 space-y-2.5">
+          <div>
+            <p className="text-[11px] font-medium text-text-secondary mb-1.5">Who buys the parts?</p>
+            <div className="inline-flex rounded-full bg-white p-1 border border-border">
+              <button
+                type="button"
+                onClick={() => setPartsBuyer("customer")}
+                className={`min-h-11 rounded-full px-3 py-1 text-[11px] font-semibold transition-all ${
+                  partsBuyer === "customer" ? "bg-primary text-white shadow-sm" : "text-text-secondary"
+                }`}
+              >
+                {partsBuyerLabels.customer}
+              </button>
+              <button
+                type="button"
+                onClick={() => setPartsBuyer("tech")}
+                className={`min-h-11 rounded-full px-3 py-1 text-[11px] font-semibold transition-all ${
+                  partsBuyer === "tech" ? "bg-primary text-white shadow-sm" : "text-text-secondary"
+                }`}
+              >
+                {partsBuyerLabels.tech}
+              </button>
+            </div>
+          </div>
+          <div>
+            <p className="text-[11px] font-medium text-text-secondary mb-1.5">Parts status</p>
+            <div className="inline-flex rounded-full bg-white p-1 border border-border">
+              <button
+                type="button"
+                onClick={() => setPartStatus("needed")}
+                className={`min-h-11 rounded-full px-3 py-1 text-[11px] font-semibold transition-all ${
+                  partStatus === "needed" ? "bg-primary text-white shadow-sm" : "text-text-secondary"
+                }`}
+              >
+                Needs purchase
+              </button>
+              <button
+                type="button"
+                onClick={() => setPartStatus("purchased")}
+                className={`min-h-11 rounded-full px-3 py-1 text-[11px] font-semibold transition-all ${
+                  partStatus === "purchased" ? "bg-primary text-white shadow-sm" : "text-text-secondary"
+                }`}
+              >
+                Purchased
+              </button>
+            </div>
           </div>
         </div>
       )}
 
-      {/* Photos */}
+      {/* Photos & videos */}
       <label className="block text-[11px] font-semibold uppercase tracking-wider text-text-secondary mb-1.5 flex items-center gap-1.5">
         <Camera size={11} />
-        Photos (optional)
+        Photos & video (optional)
         <span className="ml-auto text-[10px] font-normal text-text-tertiary normal-case tracking-normal">
           {photos.length}/{MAX_PHOTOS}
         </span>
@@ -271,19 +289,29 @@ export default function AddTaskForm({
         <input
           ref={fileInputRef}
           type="file"
-          accept="image/*"
+          accept="image/*,video/mp4,video/quicktime,video/webm"
           className="hidden"
           onChange={handlePhotoChange}
         />
         <div className="flex flex-wrap gap-2">
           {photos.map((p) => (
             <div key={p.id} className="relative group">
-              {/* eslint-disable-next-line @next/next/no-img-element */}
+              {isVideoUrl(p.url) ? (
+                <video
+                  src={p.url}
+                  muted
+                  playsInline
+                  preload="metadata"
+                  className="h-16 w-16 rounded-lg object-cover border border-border"
+                />
+              ) : (
+              /* eslint-disable-next-line @next/next/no-img-element */
               <img
                 src={p.url}
                 alt="Task photo"
                 className="h-16 w-16 rounded-lg object-cover border border-border"
               />
+              )}
               <button
                 type="button"
                 onClick={() => removePhoto(p.id)}

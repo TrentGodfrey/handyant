@@ -12,6 +12,8 @@ export async function GET() {
   const parts = await prisma.part.findMany({
     where: {
       status: "needed",
+      // Parts the homeowner is buying are not on Anthony's shopping list.
+      OR: [{ buyer: null }, { buyer: { not: "customer" } }],
       booking: {
         techId: tech.id,
         status: { in: ["pending", "confirmed"] },

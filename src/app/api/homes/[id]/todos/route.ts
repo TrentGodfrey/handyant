@@ -16,6 +16,10 @@ import {
   optionalBoundedText,
   requiredBoundedText,
 } from "@/lib/text-input";
+import {
+  optionalPartPurchaseStatus,
+  optionalPartsBuyer,
+} from "@/lib/parts-status";
 
 export async function GET(_req: NextRequest, ctx: { params: Promise<{ id: string }> }) {
   const user = await requireUser();
@@ -74,17 +78,9 @@ export async function POST(req: NextRequest, ctx: { params: Promise<{ id: string
     TEXT_LIMITS.partsDescription,
   );
   if (!partsDescription.ok) return badRequest(partsDescription.message);
-  const partsBuyer = optionalBoundedText(
-    body.partsBuyer,
-    "Parts buyer",
-    TEXT_LIMITS.partsBuyer,
-  );
+  const partsBuyer = optionalPartsBuyer(body.partsBuyer);
   if (!partsBuyer.ok) return badRequest(partsBuyer.message);
-  const partStatus = optionalBoundedText(
-    body.partStatus,
-    "Parts status",
-    TEXT_LIMITS.partsBuyer,
-  );
+  const partStatus = optionalPartPurchaseStatus(body.partStatus);
   if (!partStatus.ok) return badRequest(partStatus.message);
   const notes = optionalBoundedText(
     body.notes,
@@ -136,7 +132,9 @@ export async function POST(req: NextRequest, ctx: { params: Promise<{ id: string
       priority: priority as "low" | "medium" | "high",
       status,
       parts: parts.value,
-      partStatus: partStatus.value,
+      partStatus:
+        partStatus.value ??
+        (parts.value || partsDescription.value ? "needed" : null),
       partsDescription: partsDescription.value,
       partsBuyer: partsBuyer.value,
       specialist: body.specialist === true,

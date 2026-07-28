@@ -1,13 +1,19 @@
 /**
- * Validators for base64 image uploads. Used by /api/photos and /api/me/avatar.
+ * Validators for media uploads. Used by /api/photos and /api/me/avatar.
  *
- * - Size cap: 5 MB after base64 decode.
+ * - Image size cap: 5 MB after base64 decode.
  * - Magic byte check: must be JPG, PNG, WEBP, or GIF (HEIC is intentionally
  *   excluded because we cannot validate via magic bytes the same way).
+ * - Videos (MP4/MOV/WEBM) arrive as multipart uploads and are validated via
+ *   their container magic bytes.
  */
+
+import { MAX_VIDEO_BYTES, MAX_VIDEO_MB } from "@/lib/media";
 
 export const MAX_IMAGE_BYTES = 5 * 1024 * 1024; // 5 MB
 export const MAX_IMAGE_REQUEST_BYTES = 7 * 1024 * 1024; // base64 + JSON overhead
+// Multipart overhead is tiny compared to base64; 1 MB of headroom is plenty.
+export const MAX_VIDEO_REQUEST_BYTES = MAX_VIDEO_BYTES + 1024 * 1024;
 
 export const MIME_EXT: Record<string, string> = {
   "image/jpeg": "jpg",
@@ -86,6 +92,72 @@ function detectImageType(buf: Buffer): "jpg" | "png" | "webp" | "gif" | null {
     return "webp";
   }
   return null;
+}
+
+/**
+ * Detect a video container from its magic bytes.
+ *
+ * - MP4/MOV: ISO base media file — box size then "ftyp" at offset 4, with the
+ *   major brand at offset 8. HEIC/AVIF still images share this container, so
+ *   their brands are explicitly rejected here.
+ * - WEBM: EBML header 1A 45 DF A3.
+ */
+const ISO_IMAGE_BRANDS = new Set(["heic", "heix", "hevc", "hevx", "mif1", "msf1", "avif", "avis"]);
+
+export function detectVideoType(buf: Buffer): "mp4" | "mov" | "webm" | null {
+  if (buf.length < 12) return null;
+  // WEBM/Matroska: 1A 45 DF A3
+  if (buf[0] === 0x1a && buf[1] === 0x45 && buf[2] === 0xdf && buf[3] === 0xa3) {
+    return "webm";
+  }
+  // ISO BMFF: "ftyp" at offset 4
+  if (buf[4] === 0x66 && buf[5] === 0x74 && buf[6] === 0x79 && buf[7] === 0x70) {
+    const brand = buf.subarray(8, 12).toString("latin1").toLowerCase();
+    if (ISO_IMAGE_BRANDS.has(brand.trim())) return null;
+    if (brand.startsWith("qt")) return "mov";
+    return "mp4";
+  }
+  return null;
+}
+
+export type ParsedMedia = {
+  ext: string;
+  kind: "image" | "video";
+};
+
+export type MediaBufferResult =
+  | { ok: true; data: ParsedMedia }
+  | { ok: false; status: 400; message: string };
+
+/** Validate a raw uploaded buffer as either a supported image or video. */
+export function validateMediaBuffer(buf: Buffer): MediaBufferResult {
+  const image = detectImageType(buf);
+  if (image) {
+    if (buf.byteLength > MAX_IMAGE_BYTES) {
+      return {
+        ok: false,
+        status: 400,
+        message: `Image too large (max ${Math.floor(MAX_IMAGE_BYTES / (1024 * 1024))}MB)`,
+      };
+    }
+    return { ok: true, data: { ext: image, kind: "image" } };
+  }
+  const video = detectVideoType(buf);
+  if (video) {
+    if (buf.byteLength > MAX_VIDEO_BYTES) {
+      return {
+        ok: false,
+        status: 400,
+        message: `Video too large (max ${MAX_VIDEO_MB}MB)`,
+      };
+    }
+    return { ok: true, data: { ext: video, kind: "video" } };
+  }
+  return {
+    ok: false,
+    status: 400,
+    message: "Unsupported file (allowed: JPG, PNG, WEBP, GIF, MP4, MOV, WEBM)",
+  };
 }
 
 export type ImageError =

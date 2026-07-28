@@ -9,6 +9,7 @@ import {
 } from "lucide-react";
 import { useDemoMode } from "@/lib/useDemoMode";
 import { prepareImageForUpload } from "@/lib/client-image-upload";
+import { isVideoUrl } from "@/lib/media";
 
 // =====================================================================
 // Demo data (preserved)
@@ -498,12 +499,23 @@ function RealPhotoGallery() {
               >
                 <div className="relative h-[120px] bg-surface-secondary flex items-center justify-center overflow-hidden">
                   {/* Protected uploads load directly so the browser includes the login cookie. */}
-                  {/* eslint-disable-next-line @next/next/no-img-element */}
+                  {isVideoUrl(photo.url) ? (
+                    <video
+                      src={photo.url}
+                      muted
+                      playsInline
+                      preload="metadata"
+                      className="absolute inset-0 h-full w-full object-cover"
+                      aria-label={photo.label ?? "Video"}
+                    />
+                  ) : (
+                  /* eslint-disable-next-line @next/next/no-img-element */
                   <img
                     src={photo.url}
                     alt={photo.label ?? "Photo"}
                     className="absolute inset-0 h-full w-full object-cover"
                   />
+                  )}
                   <div className="absolute inset-0 bg-black/0 group-hover:bg-black/10 transition-colors flex items-center justify-center opacity-0 group-hover:opacity-100">
                     <div className="bg-white/90 rounded-full p-1.5">
                       <ZoomIn size={14} className="text-text-primary" />
@@ -575,12 +587,23 @@ function RealPhotoGallery() {
             )}
 
             <div className="relative w-full max-w-sm aspect-square rounded-2xl bg-surface-secondary overflow-hidden flex items-center justify-center shadow-xl">
-              {/* eslint-disable-next-line @next/next/no-img-element */}
+              {isVideoUrl(modalPhoto.url) ? (
+                <video
+                  src={modalPhoto.url}
+                  controls
+                  playsInline
+                  preload="metadata"
+                  className="absolute inset-0 h-full w-full object-contain"
+                  aria-label={modalPhoto.label ?? "Video"}
+                />
+              ) : (
+              /* eslint-disable-next-line @next/next/no-img-element */
               <img
                 src={modalPhoto.url}
                 alt={modalPhoto.label ?? "Photo"}
                 className="absolute inset-0 h-full w-full object-contain"
               />
+              )}
             </div>
 
             {photos.length > 1 && (

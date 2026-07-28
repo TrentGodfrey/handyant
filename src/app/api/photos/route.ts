@@ -6,8 +6,10 @@ import path from "node:path";
 import { prisma } from "@/lib/prisma";
 import { requireUser, unauthorized, badRequest, forbidden, verificationRequired } from "@/lib/session";
 import {
+  MAX_VIDEO_REQUEST_BYTES,
   imageRequestExceedsLimit,
   parseAndValidateDataUrl,
+  validateMediaBuffer,
 } from "@/lib/imageUpload";
 import { rateLimited, takeRateLimit } from "@/lib/rate-limit";
 import { canAccessBooking, canAccessHome } from "@/lib/resource-access";
@@ -67,21 +69,50 @@ export async function POST(req: NextRequest) {
   const user = await requireUser();
   if (!user) return unauthorized();
   if (user.role === "customer" && !user.emailVerified) return verificationRequired();
-  if (imageRequestExceedsLimit(req)) {
+
+  // Videos arrive as multipart/form-data (base64 JSON would inflate them by a
+  // third); photos keep the original JSON data-URL contract.
+  const isMultipart = (req.headers.get("content-type") ?? "").includes("multipart/form-data");
+  if (isMultipart) {
+    const declaredLength = Number(req.headers.get("content-length") ?? "0");
+    if (Number.isFinite(declaredLength) && declaredLength > MAX_VIDEO_REQUEST_BYTES) {
+      return Response.json({ error: "Upload is too large" }, { status: 413 });
+    }
+  } else if (imageRequestExceedsLimit(req)) {
     return Response.json({ error: "Image request is too large" }, { status: 413 });
   }
   const limit = takeRateLimit(`photo:${user.id}`, 30, 60 * 60 * 1000);
   if (!limit.allowed) return rateLimited(limit.retryAfterSeconds);
 
-  const body = (await req.json()) as {
+  let body: {
     bookingId?: string;
     homeId?: string;
     dataUrl?: string;
     label?: string;
     type?: string;
   };
+  let uploadedFile: File | null = null;
+  if (isMultipart) {
+    const form = await req.formData().catch(() => null);
+    if (!form) return badRequest("Invalid upload");
+    const file = form.get("file");
+    if (!(file instanceof File)) return badRequest("file required");
+    uploadedFile = file;
+    const field = (name: string) => {
+      const value = form.get(name);
+      return typeof value === "string" && value ? value : undefined;
+    };
+    body = {
+      bookingId: field("bookingId"),
+      homeId: field("homeId"),
+      label: field("label"),
+      type: field("type"),
+    };
+  } else {
+    body = (await req.json()) as typeof body;
+    if (!body.dataUrl) return badRequest("dataUrl required");
+  }
 
-  if (!body.dataUrl) return badRequest("dataUrl required");
   if (!body.bookingId && !body.homeId) return badRequest("bookingId or homeId required");
   if (body.label && body.label.trim().length > 120) return badRequest("Photo caption is too long");
 
@@ -131,17 +162,28 @@ export async function POST(req: NextRequest) {
   }
   if (!storageAccountId) return badRequest("Photo owner could not be determined");
 
-  const parsed = parseAndValidateDataUrl(body.dataUrl);
-  if (!parsed.ok) return badRequest(parsed.message);
+  let uploadBuffer: Buffer;
+  let uploadExt: string;
+  if (uploadedFile) {
+    uploadBuffer = Buffer.from(await uploadedFile.arrayBuffer());
+    const media = validateMediaBuffer(uploadBuffer);
+    if (!media.ok) return badRequest(media.message);
+    uploadExt = media.data.ext;
+  } else {
+    const parsed = parseAndValidateDataUrl(body.dataUrl!);
+    if (!parsed.ok) return badRequest(parsed.message);
+    uploadBuffer = parsed.data.buffer;
+    uploadExt = parsed.data.ext;
+  }
 
-  const filename = `${randomUUID()}.${parsed.data.ext}`;
+  const filename = `${randomUUID()}.${uploadExt}`;
   const filePath = path.join(UPLOAD_DIR, filename);
   const stored = await withUploadQuota({
     accountId: storageAccountId,
-    incomingBytes: parsed.data.buffer.byteLength,
+    incomingBytes: uploadBuffer.byteLength,
     write: async () => {
       await ensureDir();
-      await writeFile(filePath, parsed.data.buffer);
+      await writeFile(filePath, uploadBuffer);
     },
   });
   if (!stored.ok) {

@@ -10,6 +10,10 @@ import {
 } from "lucide-react";
 import type { Priority, TodoRecord } from "./types";
 import { PRIORITY_CONFIG } from "./types";
+import {
+  normalizePartPurchaseStatus,
+  normalizePartsBuyer,
+} from "@/lib/parts-status";
 
 interface TodoListProps {
   todos: TodoRecord[];
@@ -88,11 +92,8 @@ export default function TodoList(props: TodoListProps) {
               ? (item.status as KnownStatus)
               : "pending";
             const partsLabel = item.partsDescription ?? item.parts;
-            const partsBuyerLabel = item.partsBuyer === "tech"
-              ? "Anthony to Purchase"
-              : item.partsBuyer === "customer"
-              ? "Customer to Purchase"
-              : item.partStatus;
+            const partsBuyer = normalizePartsBuyer(item.partsBuyer, item.partStatus);
+            const partsPurchase = normalizePartPurchaseStatus(item.partStatus);
             return (
               <Card key={item.id} padding="sm" onClick={() => setExpandedTodo(isExpanded ? null : item.id)} className="cursor-pointer">
                 <div className="flex items-start gap-2.5">
@@ -125,11 +126,18 @@ export default function TodoList(props: TodoListProps) {
                       <div className="mt-2.5 flex items-center gap-2 rounded-lg bg-surface-secondary px-3 py-2">
                         <ShoppingCart size={12} className="shrink-0 text-text-tertiary" />
                         <span className="text-[11px] text-text-secondary flex-1 truncate">{partsLabel}</span>
-                        {partsBuyerLabel && (
-                          <span className={`text-[10px] font-semibold shrink-0 ${partsBuyerLabel === "Purchased" ? "text-success" : partsBuyerLabel.includes("Anthony") || partsBuyerLabel === "Tech to Purchase" ? "text-primary" : "text-accent-amber"}`}>
-                            {partsBuyerLabel}
+                        {partsBuyer && (
+                          <span className={`text-[10px] font-semibold shrink-0 ${partsBuyer === "tech" ? "text-primary" : "text-accent-amber"}`}>
+                            {partsBuyer === "tech" ? "Anthony buys" : "You buy"}
                           </span>
                         )}
+                        <span className={`rounded-full px-2 py-0.5 text-[10px] font-semibold shrink-0 ${
+                          partsPurchase === "purchased"
+                            ? "bg-success-light text-success"
+                            : "bg-warning-light text-accent-amber"
+                        }`}>
+                          {partsPurchase === "purchased" ? "Purchased" : "Needs purchase"}
+                        </span>
                       </div>
                     )}
                     {isExpanded && item.notes && (

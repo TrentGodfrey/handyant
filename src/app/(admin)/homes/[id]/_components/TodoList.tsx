@@ -9,6 +9,11 @@ import {
 } from "lucide-react";
 import type { ItemStatus, NormalizedTodo } from "./types";
 import { priorityDot } from "./types";
+import {
+  normalizePartPurchaseStatus,
+  normalizePartsBuyer,
+} from "@/lib/parts-status";
+import { isVideoUrl } from "@/lib/media";
 
 interface TodoListProps {
   items: NormalizedTodo[];
@@ -81,7 +86,10 @@ export default function TodoList({
         </Card>
       ) : (
         <div className="space-y-2">
-          {items.map((item) => (
+          {items.map((item) => {
+            const partsBuyer = normalizePartsBuyer(item.partsBuyer, item.partStatus);
+            const partsPurchase = normalizePartPurchaseStatus(item.partStatus);
+            return (
             <Card key={item.id} padding="sm" variant={item.status === "completed" ? "flat" : "default"}>
               <div className="flex items-start gap-2.5">
                 <div
@@ -119,25 +127,36 @@ export default function TodoList({
                     <div className="mt-2 flex items-center gap-2 rounded-lg bg-surface-secondary px-3 py-2">
                       <ShoppingCart size={10} className="shrink-0 text-text-tertiary" />
                       <span className="flex-1 truncate text-[11px] text-text-secondary">{item.parts}</span>
-                      {(item.partsBuyer || item.partStatus) && (
+                      {partsBuyer && (
                         <span className={`text-[10px] font-semibold shrink-0 ${
-                          item.partsBuyer === "tech" || (item.partStatus ?? "").includes("Anthony") || item.partStatus === "Tech to Purchase"
-                            ? "text-primary"
-                            : "text-accent-amber"
+                          partsBuyer === "tech" ? "text-primary" : "text-accent-amber"
                         }`}>
-                          {item.partsBuyer === "tech"
-                            ? "Anthony buys"
-                            : item.partsBuyer === "customer"
-                            ? "Customer buys"
-                            : item.partStatus}
+                          {partsBuyer === "tech" ? "Anthony buys" : "Customer buys"}
                         </span>
                       )}
+                      <span className={`rounded-full px-2 py-0.5 text-[10px] font-semibold shrink-0 ${
+                        partsPurchase === "purchased"
+                          ? "bg-success-light text-success"
+                          : "bg-warning-light text-accent-amber"
+                      }`}>
+                        {partsPurchase === "purchased" ? "Purchased" : "Needs purchase"}
+                      </span>
                     </div>
                   )}
 
                   {item.photoUrls.length > 0 && (
                     <div className="mt-2 flex items-center gap-1.5">
                       {item.photoUrls.slice(0, 3).map((url, idx) => (
+                        isVideoUrl(url) ? (
+                          <video
+                            key={idx}
+                            src={url}
+                            muted
+                            playsInline
+                            preload="metadata"
+                            className="h-10 w-10 rounded-md object-cover border border-border"
+                          />
+                        ) : (
                         /* eslint-disable-next-line @next/next/no-img-element */
                         <img
                           key={idx}
@@ -145,6 +164,7 @@ export default function TodoList({
                           alt="Task photo"
                           className="h-10 w-10 rounded-md object-cover border border-border"
                         />
+                        )
                       ))}
                       {item.photoUrls.length > 3 && (
                         <div className="flex h-10 w-10 items-center justify-center rounded-md bg-surface-secondary text-[10px] font-semibold text-text-secondary border border-border">
@@ -198,7 +218,8 @@ export default function TodoList({
                 </div>
               </div>
             </Card>
-          ))}
+            );
+          })}
         </div>
       )}
     </section>

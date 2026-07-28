@@ -240,6 +240,8 @@ export async function PATCH(req: NextRequest, ctx: { params: Promise<{ id: strin
       visitCount,
       workingHours: profile?.workingHours,
       allowBeyondAdvanceHorizon: user.isAdmin,
+      // Staff can move a visit onto a day already worked; customers cannot.
+      allowPastVisit: isTech,
     });
     if (!policy.ok) return badRequest(policy.message);
     const start = targetTime.getUTCHours() * 60 + targetTime.getUTCMinutes();

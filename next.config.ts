@@ -36,6 +36,7 @@ const nextConfig: NextConfig = {
               scriptSrc,
               "style-src 'self' 'unsafe-inline'",
               "img-src 'self' data: blob: https://*.tile.openstreetmap.org https://lh3.googleusercontent.com",
+              "media-src 'self' blob:",
               "font-src 'self' data:",
               "connect-src 'self'",
               ...(isProduction ? ["upgrade-insecure-requests"] : []),

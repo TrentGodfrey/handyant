@@ -13,6 +13,7 @@ import {
 } from "@/lib/booking-policy";
 import { bookingDateToDatabaseDate } from "@/lib/booking-time";
 import { rateLimited, requestIp, takeRateLimit } from "@/lib/rate-limit";
+import { requireUser } from "@/lib/session";
 
 // Public endpoint - unauthenticated visitors can pick a time before signing up.
 // Returns the four fixed daily booking windows for the default tech (Anthony).
@@ -65,6 +66,10 @@ export async function GET(req: NextRequest) {
   });
 
   const workingHours = profile?.workingHours;
+  // Signed-in staff may look up past days to log visits already worked;
+  // everyone else only sees future availability.
+  const viewer = await requireUser();
+  const allowPastVisit = viewer?.role === "tech";
   const policyResults = BOOKING_SLOT_STARTS.map((time) => ({
     time,
     result: validateBookingWindow({
@@ -72,6 +77,7 @@ export async function GET(req: NextRequest) {
       time,
       visitCount,
       workingHours,
+      allowPastVisit,
     }),
   }));
   if (policyResults.every(({ result }) => !result.ok && result.message === "MCQ is closed on that day")) {
