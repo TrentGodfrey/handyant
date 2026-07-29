@@ -2,7 +2,10 @@ import { NextRequest } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { requireUser, unauthorized, notFound, forbidden, badRequest } from "@/lib/session";
 import { BookingStatus } from "@/generated/prisma/enums";
-import { completedStatusDelta, getVisitUsage } from "@/lib/subscription-usage";
+import {
+  appliedVisitUnits,
+  getVisitUsage,
+} from "@/lib/subscription-usage";
 import { decryptHomeAccess } from "@/lib/sensitive-data";
 import {
   bookingDateToDatabaseDate,
@@ -14,9 +17,11 @@ import {
   visitDurationMinutes,
 } from "@/lib/booking-slots";
 import {
+  bookingDateAndTimeToInstant,
   customerCancellationError,
   dateOnlyString,
   intervalsOverlap,
+  isHistoricalVisitWindowComplete,
   validateBookingWindow,
 } from "@/lib/booking-policy";
 import { sendActivityEmail } from "@/lib/activity-email";
@@ -43,6 +48,10 @@ export async function GET(_req: NextRequest, ctx: { params: Promise<{ id: string
 
   const booking = await prisma.booking.findUnique({
     where: { id },
+    omit: {
+      usageSubscriptionId: true,
+      usageAppliedUnits: true,
+    },
     include: {
       home: true,
       customer: { select: { id: true, name: true, phone: true, email: true, avatarUrl: true } },
@@ -111,7 +120,7 @@ export async function PATCH(req: NextRequest, ctx: { params: Promise<{ id: strin
         pending: ["confirmed", "cancelled"],
         confirmed: ["in_progress", "completed", "cancelled"],
         in_progress: ["completed", "cancelled"],
-        completed: user.isAdmin ? ["cancelled"] : [],
+        completed: user.isAdmin ? ["confirmed", "cancelled"] : [],
         cancelled: [],
       };
       if (
@@ -205,6 +214,7 @@ export async function PATCH(req: NextRequest, ctx: { params: Promise<{ id: strin
     endMinutes: number;
     startAt: Date;
     endAt: Date;
+    isPastVisit: boolean;
   } | null = null;
   if (
     (isTech || isCustomer) &&
@@ -234,6 +244,7 @@ export async function PATCH(req: NextRequest, ctx: { params: Promise<{ id: strin
       where: { techId: targetTechId },
       select: { workingHours: true },
     });
+    const now = new Date();
     const policy = validateBookingWindow({
       date: targetDateValue,
       time: targetTimeValue,
@@ -242,6 +253,7 @@ export async function PATCH(req: NextRequest, ctx: { params: Promise<{ id: strin
       allowBeyondAdvanceHorizon: user.isAdmin,
       // Staff can move a visit onto a day already worked; customers cannot.
       allowPastVisit: isTech,
+      now,
     });
     if (!policy.ok) return badRequest(policy.message);
     const start = targetTime.getUTCHours() * 60 + targetTime.getUTCMinutes();
@@ -253,19 +265,36 @@ export async function PATCH(req: NextRequest, ctx: { params: Promise<{ id: strin
       endMinutes: end,
       startAt: policy.window.startAt,
       endAt: policy.window.endAt,
+      isPastVisit: isHistoricalVisitWindowComplete(policy.window.endAt, now),
     };
+    if (scheduleCheck.isPastVisit && existing.status !== "completed") {
+      return badRequest("Only an already-completed visit can be moved into the past");
+    }
   }
   if (Object.keys(data).length === 0) return badRequest("No valid booking updates were provided");
 
   const nextStatus = typeof data.status === "string" ? data.status : existing.status;
-  const usageDuration =
-    existing.status === "completed" && nextStatus !== "completed"
-      ? existing.durationMinutes ?? VISIT_DURATION_MINUTES
-      : typeof data.durationMinutes === "number"
-        ? data.durationMinutes
-        : existing.durationMinutes ?? VISIT_DURATION_MINUTES;
-  const visitUnits = Math.max(1, Math.round(usageDuration / VISIT_DURATION_MINUTES));
-  const usageDelta = completedStatusDelta(existing.status, nextStatus, visitUnits);
+  const enteringCompleted =
+    existing.status !== "completed" && nextStatus === "completed";
+  const leavingCompleted =
+    existing.status === "completed" && nextStatus !== "completed";
+  if (leavingCompleted) {
+    data.usageSubscriptionId = null;
+    data.usageAppliedUnits = 0;
+  }
+  const completionDuration =
+    typeof data.durationMinutes === "number"
+      ? data.durationMinutes
+      : existing.durationMinutes ?? VISIT_DURATION_MINUTES;
+  const completionVisitUnits = Math.max(
+    1,
+    Math.round(completionDuration / VISIT_DURATION_MINUTES),
+  );
+  const completionStartAt = scheduleCheck?.startAt ??
+    bookingDateAndTimeToInstant(
+      existing.scheduledDate,
+      existing.scheduledTime,
+    );
 
   let shouldSendReviewRequest = false;
   let booking;
@@ -278,7 +307,9 @@ export async function PATCH(req: NextRequest, ctx: { params: Promise<{ id: strin
               id: { not: id },
               techId: scheduleCheck.techId,
               scheduledDate: scheduleCheck.scheduledDate,
-              status: { in: ["pending", "confirmed", "in_progress"] },
+              status: scheduleCheck.isPastVisit
+                ? { not: "cancelled" }
+                : { in: ["pending", "confirmed", "in_progress"] },
             },
             select: { scheduledTime: true, durationMinutes: true },
           }),
@@ -302,6 +333,7 @@ export async function PATCH(req: NextRequest, ctx: { params: Promise<{ id: strin
         });
         if (overlaps) throw new Error("BOOKING_CONFLICT");
         if (
+          !scheduleCheck.isPastVisit &&
           availabilityBlocks.some((block) =>
             intervalsOverlap(
               scheduleCheck!.startAt,
@@ -325,8 +357,93 @@ export async function PATCH(req: NextRequest, ctx: { params: Promise<{ id: strin
       });
       if (changed.count !== 1) throw new Error("BOOKING_CHANGED");
 
+      if (leavingCompleted && existing.usageAppliedUnits > 0) {
+        if (!existing.usageSubscriptionId) {
+          throw new Error("SUBSCRIPTION_CHANGED");
+        }
+        const attributedSubscription = await tx.subscription.findUnique({
+          where: { id: existing.usageSubscriptionId },
+        });
+        if (
+          !attributedSubscription ||
+          attributedSubscription.visitsUsed < existing.usageAppliedUnits
+        ) {
+          throw new Error("SUBSCRIPTION_CHANGED");
+        }
+        const reversedSubscription = await tx.subscription.updateMany({
+          where: {
+            id: attributedSubscription.id,
+            visitsUsed: attributedSubscription.visitsUsed,
+          },
+          data: {
+            visitsUsed:
+              attributedSubscription.visitsUsed - existing.usageAppliedUnits,
+          },
+        });
+        if (reversedSubscription.count !== 1) {
+          throw new Error("SUBSCRIPTION_CHANGED");
+        }
+      }
+
+      if (enteringCompleted && existing.homeId && completionStartAt) {
+        const subscription = await tx.subscription.findFirst({
+          where: {
+            homeId: existing.homeId,
+            status: "active",
+            AND: [
+              {
+                OR: [
+                  { startedAt: null },
+                  { startedAt: { lte: completionStartAt } },
+                ],
+              },
+              {
+                OR: [
+                  { endsAt: null },
+                  { endsAt: { gte: completionStartAt } },
+                ],
+              },
+            ],
+          },
+          orderBy: { startedAt: "desc" },
+        });
+        if (subscription) {
+          const allowance = getVisitUsage(subscription.plan, 0).allowance;
+          const appliedUnits = appliedVisitUnits(
+            completionVisitUnits,
+            subscription.visitsUsed,
+            allowance,
+          );
+          if (appliedUnits > 0) {
+            const updatedSubscription = await tx.subscription.updateMany({
+              where: {
+                id: subscription.id,
+                visitsUsed: subscription.visitsUsed,
+              },
+              data: {
+                visitsUsed: subscription.visitsUsed + appliedUnits,
+              },
+            });
+            if (updatedSubscription.count !== 1) {
+              throw new Error("SUBSCRIPTION_CHANGED");
+            }
+            await tx.booking.update({
+              where: { id },
+              data: {
+                usageSubscriptionId: subscription.id,
+                usageAppliedUnits: appliedUnits,
+              },
+            });
+          }
+        }
+      }
+
       const updated = await tx.booking.findUniqueOrThrow({
         where: { id },
+        omit: {
+          usageSubscriptionId: true,
+          usageAppliedUnits: true,
+        },
         include: {
           home: true,
           customer: { select: { id: true, name: true, email: true, phone: true, avatarUrl: true } },
@@ -334,23 +451,6 @@ export async function PATCH(req: NextRequest, ctx: { params: Promise<{ id: strin
           tasks: { orderBy: { sortOrder: "asc" } },
         },
       });
-
-      if (usageDelta !== 0 && existing.homeId) {
-        const subscription = await tx.subscription.findFirst({
-          where: { homeId: existing.homeId, status: "active" },
-          orderBy: { startedAt: "desc" },
-        });
-        if (subscription) {
-          const allowance = getVisitUsage(subscription.plan, 0).allowance;
-          await tx.subscription.updateMany({
-            where: {
-              id: subscription.id,
-              visitsUsed: usageDelta > 0 ? { lte: allowance - usageDelta } : { gte: Math.abs(usageDelta) },
-            },
-            data: { visitsUsed: usageDelta > 0 ? { increment: usageDelta } : { decrement: Math.abs(usageDelta) } },
-          });
-        }
-      }
 
       if (existing.status !== "completed" && updated.status === "completed") {
         const existingReview = await tx.review.findFirst({
@@ -395,6 +495,15 @@ export async function PATCH(req: NextRequest, ctx: { params: Promise<{ id: strin
     if (error instanceof Error && error.message === "BOOKING_BLOCKED") {
       return Response.json(
         { error: "That time is blocked on the staff schedule. Please choose another time." },
+        { status: 409 },
+      );
+    }
+    if (error instanceof Error && error.message === "SUBSCRIPTION_CHANGED") {
+      return Response.json(
+        {
+          error:
+            "Membership usage changed while updating this visit. Refresh and try again.",
+        },
         { status: 409 },
       );
     }
@@ -479,25 +588,51 @@ export async function DELETE(_req: NextRequest, ctx: { params: Promise<{ id: str
           status: existing.status,
           updatedAt: existing.updatedAt,
         },
-        data: { status: "cancelled" },
+        data: {
+          status: "cancelled",
+          usageSubscriptionId: null,
+          usageAppliedUnits: 0,
+        },
       });
       if (changed.count !== 1) throw new Error("BOOKING_CHANGED");
 
-      if (existing.status === "completed" && existing.homeId) {
-        const visitUnits = Math.max(1, Math.round((existing.durationMinutes ?? VISIT_DURATION_MINUTES) / VISIT_DURATION_MINUTES));
-        const subscription = await tx.subscription.findFirst({
-          where: { homeId: existing.homeId, status: "active" },
-          orderBy: { startedAt: "desc" },
+      if (existing.status === "completed" && existing.usageAppliedUnits > 0) {
+        if (!existing.usageSubscriptionId) {
+          throw new Error("SUBSCRIPTION_CHANGED");
+        }
+        const subscription = await tx.subscription.findUnique({
+          where: { id: existing.usageSubscriptionId },
         });
-        if (subscription) {
-          await tx.subscription.updateMany({
-            where: { id: subscription.id, visitsUsed: { gte: visitUnits } },
-            data: { visitsUsed: { decrement: visitUnits } },
-          });
+        if (
+          !subscription ||
+          subscription.visitsUsed < existing.usageAppliedUnits
+        ) {
+          throw new Error("SUBSCRIPTION_CHANGED");
+        }
+        const reversedSubscription = await tx.subscription.updateMany({
+          where: {
+            id: subscription.id,
+            visitsUsed: subscription.visitsUsed,
+          },
+          data: {
+            visitsUsed: subscription.visitsUsed - existing.usageAppliedUnits,
+          },
+        });
+        if (reversedSubscription.count !== 1) {
+          throw new Error("SUBSCRIPTION_CHANGED");
         }
       }
     }, { isolationLevel: "Serializable" });
   } catch (error) {
+    if (error instanceof Error && error.message === "SUBSCRIPTION_CHANGED") {
+      return Response.json(
+        {
+          error:
+            "Membership usage changed while cancelling this visit. Refresh and try again.",
+        },
+        { status: 409 },
+      );
+    }
     if (
       (error instanceof Error && error.message === "BOOKING_CHANGED") ||
       (typeof error === "object" && error && "code" in error && error.code === "P2034")

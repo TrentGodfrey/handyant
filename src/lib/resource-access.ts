@@ -3,6 +3,7 @@ import type { SessionUser } from "@/lib/session";
 import {
   ACTIVE_HOME_ASSIGNMENT_STATUSES,
   canAccessBookingResource,
+  homeResourceAccessDecision,
 } from "@/lib/access-control";
 
 type ResourceUser = Pick<SessionUser, "id" | "role" | "isAdmin">;
@@ -24,9 +25,9 @@ export async function canAccessHome(
   user: ResourceUser,
   home: { id: string; customerId: string },
 ): Promise<boolean> {
-  if (home.customerId === user.id) return true;
-  if (user.role !== "tech") return false;
-  if (user.isAdmin) return true;
+  const decision = homeResourceAccessDecision(user, home);
+  if (decision === "allow") return true;
+  if (decision === "deny") return false;
 
   const assignedBooking = await prisma.booking.findFirst({
     where: {

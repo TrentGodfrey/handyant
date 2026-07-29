@@ -27,13 +27,20 @@ import {
   businessDateString,
   dateOnlyString,
   intervalsOverlap,
+  isHistoricalVisitWindowComplete,
   validateBookingWindow,
 } from "@/lib/booking-policy";
 import { rateLimited, takeRateLimit } from "@/lib/rate-limit";
 import {
+  appliedVisitUnits,
+  getVisitUsage,
+} from "@/lib/subscription-usage";
+import { ACTIVE_HOME_ASSIGNMENT_STATUSES } from "@/lib/access-control";
+import {
   TEXT_LIMITS,
   optionalBoundedText,
 } from "@/lib/text-input";
+import { shouldRequestHistoricalVisitReview } from "@/lib/review-prompt";
 
 const UUID_PATTERN =
   /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
@@ -44,6 +51,10 @@ export async function GET(req: NextRequest) {
 
   const bookings = await prisma.booking.findMany({
     where: bookingListWhere(user, req.nextUrl.searchParams.get("view")),
+    omit: {
+      usageSubscriptionId: true,
+      usageAppliedUnits: true,
+    },
     include: {
       home: true,
       customer: { select: { id: true, name: true, phone: true, avatarUrl: true } },
@@ -102,7 +113,12 @@ export async function POST(req: NextRequest) {
   }
   if (isTechCreating && !user.isAdmin) {
     const assignedHome = await prisma.booking.findFirst({
-      where: { customerId, homeId: body.homeId, techId: user.id },
+      where: {
+        customerId,
+        homeId: body.homeId,
+        techId: user.id,
+        status: { in: [...ACTIVE_HOME_ASSIGNMENT_STATUSES] },
+      },
       select: { id: true },
     });
     if (!assignedHome) return forbidden();
@@ -155,6 +171,7 @@ export async function POST(req: NextRequest) {
     where: { techId: assignedTechId },
     select: { workingHours: true },
   });
+  const now = new Date();
   const policy = validateBookingWindow({
     date: scheduledDateValue,
     time: normalizedTime,
@@ -163,8 +180,14 @@ export async function POST(req: NextRequest) {
     allowBeyondAdvanceHorizon: user.isAdmin,
     // Staff can log visits for days already worked.
     allowPastVisit: isTechCreating,
+    now,
   });
   if (!policy.ok) return badRequest(policy.message);
+  const isPastVisit = isHistoricalVisitWindowComplete(policy.window.endAt, now);
+  const isHistoricalVisit = isTechCreating && isPastVisit;
+  const shouldSendHistoricalReviewRequest =
+    isHistoricalVisit &&
+    shouldRequestHistoricalVisitReview(policy.window.endAt, now);
 
   // Normalize parts payload - accept string[] of items, drop blanks.
   const partItems: string[] = Array.isArray(body.parts)
@@ -296,7 +319,9 @@ export async function POST(req: NextRequest) {
             where: {
               techId: assignedTechId,
               scheduledDate,
-              status: { in: ["pending", "confirmed", "in_progress"] },
+              status: isPastVisit
+                ? { not: "cancelled" }
+                : { in: ["pending", "confirmed", "in_progress"] },
             },
             select: { scheduledTime: true, durationMinutes: true },
           }),
@@ -318,6 +343,7 @@ export async function POST(req: NextRequest) {
         });
         if (overlaps) throw new Error("BOOKING_CONFLICT");
         if (
+          !isPastVisit &&
           availabilityBlocks.some((block) =>
             intervalsOverlap(policy.window.startAt, policy.window.endAt, block.startAt, block.endAt),
           )
@@ -326,7 +352,7 @@ export async function POST(req: NextRequest) {
         }
       }
 
-      return tx.booking.create({
+      const created = await tx.booking.create({
         data: {
           customerId,
           techId: assignedTechId,
@@ -337,7 +363,11 @@ export async function POST(req: NextRequest) {
           customerNotes: customerNotes.value,
           durationMinutes,
           serviceType: "one_time",
-          status: isTechCreating ? "confirmed" : "pending",
+          status: isHistoricalVisit
+            ? "completed"
+            : isTechCreating
+              ? "confirmed"
+              : "pending",
           categories: categoryIds.length
             ? { create: categoryIds.map((categoryId) => ({ categoryId })) }
             : undefined,
@@ -355,11 +385,104 @@ export async function POST(req: NextRequest) {
                 create: selectedTodos.map((todo, sortOrder) => ({
                   homeTodoId: todo.id,
                   label: todo.task,
+                  done: isHistoricalVisit,
                   notes: todo.notes ?? todo.description,
                   sortOrder,
                 })),
               }
             : undefined,
+        },
+        include: {
+          home: true,
+          categories: { include: { category: true } },
+          parts: true,
+          tasks: { orderBy: { sortOrder: "asc" } },
+        },
+      });
+
+      if (isHistoricalVisit) {
+        if (requestedTodoIds.length > 0 && typeof body.homeId === "string") {
+          await tx.homeTodo.updateMany({
+            where: {
+              id: { in: requestedTodoIds },
+              homeId: body.homeId,
+              status: { not: "completed" },
+            },
+            data: { status: "completed" },
+          });
+        }
+
+        if (typeof body.homeId === "string") {
+          const subscription = await tx.subscription.findFirst({
+            where: {
+              homeId: body.homeId,
+              status: "active",
+              AND: [
+                {
+                  OR: [
+                    { startedAt: null },
+                    { startedAt: { lte: policy.window.startAt } },
+                  ],
+                },
+                {
+                  OR: [
+                    { endsAt: null },
+                    { endsAt: { gte: policy.window.startAt } },
+                  ],
+                },
+              ],
+            },
+            orderBy: { startedAt: "desc" },
+          });
+          if (subscription) {
+            const allowance = getVisitUsage(subscription.plan, 0).allowance;
+            const appliedUnits = appliedVisitUnits(
+              visitCount,
+              subscription.visitsUsed,
+              allowance,
+            );
+            if (appliedUnits > 0) {
+              const updatedSubscription = await tx.subscription.updateMany({
+                where: {
+                  id: subscription.id,
+                  visitsUsed: subscription.visitsUsed,
+                },
+                data: {
+                  visitsUsed: subscription.visitsUsed + appliedUnits,
+                },
+              });
+              if (updatedSubscription.count !== 1) {
+                throw new Error("SUBSCRIPTION_CHANGED");
+              }
+              await tx.booking.update({
+                where: { id: created.id },
+                data: {
+                  usageSubscriptionId: subscription.id,
+                  usageAppliedUnits: appliedUnits,
+                },
+              });
+            }
+          }
+        }
+
+        if (shouldSendHistoricalReviewRequest) {
+          await tx.notification.create({
+            data: {
+              userId: customerId,
+              title: "How was your visit?",
+              body: "Your MCQ visit is complete. Tap to leave a quick review for Anthony.",
+              type: "review",
+              link: `/account/rate/${created.id}`,
+            },
+          });
+        }
+      }
+
+      return tx.booking.findUniqueOrThrow({
+        where: { id: created.id },
+        omit: {
+          usageSubscriptionId: true,
+          usageAppliedUnits: true,
         },
         include: {
           home: true,
@@ -381,6 +504,12 @@ export async function POST(req: NextRequest) {
     }
     if (error instanceof Error && error.message === "BOOKING_BLOCKED") {
       return Response.json({ error: "That time is blocked on the staff schedule. Please choose another time." }, { status: 409 });
+    }
+    if (error instanceof Error && error.message === "SUBSCRIPTION_CHANGED") {
+      return Response.json(
+        { error: "Membership usage changed while adding this visit. Please try again." },
+        { status: 409 },
+      );
     }
     if (typeof error === "object" && error && "code" in error && error.code === "P2034") {
       return Response.json({ error: "That time was just booked. Please choose another time." }, { status: 409 });
@@ -428,11 +557,31 @@ export async function POST(req: NextRequest) {
     await sendActivityEmail({
       to: customer?.email,
       recipientName: customer?.name,
-      subject: isTechCreating ? "Your MCQ visit is scheduled" : "We received your MCQ booking",
-      heading: isTechCreating ? "Your visit is scheduled" : "Booking request received",
-      message: `${isTechCreating ? "Anthony scheduled" : "We received"} your visit for ${scheduleMessage}.`,
-      actionPath: "/home",
-      actionLabel: "View your visit",
+      subject: shouldSendHistoricalReviewRequest
+        ? "How was your MCQ visit?"
+        : isHistoricalVisit
+        ? "A completed MCQ visit was added"
+        : isTechCreating
+          ? "Your MCQ visit is scheduled"
+          : "We received your MCQ booking",
+      heading: shouldSendHistoricalReviewRequest
+        ? "Your visit is complete"
+        : isHistoricalVisit
+        ? "Visit added to your history"
+        : isTechCreating
+          ? "Your visit is scheduled"
+          : "Booking request received",
+      message: shouldSendHistoricalReviewRequest
+        ? "Thanks for choosing MCQ Property Care. Please take a moment to rate your visit and share any feedback."
+        : isHistoricalVisit
+        ? `Anthony added your completed visit from ${scheduleMessage} to your MCQ history.`
+        : `${isTechCreating ? "Anthony scheduled" : "We received"} your visit for ${scheduleMessage}.`,
+      actionPath: shouldSendHistoricalReviewRequest
+        ? `/account/rate/${booking.id}`
+        : "/home",
+      actionLabel: shouldSendHistoricalReviewRequest
+        ? "Leave a review"
+        : "View your visit",
     });
   } catch (err) {
     // Notification failures must not break booking creation.

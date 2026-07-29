@@ -6,7 +6,7 @@ import StatusBadge from "@/components/StatusBadge";
 import AddTaskForm, { type NewTaskPayload } from "@/components/AddTaskForm";
 import {
   Plus, Camera, ShoppingCart, ChevronRight, Info, X,
-  Loader2,
+  Loader2, Pencil,
 } from "lucide-react";
 import type { Priority, TodoRecord } from "./types";
 import { PRIORITY_CONFIG } from "./types";
@@ -95,17 +95,26 @@ export default function TodoList(props: TodoListProps) {
             const partsBuyer = normalizePartsBuyer(item.partsBuyer, item.partStatus);
             const partsPurchase = normalizePartPurchaseStatus(item.partStatus);
             return (
-              <Card key={item.id} padding="sm" onClick={() => setExpandedTodo(isExpanded ? null : item.id)} className="cursor-pointer">
+              <Card key={item.id} padding="sm">
                 <div className="flex items-start gap-2.5">
                   <div className={`mt-1.5 shrink-0 flex h-2.5 w-2.5 items-center justify-center rounded-full ring-4 ${pCfg.dot} ${pCfg.ring}`} />
                   <div className="flex-1 min-w-0">
                     <div className="flex items-start justify-between gap-2">
-                      <Link href={`/task/${item.id}`} onClick={(event) => event.stopPropagation()} className="inline-flex min-h-11 items-center text-[14px] font-semibold leading-snug text-text-primary hover:text-primary">{item.task}</Link>
+                      <Link href={`/task/${item.id}`} className="inline-flex min-h-11 items-center text-[14px] font-semibold leading-snug text-text-primary hover:text-primary">{item.task}</Link>
                       <div className="flex items-center gap-1 shrink-0">
                         {item.specialist && (
                           <span className="rounded-full bg-[#FFF7ED] px-2 py-0.5 text-[10px] font-semibold text-accent-coral">Specialist</span>
                         )}
-                        <ChevronRight size={14} className={`text-text-tertiary transition-transform ${isExpanded ? "rotate-90" : ""}`} />
+                        <button
+                          type="button"
+                          onClick={() => setExpandedTodo(isExpanded ? null : item.id)}
+                          aria-expanded={isExpanded}
+                          aria-controls={`task-details-${item.id}`}
+                          aria-label={`${isExpanded ? "Collapse" : "Expand"} ${item.task}`}
+                          className="flex h-11 w-11 items-center justify-center rounded-full text-text-tertiary active:bg-surface-secondary"
+                        >
+                          <ChevronRight size={14} className={`transition-transform ${isExpanded ? "rotate-90" : ""}`} />
+                        </button>
                       </div>
                     </div>
                     {item.description && (
@@ -140,31 +149,43 @@ export default function TodoList(props: TodoListProps) {
                         </span>
                       </div>
                     )}
-                    {isExpanded && item.notes && (
-                      <div className="mt-2.5 flex items-start gap-2 rounded-lg bg-warning-light px-3 py-2">
-                        <Info size={12} className="mt-0.5 shrink-0 text-accent-amber" />
-                        <p className="text-[12px] text-text-secondary">{item.notes}</p>
-                      </div>
-                    )}
-                    {isExpanded && (
-                      <div className="mt-2.5 flex items-center gap-2">
+                    <div id={`task-details-${item.id}`}>
+                      {isExpanded && item.notes && (
+                        <div className="mt-2.5 flex items-start gap-2 rounded-lg bg-warning-light px-3 py-2">
+                          <Info size={12} className="mt-0.5 shrink-0 text-accent-amber" />
+                          <p className="text-[12px] text-text-secondary">{item.notes}</p>
+                        </div>
+                      )}
+                      <div className="mt-2.5 flex flex-wrap items-center gap-2">
+                        <Link
+                          href={`/task/${item.id}`}
+                          className="flex min-h-11 items-center gap-1 rounded-lg bg-primary-50 px-3 py-1.5 text-[11px] font-semibold text-primary active:bg-primary-100"
+                          aria-label={`Edit ${item.task}`}
+                        >
+                          <Pencil size={11} />
+                          Edit
+                        </Link>
+                        {isExpanded && (
+                        <>
                         <button
-                          onClick={(e) => { e.stopPropagation(); triggerPhotoUpload(item.id); }}
+                          onClick={() => triggerPhotoUpload(item.id)}
                           disabled={photoUploadingId === item.id}
                           className="flex min-h-11 items-center gap-1 rounded-lg bg-primary-50 px-3 py-1.5 text-[11px] font-semibold text-primary hover:bg-primary-100 transition-colors disabled:opacity-50"
                         >
                           {photoUploadingId === item.id ? <Loader2 size={11} className="animate-spin" /> : <Camera size={11} />}
-                          {photoUploadingId === item.id ? "Uploading…" : "Add Photo"}
+                          {photoUploadingId === item.id ? "Uploading…" : "Add media"}
                         </button>
                         <button
-                          onClick={(e) => { e.stopPropagation(); removeTodo(item.id); }}
+                          onClick={() => removeTodo(item.id)}
                           className="flex min-h-11 items-center gap-1 rounded-lg bg-error-light px-3 py-1.5 text-[11px] font-semibold text-error hover:bg-red-100 transition-colors"
                         >
                           <X size={11} />
                           Remove
                         </button>
+                        </>
+                        )}
                       </div>
-                    )}
+                    </div>
                   </div>
                 </div>
               </Card>

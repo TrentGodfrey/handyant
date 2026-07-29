@@ -289,7 +289,7 @@ export default function AddTaskForm({
         <input
           ref={fileInputRef}
           type="file"
-          accept="image/*,video/mp4,video/quicktime,video/webm"
+          accept="image/*,video/mp4,video/quicktime,video/webm,.mp4,.mov,.webm"
           className="hidden"
           onChange={handlePhotoChange}
         />

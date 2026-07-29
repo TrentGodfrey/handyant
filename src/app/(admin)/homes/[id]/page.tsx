@@ -6,7 +6,8 @@ import { useRouter } from "next/navigation";
 import { useSession } from "next-auth/react";
 import { ChevronLeft, AlertTriangle, Trash2 } from "lucide-react";
 import { useDemoMode } from "@/lib/useDemoMode";
-import { prepareImageForUpload } from "@/lib/client-image-upload";
+import { uploadMediaFile } from "@/lib/client-image-upload";
+import { getVideoFileExtension } from "@/lib/media";
 import { toast } from "@/components/Toaster";
 import Spinner from "@/components/Spinner";
 import type { NewTaskPayload } from "@/components/AddTaskForm";
@@ -46,14 +47,15 @@ export default function HomeDetailPage({ params }: { params: Promise<{ id: strin
   const [showAddTask, setShowAddTask] = useState(false);
   const [savingTask, setSavingTask] = useState(false);
 
-  // Add Photo inline form
-  const [showAddPhoto, setShowAddPhoto] = useState(false);
-  const [newPhotoDataUrl, setNewPhotoDataUrl] = useState("");
-  const [newPhotoFileName, setNewPhotoFileName] = useState("");
-  const [newPhotoLabel, setNewPhotoLabel] = useState("");
-  const [photoError, setPhotoError] = useState<string | null>(null);
-  const [preparingPhoto, setPreparingPhoto] = useState(false);
-  const [savingPhoto, setSavingPhoto] = useState(false);
+  // Add media inline form
+  const [showAddMedia, setShowAddMedia] = useState(false);
+  const [newMediaFile, setNewMediaFile] = useState<File | null>(null);
+  const [newMediaPreviewUrl, setNewMediaPreviewUrl] = useState("");
+  const [newMediaFileName, setNewMediaFileName] = useState("");
+  const [newMediaIsVideo, setNewMediaIsVideo] = useState(false);
+  const [newMediaLabel, setNewMediaLabel] = useState("");
+  const [mediaError, setMediaError] = useState<string | null>(null);
+  const [savingMedia, setSavingMedia] = useState(false);
   const [deletingPhotoId, setDeletingPhotoId] = useState<string | null>(null);
 
   // Show/hide gate code
@@ -130,6 +132,14 @@ export default function HomeDetailPage({ params }: { params: Promise<{ id: strin
       panelAmps: home.panelAmps ? String(home.panelAmps) : "",
     });
   }, [home]);
+
+  useEffect(() => {
+    return () => {
+      if (newMediaPreviewUrl.startsWith("blob:")) {
+        URL.revokeObjectURL(newMediaPreviewUrl);
+      }
+    };
+  }, [newMediaPreviewUrl]);
 
   const homePhotos = home?.photos ?? [];
   const todoItems = (home?.todos ?? []).map((t) => {
@@ -355,89 +365,83 @@ export default function HomeDetailPage({ params }: { params: Promise<{ id: strin
     }
   }
 
-  async function selectPhoto(event: ChangeEvent<HTMLInputElement>) {
+  function selectMedia(event: ChangeEvent<HTMLInputElement>) {
     const file = event.target.files?.[0];
     event.target.value = "";
     if (!file) return;
-    setPhotoError(null);
-    setPreparingPhoto(true);
-    try {
-      const dataUrl = await prepareImageForUpload(file);
-      setNewPhotoDataUrl(dataUrl);
-      setNewPhotoFileName(file.name || "Selected photo");
-    } catch (e) {
-      setNewPhotoDataUrl("");
-      setNewPhotoFileName("");
-      setPhotoError(e instanceof Error ? e.message : "That photo could not be prepared.");
-    } finally {
-      setPreparingPhoto(false);
-    }
+    setMediaError(null);
+    setNewMediaFile(file);
+    setNewMediaPreviewUrl(URL.createObjectURL(file));
+    setNewMediaFileName(file.name || "Selected media");
+    setNewMediaIsVideo(
+      getVideoFileExtension(file) !== null ||
+      file.type.trim().toLowerCase().startsWith("video/"),
+    );
   }
 
-  function resetPhotoForm() {
-    setShowAddPhoto(false);
-    setNewPhotoDataUrl("");
-    setNewPhotoFileName("");
-    setNewPhotoLabel("");
-    setPhotoError(null);
+  function resetMediaForm() {
+    setShowAddMedia(false);
+    setNewMediaFile(null);
+    setNewMediaPreviewUrl("");
+    setNewMediaFileName("");
+    setNewMediaIsVideo(false);
+    setNewMediaLabel("");
+    setMediaError(null);
   }
 
-  async function addPhoto() {
-    if (!newPhotoDataUrl || !home) return;
-    const url = newPhotoDataUrl;
-    const label = newPhotoLabel.trim() || null;
-    setSavingPhoto(true);
-    setPhotoError(null);
+  async function addMedia() {
+    if (!newMediaFile || !home) return;
+    const file = newMediaFile;
+    const label = newMediaLabel.trim() || null;
+    setSavingMedia(true);
+    setMediaError(null);
     try {
       if (!isDemo) {
-        const r = await fetch("/api/photos", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ homeId: id, dataUrl: url, label, type: "general" }),
-        });
-        const data = await r.json().catch(() => ({}));
-        if (!r.ok) throw new Error(data.error || "Photo upload failed");
+        await uploadMediaFile(file, { homeId: id, label, type: "general" });
         await loadHome();
       } else {
+        const demoUrl = URL.createObjectURL(file);
         setHome({
           ...home,
           photos: [
             ...home.photos,
-            { id: `p${Date.now()}`, url, label, type: "general" },
+            { id: `p${Date.now()}`, url: demoUrl, label: label ?? file.name, type: "general" },
           ],
         });
       }
-      resetPhotoForm();
-      toast.success("Photo added");
+      resetMediaForm();
+      toast.success("Media added");
     } catch (e) {
-      setPhotoError(e instanceof Error ? e.message : "Photo upload failed");
+      setMediaError(e instanceof Error ? e.message : "Media upload failed");
     } finally {
-      setSavingPhoto(false);
+      setSavingMedia(false);
     }
   }
 
   async function deletePhoto(photoId: string) {
-    if (!home || !window.confirm("Delete this photo permanently?")) return;
+    if (!home || !window.confirm("Delete this media permanently?")) return;
 
     if (isDemo) {
+      const media = home.photos.find((photo) => photo.id === photoId);
+      if (media?.url.startsWith("blob:")) URL.revokeObjectURL(media.url);
       setHome({ ...home, photos: home.photos.filter((photo) => photo.id !== photoId) });
-      toast.success("Photo deleted");
+      toast.success("Media deleted");
       return;
     }
 
     setDeletingPhotoId(photoId);
-    setPhotoError(null);
+    setMediaError(null);
     try {
       const response = await fetch(`/api/photos/${photoId}`, { method: "DELETE" });
       const data = await response.json().catch(() => ({}));
-      if (!response.ok) throw new Error(data.error || "Photo could not be deleted");
+      if (!response.ok) throw new Error(data.error || "Media could not be deleted");
       setHome((current) => current
         ? { ...current, photos: current.photos.filter((photo) => photo.id !== photoId) }
         : current);
-      toast.success("Photo deleted");
+      toast.success("Media deleted");
     } catch (error) {
-      const message = error instanceof Error ? error.message : "Photo could not be deleted";
-      setPhotoError(message);
+      const message = error instanceof Error ? error.message : "Media could not be deleted";
+      setMediaError(message);
       toast.error(message);
     } finally {
       setDeletingPhotoId(null);
@@ -547,26 +551,26 @@ export default function HomeDetailPage({ params }: { params: Promise<{ id: strin
 
       <Photos
         photos={home.photos}
-        showAddPhoto={showAddPhoto}
-        onOpenAddPhoto={() => setShowAddPhoto(true)}
-        onCancelAddPhoto={resetPhotoForm}
-        newPhotoDataUrl={newPhotoDataUrl}
-        newPhotoFileName={newPhotoFileName}
-        newPhotoLabel={newPhotoLabel}
-        setNewPhotoLabel={setNewPhotoLabel}
-        photoError={photoError}
-        preparingPhoto={preparingPhoto}
-        savingPhoto={savingPhoto}
+        showAddMedia={showAddMedia}
+        onOpenAddMedia={() => setShowAddMedia(true)}
+        onCancelAddMedia={resetMediaForm}
+        newMediaPreviewUrl={newMediaPreviewUrl}
+        newMediaFileName={newMediaFileName}
+        newMediaIsVideo={newMediaIsVideo}
+        newMediaLabel={newMediaLabel}
+        setNewMediaLabel={setNewMediaLabel}
+        mediaError={mediaError}
+        savingMedia={savingMedia}
         deletingPhotoId={deletingPhotoId}
-        selectPhoto={selectPhoto}
-        addPhoto={addPhoto}
+        selectMedia={selectMedia}
+        addMedia={addMedia}
         deletePhoto={deletePhoto}
       />
 
       <TodoList
         items={todoItems}
         openTasks={openTasks}
-        onTogglePhotoForm={() => setShowAddPhoto((v) => !v)}
+        onTogglePhotoForm={() => setShowAddMedia((v) => !v)}
         showAddTask={showAddTask}
         setShowAddTask={setShowAddTask}
         savingTask={savingTask}

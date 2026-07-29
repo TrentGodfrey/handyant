@@ -251,39 +251,43 @@ model ServiceCategory {
 }
 
 model Booking {
-  id                 String             @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
-  customerId         String             @map("customer_id") @db.Uuid
-  homeId             String?            @map("home_id") @db.Uuid
-  techId             String?            @map("tech_id") @db.Uuid
-  status             BookingStatus      @default(pending)
-  scheduledDate      DateTime           @map("scheduled_date") @db.Date
-  scheduledTime      DateTime           @map("scheduled_time") @db.Time(6)
-  durationMinutes    Int?               @default(120) @map("duration_minutes")
-  serviceType        String?            @default("one_time") @map("service_type")
-  description        String?
-  customerNotes      String?            @map("customer_notes")
-  techNotes          String?            @map("tech_notes")
-  estimatedCost      Decimal?           @map("estimated_cost") @db.Decimal(10, 2)
-  finalCost          Decimal?           @map("final_cost") @db.Decimal(10, 2)
-  createdAt          DateTime?          @default(now()) @map("created_at") @db.Timestamptz(6)
-  updatedAt          DateTime?          @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(6)
-  categories         BookingCategory[]
-  customer           User               @relation("CustomerBookings", fields: [customerId], references: [id], onDelete: NoAction, onUpdate: NoAction)
-  home               Home?              @relation("BookingHomeCustomer", fields: [homeId, customerId], references: [id, customerId], onDelete: NoAction, onUpdate: NoAction)
-  tech               User?              @relation("TechBookings", fields: [techId], references: [id], onDelete: NoAction, onUpdate: NoAction)
-  invoices           Invoice[]
-  parts              Part[]
-  photos             Photo[]
-  reviews            Review[]
-  tasks              Task[]
-  bookingNotes       BookingNote[]
-  reminderDeliveries ReminderDelivery[]
-  declines           BookingDecline[]
+  id                  String             @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  customerId          String             @map("customer_id") @db.Uuid
+  homeId              String?            @map("home_id") @db.Uuid
+  techId              String?            @map("tech_id") @db.Uuid
+  status              BookingStatus      @default(pending)
+  scheduledDate       DateTime           @map("scheduled_date") @db.Date
+  scheduledTime       DateTime           @map("scheduled_time") @db.Time(6)
+  durationMinutes     Int?               @default(120) @map("duration_minutes")
+  serviceType         String?            @default("one_time") @map("service_type")
+  description         String?
+  customerNotes       String?            @map("customer_notes")
+  techNotes           String?            @map("tech_notes")
+  usageSubscriptionId String?            @map("usage_subscription_id") @db.Uuid
+  usageAppliedUnits   Int                @default(0) @map("usage_applied_units")
+  estimatedCost       Decimal?           @map("estimated_cost") @db.Decimal(10, 2)
+  finalCost           Decimal?           @map("final_cost") @db.Decimal(10, 2)
+  createdAt           DateTime?          @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt           DateTime?          @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(6)
+  categories          BookingCategory[]
+  customer            User               @relation("CustomerBookings", fields: [customerId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  home                Home?              @relation("BookingHomeCustomer", fields: [homeId, customerId], references: [id, customerId], onDelete: NoAction, onUpdate: NoAction)
+  tech                User?              @relation("TechBookings", fields: [techId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  usageSubscription   Subscription?      @relation("BookingUsageSubscription", fields: [usageSubscriptionId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  invoices            Invoice[]
+  parts               Part[]
+  photos              Photo[]
+  reviews             Review[]
+  tasks               Task[]
+  bookingNotes        BookingNote[]
+  reminderDeliveries  ReminderDelivery[]
+  declines            BookingDecline[]
 
   @@index([customerId], map: "idx_bookings_customer")
   @@index([techId], map: "idx_bookings_tech")
   @@index([scheduledDate], map: "idx_bookings_date")
   @@index([status], map: "idx_bookings_status")
+  @@index([usageSubscriptionId], map: "idx_bookings_usage_subscription")
   @@map("bookings")
 }
 
@@ -475,16 +479,17 @@ model ReminderDelivery {
 }
 
 model Subscription {
-  id         String              @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
-  customerId String              @map("customer_id") @db.Uuid
-  homeId     String?             @map("home_id") @db.Uuid
-  plan       SubscriptionPlan    @default(essential)
-  status     SubscriptionStatus? @default(active)
-  visitsUsed Int                 @default(0) @map("visits_used")
-  startedAt  DateTime?           @default(now()) @map("started_at") @db.Timestamptz(6)
-  endsAt     DateTime?           @map("ends_at") @db.Timestamptz(6)
-  customer   User                @relation(fields: [customerId], references: [id], onDelete: NoAction, onUpdate: NoAction)
-  home       Home?               @relation(fields: [homeId], references: [id], onDelete: SetNull, onUpdate: NoAction)
+  id            String              @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  customerId    String              @map("customer_id") @db.Uuid
+  homeId        String?             @map("home_id") @db.Uuid
+  plan          SubscriptionPlan    @default(essential)
+  status        SubscriptionStatus? @default(active)
+  visitsUsed    Int                 @default(0) @map("visits_used")
+  startedAt     DateTime?           @default(now()) @map("started_at") @db.Timestamptz(6)
+  endsAt        DateTime?           @map("ends_at") @db.Timestamptz(6)
+  customer      User                @relation(fields: [customerId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  home          Home?               @relation(fields: [homeId], references: [id], onDelete: SetNull, onUpdate: NoAction)
+  usageBookings Booking[]           @relation("BookingUsageSubscription")
 
   @@index([homeId, status], map: "idx_subscriptions_home_status")
   @@index([customerId, status], map: "idx_subscriptions_customer_status")

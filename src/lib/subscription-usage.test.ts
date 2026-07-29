@@ -1,6 +1,11 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { clampVisitsUsed, completedStatusDelta, getVisitUsage } from "./subscription-usage";
+import {
+  appliedVisitUnits,
+  clampVisitsUsed,
+  completedStatusDelta,
+  getVisitUsage,
+} from "./subscription-usage";
 
 test("elite visit usage reports used and remaining", () => {
   assert.deepEqual(getVisitUsage("elite", 1), {
@@ -25,4 +30,10 @@ test("completed status transitions produce a single counter delta", () => {
 test("multi-visit completion consumes each reserved visit block", () => {
   assert.equal(completedStatusDelta("confirmed", "completed", 3), 3);
   assert.equal(completedStatusDelta("completed", "cancelled", 3), -3);
+});
+
+test("booking attribution records only the exact membership units applied", () => {
+  assert.equal(appliedVisitUnits(3, 8, 10), 2);
+  assert.equal(appliedVisitUnits(2, 10, 10), 0);
+  assert.equal(appliedVisitUnits(2, 4, 10), 2);
 });

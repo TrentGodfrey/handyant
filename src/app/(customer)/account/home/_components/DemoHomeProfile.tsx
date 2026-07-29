@@ -136,7 +136,7 @@ export default function DemoHomeProfile() {
           )}
         </div>
 
-        <div className="mt-4 flex gap-2">
+        <div className="mt-4 flex flex-wrap gap-2">
           {DEMO_HOME_DETAILS.map(({ icon: Icon, label, value, color }) => (
             <div key={label} className="flex items-center gap-1.5 rounded-lg border border-border bg-surface-secondary px-3 py-1.5">
               <Icon size={12} className={color} />

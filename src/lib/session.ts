@@ -84,6 +84,16 @@ export function verificationRequired() {
   );
 }
 
+export function passwordChangeRequired() {
+  return Response.json(
+    {
+      error: "Change your temporary password before continuing.",
+      code: "PASSWORD_CHANGE_REQUIRED",
+    },
+    { status: 403 },
+  );
+}
+
 export function notFound(label = "Not found") {
   return Response.json({ error: label }, { status: 404 });
 }

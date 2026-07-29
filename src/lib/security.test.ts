@@ -68,9 +68,12 @@ test("home history deletion requires the exact destructive confirmation", () => 
   assert.equal(isConfirmedHomeHistoryDeletion(null), false);
 });
 
-test("upload cleanup accepts only generated local image paths", () => {
+test("upload cleanup accepts only generated local media paths", () => {
   assert.equal(getLocalUploadFilename("/api/uploads/photo-id.jpg"), "photo-id.jpg");
   assert.equal(getLocalUploadFilename("/uploads/legacy.png"), "legacy.png");
+  assert.equal(getLocalUploadFilename("/api/uploads/task-video.mov"), "task-video.mov");
+  assert.equal(getLocalUploadFilename("/api/uploads/task-video.mp4"), "task-video.mp4");
+  assert.equal(getLocalUploadFilename("/uploads/task-video.webm"), "task-video.webm");
   assert.equal(
     getLocalUploadFilename("/api/uploads/avatar-id.webp?v=12345"),
     "avatar-id.webp",

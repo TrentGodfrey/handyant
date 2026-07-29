@@ -24,6 +24,18 @@ export function getVisitUsage(plan: MembershipPlan, visitsUsed: number) {
   };
 }
 
+export function appliedVisitUnits(
+  requestedUnits: number,
+  visitsUsed: number,
+  allowance: number,
+): number {
+  const requested = Number.isFinite(requestedUnits)
+    ? Math.max(0, Math.floor(requestedUnits))
+    : 0;
+  const remaining = Math.max(0, allowance - visitsUsed);
+  return Math.min(requested, remaining);
+}
+
 export function completedStatusDelta(previous: string, next: string, visitUnits = 1): number {
   const units = Math.max(1, Math.floor(visitUnits));
   if (previous !== "completed" && next === "completed") return units;

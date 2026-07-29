@@ -20,6 +20,10 @@ import {
   optionalPartPurchaseStatus,
   optionalPartsBuyer,
 } from "@/lib/parts-status";
+import {
+  isPrismaTransactionConflict,
+  syncLinkedActiveBookingTasks,
+} from "@/lib/home-task-sync";
 
 async function findAccessibleTask(id: string) {
   const user = await requireUser();
@@ -116,7 +120,26 @@ export async function PATCH(req: NextRequest, ctx: { params: Promise<{ id: strin
     data.hasPhoto = valid.length > 0;
   }
   if (Object.keys(data).length === 0) return badRequest("No valid task updates were provided");
-  const updated = await prisma.homeTodo.update({ where: { id }, data, include: { home: { select: { id: true, address: true } } } });
+  let updated;
+  try {
+    updated = await prisma.$transaction(async (tx) => {
+      const result = await tx.homeTodo.update({
+        where: { id },
+        data,
+        include: { home: { select: { id: true, address: true } } },
+      });
+      await syncLinkedActiveBookingTasks(tx, result.id, result, data);
+      return result;
+    }, { isolationLevel: "Serializable" });
+  } catch (error) {
+    if (isPrismaTransactionConflict(error)) {
+      return Response.json(
+        { error: "This task changed while you were editing it. Refresh and try again." },
+        { status: 409 },
+      );
+    }
+    throw error;
+  }
   await sendHomeTaskEmail({
     homeId: access.task.homeId,
     actorRole: access.user.role,

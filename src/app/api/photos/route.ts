@@ -4,7 +4,14 @@ import { unlink } from "node:fs/promises";
 import { randomUUID } from "node:crypto";
 import path from "node:path";
 import { prisma } from "@/lib/prisma";
-import { requireUser, unauthorized, badRequest, forbidden, verificationRequired } from "@/lib/session";
+import {
+  requireUser,
+  unauthorized,
+  badRequest,
+  forbidden,
+  passwordChangeRequired,
+  verificationRequired,
+} from "@/lib/session";
 import {
   MAX_VIDEO_REQUEST_BYTES,
   imageRequestExceedsLimit,
@@ -24,6 +31,7 @@ async function ensureDir() {
 export async function GET(req: NextRequest) {
   const user = await requireUser();
   if (!user) return unauthorized();
+  if (user.role === "tech" && user.mustChangePassword) return passwordChangeRequired();
 
   const bookingId = req.nextUrl.searchParams.get("bookingId");
   const homeId = req.nextUrl.searchParams.get("homeId");
@@ -68,6 +76,7 @@ export async function GET(req: NextRequest) {
 export async function POST(req: NextRequest) {
   const user = await requireUser();
   if (!user) return unauthorized();
+  if (user.role === "tech" && user.mustChangePassword) return passwordChangeRequired();
   if (user.role === "customer" && !user.emailVerified) return verificationRequired();
 
   // Videos arrive as multipart/form-data (base64 JSON would inflate them by a

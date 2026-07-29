@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useMemo, Suspense } from "react";
+import { useState, useEffect, useMemo, useRef, Suspense } from "react";
 import Link from "next/link";
 import { useSearchParams, useRouter } from "next/navigation";
 import { useSession } from "next-auth/react";
@@ -12,7 +12,12 @@ import {
   Upload, X, Check, Repeat, Info, Sun, Sunset, ListChecks,
 } from "lucide-react";
 import { useDemoMode } from "@/lib/useDemoMode";
-import { prepareImageForUpload } from "@/lib/client-image-upload";
+import { prepareImageForUpload, uploadMediaFile } from "@/lib/client-image-upload";
+import {
+  getVideoFileExtension,
+  MAX_VIDEO_BYTES,
+  MAX_VIDEO_MB,
+} from "@/lib/media";
 import { VISIT_BLOCK_OPTIONS, visitDurationMinutes } from "@/lib/booking-slots";
 import { businessDateString } from "@/lib/booking-policy";
 import { bookingDateToLocalDate } from "@/lib/booking-time";
@@ -160,7 +165,14 @@ function toISODate(day: number, month: string, year: number): string {
   return `${year}-${m}-${String(day).padStart(2, "0")}`;
 }
 
-interface Photo { id: string; url: string; name: string; dataUrl?: string; }
+interface Photo {
+  id: string;
+  url: string;
+  name: string;
+  file?: File;
+  mediaKind: "image" | "video";
+  objectUrl?: boolean;
+}
 interface ServiceCategory { id: string; name: string; }
 interface BookingTodo { id: string; task: string; priority?: string | null; }
 interface BookingHome {
@@ -202,8 +214,22 @@ function BookingPageInner() {
   const [categories, setCategories] = useState<string[]>(fallbackCategories);
   const [categoryIdsByName, setCategoryIdsByName] = useState<Record<string, string>>({});
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [isPreparingMedia, setIsPreparingMedia] = useState(false);
   const [submitError, setSubmitError] = useState<string | null>(null);
   const [photoError, setPhotoError] = useState<string | null>(null);
+  const photosRef = useRef<Photo[]>([]);
+
+  useEffect(() => {
+    photosRef.current = photos;
+  }, [photos]);
+
+  useEffect(() => {
+    return () => {
+      for (const media of photosRef.current) {
+        if (media.objectUrl) URL.revokeObjectURL(media.url);
+      }
+    };
+  }, []);
 
   // Real-mode availability state - fetched per selected date.
   const [slots, setSlots] = useState<DisplaySlot[]>([]);
@@ -402,36 +428,80 @@ function BookingPageInner() {
   }
 
   async function handlePhotoUpload(source: "camera" | "library") {
-    if (photos.length >= 5) return;
+    if (photos.length >= 5 || isPreparingMedia) return;
     if (isDemo) {
       // Demo mode: keep existing placeholder behavior
       const id = Math.random().toString(36).slice(2);
-      setPhotos((prev) => [...prev, { id, url: `https://picsum.photos/seed/${id}/200/200`, name: `Photo ${prev.length + 1}` }]);
+      setPhotos((prev) => [...prev, {
+        id,
+        url: `https://picsum.photos/seed/${id}/200/200`,
+        name: `Photo ${prev.length + 1}`,
+        mediaKind: "image",
+      }]);
       return;
     }
-    // Real mode: open a file picker, read as data URL, store locally until booking submits
+    // Keep selected media local until the booking exists. Photos use a compact
+    // data-URL preview; videos use a blob URL so a large iPhone clip is never
+    // copied into component state.
     if (typeof document === "undefined") return;
     const input = document.createElement("input");
     input.type = "file";
-    input.accept = "image/*";
+    input.accept = source === "camera"
+      ? "image/*"
+      : "image/*,video/mp4,video/quicktime,video/webm,.mp4,.mov,.webm";
     input.multiple = false;
     if (source === "camera") input.setAttribute("capture", "environment");
     input.onchange = async () => {
       const file = input.files?.[0];
       if (!file) return;
       setPhotoError(null);
+      setIsPreparingMedia(true);
       try {
-        const dataUrl = await prepareImageForUpload(file);
+        const videoExtension = getVideoFileExtension(file);
+        const declaredVideo = file.type.trim().toLowerCase().startsWith("video/");
+        if (declaredVideo && !videoExtension) {
+          throw new Error("Use an MP4, MOV, or WEBM video.");
+        }
+
         const id = Math.random().toString(36).slice(2);
-        setPhotos((prev) => [...prev, { id, url: dataUrl, dataUrl, name: file.name || `Photo ${prev.length + 1}` }]);
+        if (videoExtension) {
+          if (file.size > MAX_VIDEO_BYTES) {
+            throw new Error(`That video is too large (max ${MAX_VIDEO_MB}MB). Try a shorter clip.`);
+          }
+          const previewUrl = URL.createObjectURL(file);
+          setPhotos((prev) => [...prev, {
+            id,
+            url: previewUrl,
+            file,
+            name: file.name || `Video ${prev.length + 1}`,
+            mediaKind: "video",
+            objectUrl: true,
+          }]);
+          return;
+        }
+
+        const dataUrl = await prepareImageForUpload(file);
+        setPhotos((prev) => [...prev, {
+          id,
+          url: dataUrl,
+          file,
+          name: file.name || `Photo ${prev.length + 1}`,
+          mediaKind: "image",
+        }]);
       } catch (error) {
-        setPhotoError(error instanceof Error ? error.message : "Could not prepare that photo");
+        setPhotoError(error instanceof Error ? error.message : "Could not prepare that media");
+      } finally {
+        setIsPreparingMedia(false);
       }
     };
     input.click();
   }
 
-  function removePhoto(id: string) { setPhotos((prev) => prev.filter((p) => p.id !== id)); }
+  function removePhoto(id: string) {
+    const removed = photos.find((photo) => photo.id === id);
+    if (removed?.objectUrl) URL.revokeObjectURL(removed.url);
+    setPhotos((prev) => prev.filter((photo) => photo.id !== id));
+  }
 
   const selectedLabel = selectedDay && selectedMonth ? `${selectedMonth} ${selectedDay}` : null;
   const homeFieldsFilled =
@@ -547,25 +617,28 @@ function BookingPageInner() {
       const booking = await res.json();
       const bookingId: string | undefined = booking?.id;
 
-      // Upload any collected photos against the new booking before confirming.
+      // Upload selected photos/videos only after the booking exists. Waiting
+      // for every attempt prevents a retry from creating a duplicate booking.
       if (bookingId && photos.length) {
-        const uploads = photos
-          .filter((p) => p.dataUrl)
-          .map((p) =>
-            fetch("/api/photos", {
-              method: "POST",
-              headers: { "Content-Type": "application/json" },
-              body: JSON.stringify({
-                bookingId,
-                dataUrl: p.dataUrl,
-                label: p.name,
-                type: "before",
-              }),
-            })
-          );
-        const uploadResponses = await Promise.all(uploads);
-        const failedUpload = uploadResponses.find((upload) => !upload.ok);
-        if (failedUpload) {
+        let mediaUploadFailed = false;
+        const selectedMedia = photos.filter(
+          (media): media is Photo & { file: File } => media.file instanceof File,
+        );
+        // A customer can select several large clips. Send them one at a time
+        // so the VPS never has to buffer multiple 90 MiB request bodies from
+        // one booking concurrently.
+        for (const media of selectedMedia) {
+          try {
+            await uploadMediaFile(media.file, {
+              bookingId,
+              label: media.name,
+              type: "before",
+            });
+          } catch {
+            mediaUploadFailed = true;
+          }
+        }
+        if (mediaUploadFailed) {
           // The booking already exists. Continue to its confirmation instead of
           // leaving the user on a button that could create a duplicate booking.
           router.push(`/book/confirmation?id=${bookingId}&photoUpload=failed`);
@@ -1042,34 +1115,51 @@ function BookingPageInner() {
 
             <div className="mb-6">
               <div className="mb-2 flex items-center justify-between">
-                <p className="text-sm font-semibold uppercase tracking-wider text-text-secondary">Photos <span className="ml-1 text-[11px] normal-case font-normal text-text-tertiary">(optional)</span></p>
+                <p className="text-sm font-semibold uppercase tracking-wider text-text-secondary">Media <span className="ml-1 text-[11px] normal-case font-normal text-text-tertiary">(optional)</span></p>
                 <span className="text-[11px] text-text-tertiary">{photos.length}/5</span>
               </div>
               <div className="flex gap-2 overflow-x-auto no-scrollbar pb-1">
                 <button
                   type="button"
                   onClick={() => handlePhotoUpload("camera")}
-                  disabled={photos.length >= 5}
+                  disabled={photos.length >= 5 || isPreparingMedia}
+                  aria-busy={isPreparingMedia}
                   className="flex h-24 w-24 shrink-0 flex-col items-center justify-center gap-1.5 rounded-xl border-2 border-dashed border-border bg-surface hover:border-primary/50 hover:bg-primary-50 transition-colors disabled:opacity-50"
                 >
                   <Camera size={22} className="text-text-tertiary" />
-                  <span className="text-[10px] font-medium text-text-tertiary">Camera</span>
+                  <span className="text-[10px] font-medium text-text-tertiary">Take photo</span>
                 </button>
                 <button
                   type="button"
                   onClick={() => handlePhotoUpload("library")}
-                  disabled={photos.length >= 5}
+                  disabled={photos.length >= 5 || isPreparingMedia}
+                  aria-busy={isPreparingMedia}
                   className="flex h-24 w-24 shrink-0 flex-col items-center justify-center gap-1.5 rounded-xl border-2 border-dashed border-border bg-surface hover:border-primary/50 hover:bg-primary-50 transition-colors disabled:opacity-50"
                 >
                   <Upload size={22} className="text-text-tertiary" />
-                  <span className="text-[10px] font-medium text-text-tertiary">Upload</span>
+                  <span className="text-[10px] font-medium text-text-tertiary">Photo / video</span>
                 </button>
                 {photos.map((photo) => (
                   <div key={photo.id} className="relative h-24 w-24 shrink-0 rounded-xl overflow-hidden border border-border">
-                    {/* Local previews use blob/data URLs and should not pass through the image optimizer. */}
-                    {/* eslint-disable-next-line @next/next/no-img-element */}
-                    <img src={photo.url} alt={photo.name} className="h-full w-full object-cover" />
-                    <button aria-label={`Remove ${photo.name}`} onClick={() => removePhoto(photo.id)} className="absolute -right-1 -top-1 flex h-11 w-11 items-center justify-center rounded-full">
+                    {photo.mediaKind === "video" ? (
+                      <video
+                        src={photo.url}
+                        aria-label={`Video preview: ${photo.name}`}
+                        className="h-full w-full bg-black object-cover"
+                        controls
+                        muted
+                        playsInline
+                        preload="metadata"
+                      />
+                    ) : (
+                      // Local previews use blob/data URLs and should not pass through the image optimizer.
+                      // eslint-disable-next-line @next/next/no-img-element
+                      <img src={photo.url} alt={photo.name} className="h-full w-full object-cover" />
+                    )}
+                    <span className="pointer-events-none absolute left-1 top-1 rounded-full bg-black/70 px-1.5 py-0.5 text-[9px] font-semibold text-white">
+                      {photo.mediaKind === "video" ? "Video" : "Photo"}
+                    </span>
+                    <button type="button" aria-label={`Remove ${photo.name}`} onClick={() => removePhoto(photo.id)} className="absolute -right-1 -top-1 flex h-11 w-11 items-center justify-center rounded-full">
                       <span className="flex h-6 w-6 items-center justify-center rounded-full bg-black/70">
                         <X size={12} className="text-white" />
                       </span>
@@ -1082,6 +1172,15 @@ function BookingPageInner() {
                   {photoError}
                 </p>
               )}
+              {isPreparingMedia && (
+                <div className="mt-2 flex items-center gap-2 text-[11px] font-medium text-text-secondary" role="status">
+                  <Spinner size="sm" />
+                  Preparing your media…
+                </div>
+              )}
+              <p className="mt-2 text-[11px] text-text-tertiary">
+                Choose photos or MP4, MOV, and WEBM clips up to {MAX_VIDEO_MB}MB each.
+              </p>
             </div>
 
             <div className="mb-8">
@@ -1120,10 +1219,26 @@ function BookingPageInner() {
                 {selectedCategories.length > 0 && (<><div className="h-px bg-border" /><div><span className="text-[12px] font-medium uppercase tracking-wide text-text-tertiary">Categories</span><div className="mt-2 flex flex-wrap gap-1.5">{selectedCategories.map((c) => (<span key={c} className="rounded-full bg-primary-50 px-3 py-1 text-[11px] font-medium text-primary">{c}</span>))}</div></div></>)}
                 {description && (<><div className="h-px bg-border" /><div><span className="text-[12px] font-medium uppercase tracking-wide text-text-tertiary">Description</span><p className="mt-1.5 text-[13px] text-text-secondary leading-relaxed">{description}</p></div></>)}
                 {partsNote && (<><div className="h-px bg-border" /><div className="flex items-center justify-between"><span className="text-[12px] font-medium uppercase tracking-wide text-text-tertiary">Parts</span><span className="text-[13px] text-text-secondary">{partsNote}</span></div></>)}
-                {photos.length > 0 && (<><div className="h-px bg-border" /><div><span className="text-[12px] font-medium uppercase tracking-wide text-text-tertiary">Photos ({photos.length})</span><div className="mt-2 flex gap-2">{photos.map((p) => (
-                  // Local previews use blob/data URLs and should not pass through the image optimizer.
-                  // eslint-disable-next-line @next/next/no-img-element
-                  <img key={p.id} src={p.url} alt="" className="h-14 w-14 rounded-lg object-cover border border-border" />
+                {photos.length > 0 && (<><div className="h-px bg-border" /><div><span className="text-[12px] font-medium uppercase tracking-wide text-text-tertiary">Media ({photos.length})</span><div className="mt-2 flex gap-2 overflow-x-auto pb-1">{photos.map((p) => (
+                  <div key={p.id} className="relative h-14 w-14 shrink-0 overflow-hidden rounded-lg border border-border">
+                    {p.mediaKind === "video" ? (
+                      <video
+                        src={p.url}
+                        aria-label={`Video preview: ${p.name}`}
+                        className="h-full w-full bg-black object-cover"
+                        muted
+                        playsInline
+                        preload="metadata"
+                      />
+                    ) : (
+                      // Local previews use blob/data URLs and should not pass through the image optimizer.
+                      // eslint-disable-next-line @next/next/no-img-element
+                      <img src={p.url} alt={p.name} className="h-full w-full object-cover" />
+                    )}
+                    <span className="pointer-events-none absolute bottom-0.5 left-0.5 rounded bg-black/70 px-1 text-[8px] font-semibold text-white">
+                      {p.mediaKind === "video" ? "Video" : "Photo"}
+                    </span>
+                  </div>
                 ))}</div></div></>)}
               </div>
             </Card>

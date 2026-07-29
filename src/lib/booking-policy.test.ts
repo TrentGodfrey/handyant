@@ -9,6 +9,7 @@ import {
   businessDateString,
   businessDateTimeToInstant,
   customerCancellationError,
+  isHistoricalVisitWindowComplete,
   intervalsOverlap,
   validateBookingWindow,
 } from "./booking-policy";
@@ -33,6 +34,25 @@ test("converts DFW summer and winter booking times to UTC instants", () => {
 
 test("uses the DFW calendar date near UTC midnight", () => {
   assert.equal(businessDateString(new Date("2026-07-27T02:00:00Z")), "2026-07-26");
+});
+
+test("classifies a visit as historical only after its full window has elapsed", () => {
+  const now = new Date("2026-07-27T14:00:00Z");
+  assert.equal(
+    isHistoricalVisitWindowComplete(
+      new Date("2026-07-27T14:45:00Z"),
+      now,
+    ),
+    false,
+  );
+  assert.equal(
+    isHistoricalVisitWindowComplete(
+      new Date("2026-07-27T13:59:59Z"),
+      now,
+    ),
+    true,
+  );
+  assert.equal(isHistoricalVisitWindowComplete(new Date(Number.NaN), now), false);
 });
 
 test("rejects normalized and impossible calendar values", () => {
@@ -74,7 +94,7 @@ test("allows only future canonical slots on enabled working days", () => {
   );
 });
 
-test("allowPastVisit lets staff log recent past visits within the backdate bound", () => {
+test("allowPastVisit lets staff log historical visits without opening backdating to customers", () => {
   const now = new Date("2026-07-27T14:00:00Z");
   const backdated = validateBookingWindow({
     date: "2026-07-20",
@@ -84,26 +104,37 @@ test("allowPastVisit lets staff log recent past visits within the backdate bound
     allowPastVisit: true,
   });
   assert.equal(backdated.ok, true);
-  assert.deepEqual(
+  assert.equal(
     validateBookingWindow({
-      date: "2025-07-21", // a Monday, well past the 180-day bound
+      date: "2024-01-07",
       time: "08:00",
       visitCount: 1,
       now,
       allowPastVisit: true,
-    }),
-    { ok: false, message: "Visits can be logged up to 180 days back" },
+    }).ok,
+    true,
   );
-  // Working-hours rules still apply to backdated visits.
   assert.deepEqual(
     validateBookingWindow({
-      date: "2026-07-19",
+      date: "2026-07-20",
+      time: "08:00",
+      visitCount: 1,
+      now,
+    }),
+    { ok: false, message: "Choose a future visit time" },
+  );
+  assert.deepEqual(
+    validateBookingWindow({
+      date: "2026-07-27",
       time: "08:00",
       visitCount: 1,
       now,
       allowPastVisit: true,
     }),
-    { ok: false, message: "MCQ is closed on that day" },
+    {
+      ok: false,
+      message: "A past visit can be added after its full visit window has ended",
+    },
   );
 });
 

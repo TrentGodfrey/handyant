@@ -4,6 +4,7 @@ import { decryptHomeAccess, encryptSensitiveValue } from "@/lib/sensitive-data";
 import { requireAdmin, requireTech, unauthorized } from "@/lib/session";
 import { SubscriptionPlan } from "@/generated/prisma/enums";
 import { customerRosterWhere } from "@/lib/resource-access";
+import { ACTIVE_HOME_ASSIGNMENT_STATUSES } from "@/lib/access-control";
 
 export async function GET(req: NextRequest) {
   const tech = await requireTech();
@@ -17,7 +18,14 @@ export async function GET(req: NextRequest) {
       homes: {
         where: tech.isAdmin
           ? {}
-          : { bookings: { some: { techId: tech.id } } },
+          : {
+              bookings: {
+                some: {
+                  techId: tech.id,
+                  status: { in: [...ACTIVE_HOME_ASSIGNMENT_STATUSES] },
+                },
+              },
+            },
         orderBy: { createdAt: "desc" },
       },
       subscriptions: {
@@ -25,7 +33,14 @@ export async function GET(req: NextRequest) {
           ? { status: "active" }
           : {
               status: "active",
-              home: { bookings: { some: { techId: tech.id } } },
+              home: {
+                bookings: {
+                  some: {
+                    techId: tech.id,
+                    status: { in: [...ACTIVE_HOME_ASSIGNMENT_STATUSES] },
+                  },
+                },
+              },
             },
         take: 1,
       },

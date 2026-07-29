@@ -8,7 +8,7 @@ import {
   Upload, ZoomIn, Loader2, Trash2,
 } from "lucide-react";
 import { useDemoMode } from "@/lib/useDemoMode";
-import { prepareImageForUpload } from "@/lib/client-image-upload";
+import { uploadMediaFile } from "@/lib/client-image-upload";
 import { isVideoUrl } from "@/lib/media";
 
 // =====================================================================
@@ -130,8 +130,8 @@ function DemoPhotoGallery() {
         </Link>
         <div className="flex items-center justify-between">
           <div>
-            <h1 className="text-[24px] font-bold text-text-primary">Visit Photos</h1>
-            <p className="text-[13px] text-text-secondary mt-0.5">{totalPhotos} photos across 4 visits</p>
+            <h1 className="text-[24px] font-bold text-text-primary">Visit Media</h1>
+            <p className="text-[13px] text-text-secondary mt-0.5">{totalPhotos} media items across 4 visits</p>
           </div>
         </div>
 
@@ -218,7 +218,7 @@ function DemoPhotoGallery() {
           className="flex min-h-11 items-center gap-2 rounded-full bg-primary px-5 py-3 text-[13px] font-semibold text-white shadow-[0_4px_20px_rgba(79,149,152,0.4)] active:scale-[0.97] transition-all"
         >
           <Upload size={16} />
-          Upload Photo
+          Upload Media
         </button>
       </div>
 
@@ -358,16 +358,11 @@ function RealPhotoGallery() {
     setUploading(true);
     setUploadError(null);
     try {
-      const dataUrl = await prepareImageForUpload(file);
-      const res = await fetch("/api/photos", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ homeId: home.id, dataUrl }),
+      await uploadMediaFile(file, {
+        homeId: home.id,
+        label: file.name,
+        type: "general",
       });
-      if (!res.ok) {
-        const err = await res.json().catch(() => ({}));
-        throw new Error(err.error ?? "Upload failed");
-      }
       await refresh();
     } catch (err: unknown) {
       setUploadError(err instanceof Error ? err.message : "Upload failed");
@@ -416,7 +411,13 @@ function RealPhotoGallery() {
 
   return (
     <div className="min-h-screen bg-background pb-28">
-      <input ref={fileInputRef} type="file" accept="image/*" className="hidden" onChange={handleFile} />
+      <input
+        ref={fileInputRef}
+        type="file"
+        accept="image/*,video/mp4,video/quicktime,video/webm,.mp4,.mov,.webm"
+        className="hidden"
+        onChange={handleFile}
+      />
 
       {/* Header */}
       <div className="bg-surface border-b border-border px-5 pt-14 pb-4">
@@ -429,9 +430,9 @@ function RealPhotoGallery() {
         </Link>
         <div className="flex items-center justify-between">
           <div>
-            <h1 className="text-[24px] font-bold text-text-primary">Visit Photos</h1>
+            <h1 className="text-[24px] font-bold text-text-primary">Visit Media</h1>
             <p className="text-[13px] text-text-secondary mt-0.5">
-              {photos.length} {photos.length === 1 ? "photo" : "photos"}
+              {photos.length} {photos.length === 1 ? "media item" : "media items"}
             </p>
           </div>
         </div>
@@ -470,7 +471,7 @@ function RealPhotoGallery() {
             </div>
             <p className="text-[16px] font-semibold text-text-primary">No home on file</p>
             <p className="text-[13px] text-text-secondary mt-1.5 max-w-xs">
-              Set up your home in your profile before adding photos.
+              Set up your home in your profile before adding media.
             </p>
             <Link
               href="/account/home"
@@ -484,9 +485,9 @@ function RealPhotoGallery() {
             <div className="flex h-16 w-16 items-center justify-center rounded-full bg-surface-secondary mb-4">
               <Camera size={28} className="text-text-tertiary" />
             </div>
-            <p className="text-[16px] font-semibold text-text-primary">No photos yet</p>
+            <p className="text-[16px] font-semibold text-text-primary">No media yet</p>
             <p className="text-[13px] text-text-secondary mt-1.5">
-              Tap Upload Photo to add the first one.
+              Tap Upload Media to add the first photo or video.
             </p>
           </div>
         ) : (
@@ -507,7 +508,9 @@ function RealPhotoGallery() {
                       preload="metadata"
                       className="absolute inset-0 h-full w-full object-cover"
                       aria-label={photo.label ?? "Video"}
-                    />
+                    >
+                      Your browser does not support video playback.
+                    </video>
                   ) : (
                   /* eslint-disable-next-line @next/next/no-img-element */
                   <img
@@ -543,7 +546,7 @@ function RealPhotoGallery() {
             className="flex min-h-11 items-center gap-2 rounded-full bg-primary px-5 py-3 text-[13px] font-semibold text-white shadow-[0_4px_20px_rgba(79,149,152,0.4)] active:scale-[0.97] transition-all disabled:opacity-60"
           >
             {uploading ? <Loader2 size={16} className="animate-spin" /> : <Upload size={16} />}
-            {uploading ? "Uploading…" : "Upload Photo"}
+            {uploading ? "Uploading…" : "Upload Media"}
           </button>
         </div>
       )}
@@ -554,7 +557,7 @@ function RealPhotoGallery() {
           <div className="flex items-center justify-between px-5 pt-[max(env(safe-area-inset-top,0px),3.5rem)] pb-4">
             <div className="min-w-0 flex-1">
               <p className="text-white font-semibold text-[15px] truncate">
-                {modalPhoto.label || "Photo"}
+                {modalPhoto.label || (isVideoUrl(modalPhoto.url) ? "Video" : "Photo")}
               </p>
               <p className="text-white/60 text-[12px] mt-0.5">{formatPhotoDate(modalPhoto.uploadedAt)}</p>
             </div>
@@ -563,7 +566,7 @@ function RealPhotoGallery() {
                 onClick={() => handleDelete(modalPhoto)}
                 disabled={deletingId === modalPhoto.id}
                 className="flex h-11 w-11 items-center justify-center rounded-full bg-white/15 active:bg-white/25 transition-colors disabled:opacity-50"
-                aria-label="Delete photo"
+                aria-label="Delete media"
               >
                 {deletingId === modalPhoto.id
                   ? <Loader2 size={16} className="animate-spin text-white" />
@@ -595,7 +598,9 @@ function RealPhotoGallery() {
                   preload="metadata"
                   className="absolute inset-0 h-full w-full object-contain"
                   aria-label={modalPhoto.label ?? "Video"}
-                />
+                >
+                  Your browser does not support video playback.
+                </video>
               ) : (
               /* eslint-disable-next-line @next/next/no-img-element */
               <img

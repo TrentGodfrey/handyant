@@ -1,4 +1,8 @@
-import { MAX_VIDEO_BYTES, MAX_VIDEO_MB, VIDEO_MIME_EXT } from "@/lib/media";
+import {
+  getVideoFileExtension,
+  MAX_VIDEO_BYTES,
+  MAX_VIDEO_MB,
+} from "@/lib/media";
 
 // Keep the encoded request comfortably below reverse-proxy limits. A base64
 // payload is roughly 33% larger than the original file, so sending a raw 5 MB
@@ -99,8 +103,10 @@ export async function uploadMediaFile(
   file: File,
   target: UploadTarget,
 ): Promise<UploadedMedia> {
-  if (file.type.toLowerCase().startsWith("video/")) {
-    if (!VIDEO_MIME_EXT[file.type.toLowerCase()]) {
+  const videoExtension = getVideoFileExtension(file);
+  const declaredVideo = file.type.trim().toLowerCase().startsWith("video/");
+  if (videoExtension || declaredVideo) {
+    if (!videoExtension) {
       throw new Error("Use an MP4, MOV, or WEBM video.");
     }
     if (file.size > MAX_VIDEO_BYTES) {

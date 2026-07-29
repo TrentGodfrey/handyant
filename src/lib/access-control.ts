@@ -62,6 +62,26 @@ export function canAccessBookingResource(
   );
 }
 
+export type HomeResourceAccessDecision =
+  | "allow"
+  | "requires_assignment"
+  | "deny";
+
+/**
+ * Resolve the portion of home access that does not require a database lookup.
+ * Customers may reach only homes linked to their own account, while the
+ * business owner may reach every home. Ordinary technicians must prove an
+ * active booking assignment before access is granted.
+ */
+export function homeResourceAccessDecision(
+  user: { id: string; role: "customer" | "tech"; isAdmin: boolean },
+  home: { customerId: string },
+): HomeResourceAccessDecision {
+  if (home.customerId === user.id) return "allow";
+  if (user.role !== "tech") return "deny";
+  return user.isAdmin ? "allow" : "requires_assignment";
+}
+
 export function canMutateSharedHomeNote(
   user: { id: string; role: "customer" | "tech"; isAdmin: boolean },
   authorId: string | null,

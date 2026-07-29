@@ -1,6 +1,12 @@
 import { NextRequest } from "next/server";
 import { prisma } from "@/lib/prisma";
-import { requireUser, unauthorized, notFound, forbidden } from "@/lib/session";
+import {
+  requireUser,
+  unauthorized,
+  notFound,
+  forbidden,
+  passwordChangeRequired,
+} from "@/lib/session";
 import { deleteLocalUploadFiles } from "@/lib/upload-storage";
 import { canAccessBooking, canAccessHome } from "@/lib/resource-access";
 
@@ -10,6 +16,7 @@ export async function DELETE(
 ) {
   const user = await requireUser();
   if (!user) return unauthorized();
+  if (user.role === "tech" && user.mustChangePassword) return passwordChangeRequired();
   const { id } = await ctx.params;
 
   const photo = await prisma.photo.findUnique({ where: { id } });

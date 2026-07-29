@@ -13,7 +13,7 @@ import {
 import { isVideoUrl } from "@/lib/media";
 import {
   Loader2, ListChecks, Plus, Trash2, ShoppingCart,
-  Camera, AlertCircle,
+  Camera, AlertCircle, Pencil,
 } from "lucide-react";
 
 // ── Types ────────────────────────────────────────────────────────────────────
@@ -636,7 +636,7 @@ function TodoRow({
               )}
               <Link
                 href={`/task/${todo.id}`}
-                className={`text-[14px] font-semibold leading-snug ${
+                className={`inline-flex min-h-11 items-center text-[14px] font-semibold leading-snug ${
                   todo.done
                     ? "line-through text-text-tertiary"
                     : "text-text-primary hover:text-primary"
@@ -721,6 +721,17 @@ function TodoRow({
               )}
             </div>
           )}
+
+          <div className="mt-2 flex justify-end">
+            <Link
+              href={`/task/${todo.id}`}
+              className="inline-flex min-h-11 items-center gap-1.5 rounded-lg bg-primary-50 px-3 text-[11px] font-semibold text-primary active:bg-primary-100"
+              aria-label={`Edit ${todo.task}`}
+            >
+              <Pencil size={11} />
+              Edit task
+            </Link>
+          </div>
         </div>
       </div>
     </Card>

@@ -5,7 +5,7 @@ import StatusBadge from "@/components/StatusBadge";
 import AddTaskForm, { type NewTaskPayload } from "@/components/AddTaskForm";
 import Link from "next/link";
 import {
-  Plus, Camera, ShoppingCart, AlertTriangle, CheckCircle2, X, Trash2,
+  Plus, Camera, ShoppingCart, AlertTriangle, CheckCircle2, Pencil, X, Trash2,
 } from "lucide-react";
 import type { ItemStatus, NormalizedTodo } from "./types";
 import { priorityDot } from "./types";
@@ -56,7 +56,7 @@ export default function TodoList({
             className="flex min-h-11 items-center gap-1 rounded-lg border border-border bg-surface px-2.5 py-1.5 text-[11px] font-medium text-text-secondary active:bg-surface-secondary transition-colors"
           >
             <Camera size={11} />
-            Photo
+            Media
           </button>
           <button
             type="button"
@@ -191,6 +191,14 @@ export default function TodoList({
                       )}
                     </div>
                     <div className="flex items-center gap-1.5">
+                      <Link
+                        href={`/task/${item.id}`}
+                        className="flex min-h-11 items-center gap-1 rounded-full bg-primary-50 px-3 py-1 text-[10px] font-semibold text-primary active:bg-primary-100"
+                        aria-label={`Edit ${item.task}`}
+                      >
+                        <Pencil size={10} />
+                        Edit
+                      </Link>
                       <button
                         type="button"
                         onClick={() => deleteTask(item.id)}

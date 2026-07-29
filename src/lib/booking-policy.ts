@@ -11,7 +11,6 @@ import {
 
 export const BUSINESS_TIME_ZONE = "America/Chicago";
 export const MAX_BOOKING_ADVANCE_DAYS = 180;
-export const MAX_BOOKING_BACKDATE_DAYS = 180;
 export const MAX_PENDING_BOOKINGS_PER_CUSTOMER = 8;
 export const MAX_FUTURE_BOOKINGS_PER_CUSTOMER = 24;
 
@@ -119,6 +118,13 @@ export function businessDateString(date = new Date()): string {
   return `${parts.year}-${String(parts.month).padStart(2, "0")}-${String(parts.day).padStart(2, "0")}`;
 }
 
+export function isHistoricalVisitWindowComplete(
+  endAt: Date,
+  now = new Date(),
+): boolean {
+  return !Number.isNaN(endAt.getTime()) && endAt.getTime() <= now.getTime();
+}
+
 export function dateOnlyString(value: Date | string): string | null {
   const parts = bookingDateParts(value);
   if (!parts) return null;
@@ -186,7 +192,7 @@ export function validateBookingWindow(params: {
   workingHours?: unknown;
   now?: Date;
   allowBeyondAdvanceHorizon?: boolean;
-  /** Staff may log visits for days already worked (bounded backdating). */
+  /** Staff may log visits only after the full visit window has elapsed. */
   allowPastVisit?: boolean;
 }): BookingPolicyResult {
   const {
@@ -203,6 +209,18 @@ export function validateBookingWindow(params: {
   if (!isVisitBlockCount(visitCount) || !canStartVisitBlocks(time, visitCount)) {
     return { ok: false, message: "Choose one of the four available start times and a valid visit length" };
   }
+  const endAt = new Date(dateValue.getTime() + visitDurationMinutes(visitCount) * 60_000);
+  const visitHasStarted = dateValue.getTime() <= now.getTime();
+  const visitWindowComplete = isHistoricalVisitWindowComplete(endAt, now);
+  if (visitHasStarted && !allowPastVisit) {
+    return { ok: false, message: "Choose a future visit time" };
+  }
+  if (visitHasStarted && allowPastVisit && !visitWindowComplete) {
+    return {
+      ok: false,
+      message: "A past visit can be added after its full visit window has ended",
+    };
+  }
 
   const dateAtMidnight = new Date(`${date}T00:00:00Z`);
   if (Number.isNaN(dateAtMidnight.getTime())) {
@@ -210,23 +228,31 @@ export function validateBookingWindow(params: {
   }
   const day = DAY_KEYS[dateAtMidnight.getUTCDay()];
   const hours = effectiveDayHours(workingHours, day);
-  if (!hours.enabled) return { ok: false, message: "MCQ is closed on that day" };
+  // A historical visit records work that already happened. Current working
+  // hours or an old lunch configuration must not prevent staff from preserving
+  // that history. Future staff/customer bookings still follow today's policy.
+  if (!visitWindowComplete && !hours.enabled) {
+    return { ok: false, message: "MCQ is closed on that day" };
+  }
 
   const startMinutes = parseMinutes(time);
   const workingStart = parseMinutes(hours.start);
   const workingEnd = parseMinutes(hours.end);
   const endMinutes = startMinutes + visitDurationMinutes(visitCount);
   if (
-    Number.isNaN(workingStart) ||
-    Number.isNaN(workingEnd) ||
-    startMinutes < workingStart ||
-    endMinutes > workingEnd
+    !visitWindowComplete &&
+    (
+      Number.isNaN(workingStart) ||
+      Number.isNaN(workingEnd) ||
+      startMinutes < workingStart ||
+      endMinutes > workingEnd
+    )
   ) {
     return { ok: false, message: "That visit falls outside MCQ working hours" };
   }
 
   const lunch = effectiveLunchBreak(workingHours);
-  if (lunch) {
+  if (!visitWindowComplete && lunch) {
     const lunchStart = parseMinutes(lunch.start);
     const lunchEnd = parseMinutes(lunch.end);
     if (
@@ -241,22 +267,6 @@ export function validateBookingWindow(params: {
     }
   }
 
-  const endAt = new Date(dateValue.getTime() + visitDurationMinutes(visitCount) * 60_000);
-  if (!allowPastVisit && dateValue.getTime() <= now.getTime()) {
-    return { ok: false, message: "Choose a future visit time" };
-  }
-  if (allowPastVisit) {
-    const earliestDate = addDaysToDateString(
-      businessDateString(now),
-      -MAX_BOOKING_BACKDATE_DAYS,
-    );
-    if (earliestDate && date < earliestDate) {
-      return {
-        ok: false,
-        message: `Visits can be logged up to ${MAX_BOOKING_BACKDATE_DAYS} days back`,
-      };
-    }
-  }
   const latestDate = addDaysToDateString(
     businessDateString(now),
     MAX_BOOKING_ADVANCE_DAYS,

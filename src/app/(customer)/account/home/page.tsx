@@ -405,7 +405,7 @@ function RealHomeProfile() {
 
   return (
     <div className="min-h-screen bg-background pb-[calc(7rem+env(safe-area-inset-bottom))]">
-      <input ref={photoInputRef} type="file" accept="image/*,video/mp4,video/quicktime,video/webm" className="hidden" onChange={handlePhotoFile} />
+      <input ref={photoInputRef} type="file" accept="image/*,video/mp4,video/quicktime,video/webm,.mp4,.mov,.webm" className="hidden" onChange={handlePhotoFile} />
 
       {homes.length > 1 && (
         <div className="border-b border-border bg-surface px-4 pb-3 pt-[calc(0.75rem+env(safe-area-inset-top))] sm:px-6">

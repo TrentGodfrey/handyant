@@ -11,12 +11,13 @@ import {
   Plus, AlertTriangle, Check, Package, Pencil, Star, Trash2,
 } from "lucide-react";
 import { useDemoMode } from "@/lib/useDemoMode";
-import { prepareImageForUpload } from "@/lib/client-image-upload";
+import { uploadMediaFile } from "@/lib/client-image-upload";
 import { toast } from "@/components/Toaster";
 import { demoCustomerBy } from "@/lib/demoData";
 import Spinner from "@/components/Spinner";
 import { bookingDateToLocalDate, formatBookingTime } from "@/lib/booking-time";
 import { businessDateString } from "@/lib/booking-policy";
+import { isVideoUrl } from "@/lib/media";
 import { normalizePartsBuyer } from "@/lib/parts-status";
 
 // ── Types ────────────────────────────────────────────────────────────────────
@@ -632,37 +633,21 @@ export default function JobDetailPage({ params }: { params: Promise<{ id: string
     if (!file) return;
     setUploadError(null);
 
-    const dataUrl = await prepareImageForUpload(file).catch((err: unknown) => {
-      setUploadError(err instanceof Error ? err.message : "Failed to prepare photo");
-      return null;
-    });
-    if (!dataUrl) return;
-
     if (isDemo) {
-      // Append a placeholder entry locally for demo mode.
+      // Demo mode keeps the selected media local while still showing a real preview.
       setPhotos((prev) => [
         ...prev,
-        { id: `demo-${Date.now()}`, label: file.name, url: dataUrl },
+        { id: `demo-${Date.now()}`, label: file.name, url: URL.createObjectURL(file) },
       ]);
       return;
     }
     setUploading(true);
     try {
-      const res = await fetch("/api/photos", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          bookingId: id,
-          dataUrl,
-          label: file.name,
-          type: "after",
-        }),
+      const created = await uploadMediaFile(file, {
+        bookingId: id,
+        label: file.name,
+        type: "after",
       });
-      if (!res.ok) {
-        const body = await res.json().catch(() => ({}));
-        throw new Error(body?.error ?? `Upload failed (${res.status})`);
-      }
-      const created = await res.json();
       setPhotos((prev) => [
         ...prev,
         { id: created.id, label: created.label ?? file.name, url: created.url },
@@ -675,10 +660,14 @@ export default function JobDetailPage({ params }: { params: Promise<{ id: string
   }
 
   async function deletePhoto(photoId: string) {
-    if (!window.confirm("Delete this visit photo permanently?")) return;
+    if (!window.confirm("Delete this visit media permanently?")) return;
     if (isDemo) {
-      setPhotos((current) => current.filter((photo) => photo.id !== photoId));
-      toast.success("Photo deleted");
+      setPhotos((current) => {
+        const media = current.find((photo) => photo.id === photoId);
+        if (media?.url?.startsWith("blob:")) URL.revokeObjectURL(media.url);
+        return current.filter((photo) => photo.id !== photoId);
+      });
+      toast.success("Media deleted");
       return;
     }
 
@@ -687,11 +676,11 @@ export default function JobDetailPage({ params }: { params: Promise<{ id: string
     try {
       const response = await fetch(`/api/photos/${photoId}`, { method: "DELETE" });
       const data = await response.json().catch(() => ({}));
-      if (!response.ok) throw new Error(data.error || "Photo could not be deleted");
+      if (!response.ok) throw new Error(data.error || "Media could not be deleted");
       setPhotos((current) => current.filter((photo) => photo.id !== photoId));
-      toast.success("Photo deleted");
+      toast.success("Media deleted");
     } catch (error) {
-      const message = error instanceof Error ? error.message : "Photo could not be deleted";
+      const message = error instanceof Error ? error.message : "Media could not be deleted";
       setUploadError(message);
       toast.error(message);
     } finally {
@@ -971,11 +960,11 @@ export default function JobDetailPage({ params }: { params: Promise<{ id: string
           </div>
         )}
 
-        {/* Photos */}
+        {/* Media */}
         <div>
           <div className="mb-2 flex items-center justify-between">
             <p className="text-sm font-semibold uppercase tracking-wider text-text-secondary">
-              Photos {photos.length > 0 ? `(${photos.length})` : ""}
+              Media {photos.length > 0 ? `(${photos.length})` : ""}
             </p>
             {uploading && (
               <span className="text-[11px] text-text-tertiary">Uploading…</span>
@@ -984,11 +973,11 @@ export default function JobDetailPage({ params }: { params: Promise<{ id: string
           <input
             ref={fileInputRef}
             type="file"
-            accept="image/*"
+            accept="image/*,video/mp4,video/quicktime,video/webm,.mp4,.mov,.webm"
             className="hidden"
             onChange={handlePhotoChange}
           />
-          <div className="grid grid-cols-3 gap-2">
+          <div className="grid grid-cols-2 gap-2 sm:grid-cols-3">
             {photos.map((photo) => (
               <div
                 key={photo.id}
@@ -996,12 +985,25 @@ export default function JobDetailPage({ params }: { params: Promise<{ id: string
               >
                 {photo.url ? (
                   // Protected uploads must load in the browser so the session cookie is included.
-                  // eslint-disable-next-line @next/next/no-img-element
-                  <img
-                    src={photo.url}
-                    alt={photo.label}
-                    className="absolute inset-0 h-full w-full object-cover"
-                  />
+                  isVideoUrl(photo.url) || /\.(?:mp4|mov|webm)$/i.test(photo.label) ? (
+                    <video
+                      src={photo.url}
+                      controls
+                      playsInline
+                      preload="metadata"
+                      className="absolute inset-0 h-full w-full object-cover"
+                      aria-label={photo.label || "Visit video"}
+                    >
+                      Your browser does not support video playback.
+                    </video>
+                  ) : (
+                    // eslint-disable-next-line @next/next/no-img-element
+                    <img
+                      src={photo.url}
+                      alt={photo.label}
+                      className="absolute inset-0 h-full w-full object-cover"
+                    />
+                  )
                 ) : (
                   <>
                     <Camera size={20} className="text-text-tertiary" />
@@ -1012,7 +1014,7 @@ export default function JobDetailPage({ params }: { params: Promise<{ id: string
                   type="button"
                   onClick={() => deletePhoto(photo.id)}
                   disabled={deletingPhotoId === photo.id}
-                  aria-label={`Delete ${photo.label || "visit photo"}`}
+                  aria-label={`Delete ${photo.label || "visit media"}`}
                   className="absolute right-0 top-0 z-10 flex h-11 w-11 items-center justify-center rounded-full disabled:opacity-60"
                 >
                   <span className="flex h-8 w-8 items-center justify-center rounded-full bg-black/70 text-white shadow-sm active:bg-black/85">
@@ -1028,7 +1030,7 @@ export default function JobDetailPage({ params }: { params: Promise<{ id: string
               className="aspect-square rounded-xl border-2 border-dashed border-border flex flex-col items-center justify-center gap-1.5 hover:border-primary/40 transition-colors disabled:opacity-60"
             >
               <Plus size={18} className="text-text-tertiary" />
-              <p className="text-[9px] text-text-tertiary">{uploading ? "Uploading" : "Add"}</p>
+              <p className="text-[9px] text-text-tertiary">{uploading ? "Uploading" : "Add media"}</p>
             </button>
           </div>
           {uploadError && (

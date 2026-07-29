@@ -185,5 +185,8 @@ export async function proxy(req: NextRequest) {
 }
 
 export const config = {
-  matcher: ["/((?!_next/static|_next/image|favicon.ico).*)"],
+  // Uploads are authenticated and gated inside their Route Handlers so large
+  // multipart bodies can stream directly there instead of being cloned into
+  // the Proxy's in-memory request buffer.
+  matcher: ["/((?!api/photos(?:/|$)|_next/static|_next/image|favicon.ico).*)"],
 };

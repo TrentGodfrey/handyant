@@ -422,9 +422,9 @@ function RealConfirmation() {
       <div className="px-5 py-5 space-y-5">
         {photoUploadFailed && (
           <div className="rounded-xl border border-warning/30 bg-warning-light px-4 py-3">
-            <p className="text-[13px] font-semibold text-text-primary">Your visit was created, but one photo did not upload.</p>
+            <p className="text-[13px] font-semibold text-text-primary">Your visit was created, but some media did not upload.</p>
             <p className="mt-1 text-[12px] text-text-secondary">
-              You can add it to the task or home after returning to the app.
+              You can add those photos or videos to the task or home after returning to the app.
             </p>
           </div>
         )}

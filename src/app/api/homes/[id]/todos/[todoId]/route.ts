@@ -20,6 +20,10 @@ import {
   optionalPartPurchaseStatus,
   optionalPartsBuyer,
 } from "@/lib/parts-status";
+import {
+  isPrismaTransactionConflict,
+  syncLinkedActiveBookingTasks,
+} from "@/lib/home-task-sync";
 
 async function ensureAccess(homeId: string) {
   const user = await requireUser();
@@ -126,7 +130,22 @@ export async function PATCH(
   }
   if (Object.keys(data).length === 0) return badRequest("No valid task updates were provided");
 
-  const updated = await prisma.homeTodo.update({ where: { id: todoId }, data });
+  let updated;
+  try {
+    updated = await prisma.$transaction(async (tx) => {
+      const result = await tx.homeTodo.update({ where: { id: todoId }, data });
+      await syncLinkedActiveBookingTasks(tx, result.id, result, data);
+      return result;
+    }, { isolationLevel: "Serializable" });
+  } catch (error) {
+    if (isPrismaTransactionConflict(error)) {
+      return Response.json(
+        { error: "This task changed while you were editing it. Refresh and try again." },
+        { status: 409 },
+      );
+    }
+    throw error;
+  }
   await sendHomeTaskEmail({
     homeId: id,
     actorRole: access.user.role,

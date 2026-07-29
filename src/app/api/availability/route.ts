@@ -70,6 +70,7 @@ export async function GET(req: NextRequest) {
   // everyone else only sees future availability.
   const viewer = await requireUser();
   const allowPastVisit = viewer?.role === "tech";
+  const now = new Date();
   const policyResults = BOOKING_SLOT_STARTS.map((time) => ({
     time,
     result: validateBookingWindow({
@@ -78,6 +79,7 @@ export async function GET(req: NextRequest) {
       visitCount,
       workingHours,
       allowPastVisit,
+      now,
     }),
   }));
   if (policyResults.every(({ result }) => !result.ok && result.message === "MCQ is closed on that day")) {
@@ -103,7 +105,9 @@ export async function GET(req: NextRequest) {
       where: {
         techId: tech.id,
         scheduledDate: date,
-        status: { in: ["pending", "confirmed", "in_progress"] },
+        // Completed history still occupies its original time. Keeping every
+        // non-cancelled visit here prevents an accidental duplicate import.
+        status: { not: "cancelled" },
       },
       select: { scheduledTime: true, durationMinutes: true },
     }),
@@ -135,9 +139,13 @@ export async function GET(req: NextRequest) {
     const overlapsBooking = bookingIntervals.some((booking) =>
       intervalsOverlap(startAt, endAt, booking.startAt, booking.endAt),
     );
-    const overlapsBlock = blocks.some((block) =>
-      intervalsOverlap(startAt, endAt, block.startAt, block.endAt),
-    );
+    // Old availability blocks describe what was planned, not what actually
+    // happened. They must not prevent staff from recording a completed visit.
+    const overlapsBlock =
+      endAt.getTime() > now.getTime() &&
+      blocks.some((block) =>
+        intervalsOverlap(startAt, endAt, block.startAt, block.endAt),
+      );
     return { time, available: !overlapsBooking && !overlapsBlock };
   });
 

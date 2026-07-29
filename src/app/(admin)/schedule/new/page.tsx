@@ -26,6 +26,7 @@ import { DEMO_CUSTOMERS } from "@/lib/demoData";
 import {
   businessDateString,
   businessDateTimeToInstant,
+  isHistoricalVisitWindowComplete,
 } from "@/lib/booking-policy";
 import { bookingDateToLocalDate } from "@/lib/booking-time";
 import {
@@ -124,6 +125,22 @@ function buildLiveCalendar(today: Date, weekOffset = 0): CalendarDay[] {
   return result;
 }
 
+function calendarWeekOffsetForDate(today: Date, target: Date): number {
+  const todayWeek = startOfWeekSunday(today);
+  const targetWeek = startOfWeekSunday(target);
+  const todayDay = Date.UTC(
+    todayWeek.getFullYear(),
+    todayWeek.getMonth(),
+    todayWeek.getDate(),
+  );
+  const targetDay = Date.UTC(
+    targetWeek.getFullYear(),
+    targetWeek.getMonth(),
+    targetWeek.getDate(),
+  );
+  return Math.round((targetDay - todayDay) / (7 * 24 * 60 * 60 * 1000));
+}
+
 const DEMO_CALENDAR = buildDemoCalendar();
 
 const inputCls =
@@ -179,9 +196,8 @@ function ScheduleNewPageInner() {
   // Calendar: demo mode uses fixed March 2026 grid; live mode anchors to today.
   // Build inside the component so "today" follows MCQ's Chicago business day,
   // even when the browser happens to be in another timezone.
-  // Staff can page back to earlier weeks to log visits already worked
-  // (server accepts up to 180 days back, so clamp at 25 weeks each way).
-  const MAX_CALENDAR_WEEK_OFFSET = 25;
+  // Staff can page through the full calendar or jump straight to a date to
+  // preserve visits already worked.
   const [calendarWeekOffset, setCalendarWeekOffset] = useState(0);
   const businessToday = bookingDateToLocalDate(businessDateString());
   const calendarDays: CalendarDay[] = isDemo
@@ -201,20 +217,18 @@ function ScheduleNewPageInner() {
     <div className="mb-2 flex items-center justify-between">
       <button
         type="button"
-        onClick={() => setCalendarWeekOffset((v) => Math.max(v - 1, -MAX_CALENDAR_WEEK_OFFSET))}
-        disabled={calendarWeekOffset <= -MAX_CALENDAR_WEEK_OFFSET}
-        className="flex h-11 w-11 items-center justify-center rounded-full text-text-secondary hover:bg-surface-secondary transition-colors disabled:opacity-40"
-        aria-label="Earlier weeks"
+        onClick={() => setCalendarWeekOffset((v) => v - 1)}
+        className="flex h-11 w-11 items-center justify-center rounded-full text-text-secondary hover:bg-surface-secondary transition-colors"
+        aria-label="Previous week"
       >
         <ChevronLeft size={16} />
       </button>
       <span className="text-[12px] font-semibold text-text-primary">{calendarLabel}</span>
       <button
         type="button"
-        onClick={() => setCalendarWeekOffset((v) => Math.min(v + 1, MAX_CALENDAR_WEEK_OFFSET))}
-        disabled={calendarWeekOffset >= MAX_CALENDAR_WEEK_OFFSET}
-        className="flex h-11 w-11 items-center justify-center rounded-full text-text-secondary hover:bg-surface-secondary transition-colors disabled:opacity-40"
-        aria-label="Later weeks"
+        onClick={() => setCalendarWeekOffset((v) => v + 1)}
+        className="flex h-11 w-11 items-center justify-center rounded-full text-text-secondary hover:bg-surface-secondary transition-colors"
+        aria-label="Next week"
       >
         <ChevronRight size={16} />
       </button>
@@ -332,6 +346,22 @@ function ScheduleNewPageInner() {
     selectedClient?.homes.find((home) => home.id === selectedHomeId) ??
     selectedClient?.primaryHome ??
     null;
+  const selectedVisitStart =
+    selectedDate && timeSlot
+      ? businessDateTimeToInstant(
+          dateToISODate(selectedDate),
+          timeToHHMM(timeSlot),
+        )
+      : null;
+  const selectedVisitIsHistorical =
+    !isDemo &&
+    selectedVisitStart !== null &&
+    isHistoricalVisitWindowComplete(
+      new Date(
+        selectedVisitStart.getTime() +
+          visitDurationMinutes(visitCount) * 60_000,
+      ),
+    );
 
   useEffect(() => {
     if (!selectedDate || isDemo) {
@@ -482,7 +512,11 @@ function ScheduleNewPageInner() {
             <Check size={38} className="text-success" strokeWidth={2.5} />
           </div>
           <h2 className="text-[26px] font-bold text-text-primary">
-            {mode === "job" ? "Job Added!" : "Time Blocked!"}
+            {mode === "job"
+              ? selectedVisitIsHistorical
+                ? "Visit Added to History!"
+                : "Job Added!"
+              : "Time Blocked!"}
           </h2>
           <p className="mt-2 text-[15px] text-text-secondary">
             {mode === "job"
@@ -667,6 +701,24 @@ function ScheduleNewPageInner() {
               </label>
               <Card padding="sm">
                 {calendarNav}
+                {!isDemo && (
+                  <label className="mb-3 block">
+                    <span className="mb-1 block text-[11px] font-semibold text-text-secondary">
+                      Jump to any date
+                    </span>
+                    <input
+                      type="date"
+                      value={selectedDate ? dateToISODate(selectedDate) : ""}
+                      onChange={(event) => {
+                        const date = bookingDateToLocalDate(event.target.value);
+                        if (Number.isNaN(date.getTime())) return;
+                        setSelectedDate(date);
+                        setCalendarWeekOffset(calendarWeekOffsetForDate(businessToday, date));
+                      }}
+                      className={`${inputCls} min-h-11`}
+                    />
+                  </label>
+                )}
                 <div className="grid grid-cols-7 gap-1 mb-2">
                   {["Su", "Mo", "Tu", "We", "Th", "Fr", "Sa"].map((d) => (
                     <div key={d} className="text-center text-[10px] font-bold text-text-tertiary py-1">
@@ -710,12 +762,19 @@ function ScheduleNewPageInner() {
                   })}
                 </div>
                 {selectedDate && (
-                  <p className="mt-3 text-center text-[12px] font-semibold text-primary border-t border-border pt-3">
-                    {formatDate(selectedDate)}
-                    {selectedDate < todayMidnight && !isDemo && (
-                      <span className="ml-1.5 rounded-full bg-surface-secondary px-2 py-0.5 text-[10px] font-semibold text-text-secondary">Past visit</span>
+                  <>
+                    <p className="mt-3 text-center text-[12px] font-semibold text-primary border-t border-border pt-3">
+                      {formatDate(selectedDate)}
+                      {selectedVisitIsHistorical && (
+                        <span className="ml-1.5 rounded-full bg-surface-secondary px-2 py-0.5 text-[10px] font-semibold text-text-secondary">Past visit</span>
+                      )}
+                    </p>
+                    {selectedVisitIsHistorical && (
+                      <p className="mt-2 text-center text-[11px] font-medium text-text-secondary">
+                        This visit will be saved as completed and added to the customer&apos;s history.
+                      </p>
                     )}
-                  </p>
+                  </>
                 )}
               </Card>
             </div>
@@ -925,7 +984,11 @@ function ScheduleNewPageInner() {
               onClick={handleSubmitJob}
               disabled={submitting}
             >
-              {submitting ? "Adding..." : "Add to Schedule"}
+              {submitting
+                ? "Adding..."
+                : selectedVisitIsHistorical
+                  ? "Add Completed Visit"
+                  : "Add to Schedule"}
             </Button>
           </>
         )}
@@ -943,6 +1006,24 @@ function ScheduleNewPageInner() {
               </label>
               <Card padding="sm">
                 {calendarNav}
+                {!isDemo && (
+                  <label className="mb-3 block">
+                    <span className="mb-1 block text-[11px] font-semibold text-text-secondary">
+                      Jump to any date
+                    </span>
+                    <input
+                      type="date"
+                      value={blockDate ? dateToISODate(blockDate) : ""}
+                      onChange={(event) => {
+                        const date = bookingDateToLocalDate(event.target.value);
+                        if (Number.isNaN(date.getTime())) return;
+                        setBlockDate(date);
+                        setCalendarWeekOffset(calendarWeekOffsetForDate(businessToday, date));
+                      }}
+                      className={`${inputCls} min-h-11`}
+                    />
+                  </label>
+                )}
                 <div className="grid grid-cols-7 gap-1 mb-2">
                   {["Su", "Mo", "Tu", "We", "Th", "Fr", "Sa"].map((d) => (
                     <div key={d} className="text-center text-[10px] font-bold text-text-tertiary py-1">

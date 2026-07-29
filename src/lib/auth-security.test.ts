@@ -6,6 +6,7 @@ import {
   canMutateSharedHomeNote,
   canAccessWhilePasswordChangeRequired,
   hasAdminAccess,
+  homeResourceAccessDecision,
   isPrivilegedSessionActive,
   privilegedPageAccessDecision,
   sessionClaimsMatchCurrentUser,
@@ -65,6 +66,38 @@ test("booking resources are limited to the customer, owner, or assigned technici
       booking,
     ),
     false,
+  );
+});
+
+test("home tasks are limited to the linked customer, owner, or an assigned technician", () => {
+  const home = { customerId: "customer-1" };
+  assert.equal(
+    homeResourceAccessDecision(
+      { id: "customer-1", role: "customer", isAdmin: false },
+      home,
+    ),
+    "allow",
+  );
+  assert.equal(
+    homeResourceAccessDecision(
+      { id: "other-customer", role: "customer", isAdmin: false },
+      home,
+    ),
+    "deny",
+  );
+  assert.equal(
+    homeResourceAccessDecision(
+      { id: "owner", role: "tech", isAdmin: true },
+      home,
+    ),
+    "allow",
+  );
+  assert.equal(
+    homeResourceAccessDecision(
+      { id: "assigned-tech", role: "tech", isAdmin: false },
+      home,
+    ),
+    "requires_assignment",
   );
 });
 
