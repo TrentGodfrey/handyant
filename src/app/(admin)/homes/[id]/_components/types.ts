@@ -1,6 +1,7 @@
 // Shared types + constants + helpers for the admin Home Detail page.
 
 import { bookingDateToLocalDate } from "@/lib/booking-time";
+import { normalizeHomeTodoStatus } from "@/lib/home-todo-status";
 
 export type Priority = "high" | "medium" | "low";
 export type ItemStatus = "needs-parts" | "in-progress" | "pending" | "completed";
@@ -179,9 +180,10 @@ export function formatShortDate(iso: string): string {
 }
 
 export function normalizeStatus(s: string): ItemStatus {
-  if (s === "completed" || s === "done") return "completed";
-  if (s === "needs-parts" || s === "needs_parts") return "needs-parts";
-  if (s === "in-progress" || s === "in_progress") return "in-progress";
+  const normalized = normalizeHomeTodoStatus(s);
+  if (normalized === "completed") return "completed";
+  if (normalized === "needs-parts") return "needs-parts";
+  if (normalized === "in-progress") return "in-progress";
   return "pending";
 }
 

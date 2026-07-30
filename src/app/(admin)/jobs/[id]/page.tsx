@@ -845,24 +845,25 @@ export default function JobDetailPage({ params }: { params: Promise<{ id: string
                     )}
                   </span>
                 </button>
-                <div className="flex shrink-0 items-center gap-0.5">
+                <div className="flex shrink-0 items-center gap-1">
                   <button
                     type="button"
                     onClick={() => startEditTask(task)}
-                    className="flex h-11 w-11 items-center justify-center rounded-full text-text-tertiary active:bg-surface-secondary active:text-text-secondary transition-colors"
+                    className="flex min-h-11 items-center justify-center gap-1.5 rounded-lg border border-primary/30 bg-primary-50 px-2.5 text-[12px] font-semibold text-primary transition-colors hover:bg-primary/15 active:bg-primary/20 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary"
                     aria-label={`Edit ${task.label}`}
                     title="Edit task"
                   >
-                    <Pencil size={13} />
+                    <Pencil size={14} aria-hidden="true" />
+                    <span>Edit</span>
                   </button>
                   <button
                     type="button"
                     onClick={() => deleteChecklistTask(task.id)}
-                    className="flex h-11 w-11 items-center justify-center rounded-full text-text-tertiary active:bg-error-light active:text-error transition-colors"
+                    className="flex h-11 w-11 items-center justify-center rounded-lg border border-error/25 bg-error-light text-error transition-colors hover:border-error/40 active:bg-error/15 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-error"
                     aria-label={`Delete ${task.label}`}
                     title="Delete task"
                   >
-                    <Trash2 size={13} />
+                    <Trash2 size={14} aria-hidden="true" />
                   </button>
                 </div>
               </div>

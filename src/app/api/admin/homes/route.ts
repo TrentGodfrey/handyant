@@ -2,6 +2,7 @@ import { NextRequest } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { requireTech, unauthorized } from "@/lib/session";
 import { homeRosterWhere } from "@/lib/resource-access";
+import { countOpenHomeTodos } from "@/lib/home-todo-status";
 
 export async function GET(req: NextRequest) {
   const tech = await requireTech();
@@ -32,9 +33,11 @@ export async function GET(req: NextRequest) {
           id: true,
           status: true,
           scheduledDate: true,
-          tasks: { select: { done: true } },
         },
         orderBy: { scheduledDate: "desc" },
+      },
+      todos: {
+        select: { status: true },
       },
       photos: true,
     },
@@ -42,14 +45,13 @@ export async function GET(req: NextRequest) {
   });
 
   const enriched = homes.map((h) => {
-    const lastVisit = h.bookings.find((b) => b.status === "completed")?.scheduledDate ?? null;
-    const openTasks = h.bookings
-      .filter((b) => b.status !== "completed" && b.status !== "cancelled")
-      .reduce((acc, b) => acc + b.tasks.filter((t) => !t.done).length, 0);
-    const totalVisits = h.bookings.filter((b) => b.status === "completed").length;
-    const activeSubscription = h.subscriptions[0] ?? null;
+    const { todos, ...home } = h;
+    const lastVisit = home.bookings.find((b) => b.status === "completed")?.scheduledDate ?? null;
+    const openTasks = countOpenHomeTodos(todos);
+    const totalVisits = home.bookings.filter((b) => b.status === "completed").length;
+    const activeSubscription = home.subscriptions[0] ?? null;
     return {
-      ...h,
+      ...home,
       lastVisit,
       openTasks,
       totalVisits,
