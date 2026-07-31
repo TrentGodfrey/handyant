@@ -5,6 +5,7 @@ import { requireAdmin, requireTech, unauthorized } from "@/lib/session";
 import { SubscriptionPlan } from "@/generated/prisma/enums";
 import { customerRosterWhere } from "@/lib/resource-access";
 import { ACTIVE_HOME_ASSIGNMENT_STATUSES } from "@/lib/access-control";
+import { validateYearBuilt } from "@/lib/home-details";
 
 export async function GET(req: NextRequest) {
   const tech = await requireTech();
@@ -92,6 +93,10 @@ export async function POST(req: NextRequest) {
   if (plan != null && !Object.values(SubscriptionPlan).includes(plan)) {
     return Response.json({ error: "Invalid subscription plan" }, { status: 400 });
   }
+  const yearBuilt = validateYearBuilt(body.yearBuilt);
+  if (!yearBuilt.ok) {
+    return Response.json({ error: yearBuilt.message }, { status: 400 });
+  }
   const normalizedEmail =
     typeof body.email === "string" && body.email.trim()
       ? body.email.trim().toLowerCase()
@@ -136,7 +141,7 @@ export async function POST(req: NextRequest) {
         zip: body.zip ?? null,
         notes: body.notes ?? null,
         gateCode: encryptSensitiveValue(body.gateCode ?? null),
-        yearBuilt: body.yearBuilt ?? null,
+        yearBuilt: yearBuilt.value,
       },
     });
   }

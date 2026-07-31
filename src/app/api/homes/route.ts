@@ -1,7 +1,8 @@
 import { NextRequest } from "next/server";
 import { prisma } from "@/lib/prisma";
-import { requireUser, unauthorized, verificationRequired } from "@/lib/session";
+import { requireUser, unauthorized, verificationRequired, badRequest } from "@/lib/session";
 import { decryptHomeAccess, encryptSensitiveValue } from "@/lib/sensitive-data";
+import { validateYearBuilt } from "@/lib/home-details";
 
 export async function GET() {
   const user = await requireUser();
@@ -48,6 +49,9 @@ export async function POST(req: NextRequest) {
     }
   }
 
+  const yearBuilt = validateYearBuilt(body.yearBuilt);
+  if (!yearBuilt.ok) return badRequest(yearBuilt.message);
+
   const home = await prisma.home.create({
     data: {
       customerId: user.id,
@@ -58,7 +62,7 @@ export async function POST(req: NextRequest) {
       notes: body.notes ?? null,
       gateCode: encryptSensitiveValue(body.gateCode ?? null),
       wifiPassword: encryptSensitiveValue(body.wifiPassword ?? null),
-      yearBuilt: Number.isInteger(body.yearBuilt) ? body.yearBuilt : null,
+      yearBuilt: yearBuilt.value,
     },
   });
   return Response.json(decryptHomeAccess(home), { status: 201 });

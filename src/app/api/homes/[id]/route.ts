@@ -1,6 +1,7 @@
 import { NextRequest } from "next/server";
 import { prisma } from "@/lib/prisma";
-import { requireAdmin, requireUser, unauthorized, notFound, forbidden } from "@/lib/session";
+import { requireAdmin, requireUser, unauthorized, notFound, forbidden, badRequest } from "@/lib/session";
+import { HOME_NUMBER_VALIDATORS } from "@/lib/home-details";
 import { decryptHomeAccess, encryptSensitiveValue } from "@/lib/sensitive-data";
 import { isConfirmedHomeHistoryDeletion } from "@/lib/home-deletion";
 import { deleteLocalUploadFiles } from "@/lib/upload-storage";
@@ -136,7 +137,15 @@ export async function PATCH(req: NextRequest, ctx: { params: Promise<{ id: strin
   const allowedKeys =
     user.role === "tech" && !user.isAdmin ? staffSafeKeys : ownerKeys;
   for (const key of allowedKeys) {
-    if (body[key] !== undefined) data[key] = body[key];
+    if (body[key] === undefined) continue;
+    const validate = HOME_NUMBER_VALIDATORS[key];
+    if (validate) {
+      const result = validate(body[key]);
+      if (!result.ok) return badRequest(result.message);
+      data[key] = result.value;
+      continue;
+    }
+    data[key] = body[key];
   }
   if (body.gateCode !== undefined) data.gateCode = encryptSensitiveValue(body.gateCode);
   if (body.wifiPassword !== undefined) data.wifiPassword = encryptSensitiveValue(body.wifiPassword);

@@ -4,6 +4,7 @@ import { useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { PLANS, type PlanId } from "@/lib/plans";
+import { buildYearBuiltOptions } from "@/lib/home-details";
 import Card from "@/components/Card";
 import Button from "@/components/Button";
 import {
@@ -40,7 +41,7 @@ interface FormData {
   plan: PlanId | null;
 }
 
-const yearOptions = Array.from({ length: 25 }, (_, i) => String(2024 - i));
+const yearOptions = buildYearBuiltOptions().map(String);
 
 export default function AddNewClientPage() {
   const router = useRouter();
@@ -60,7 +61,7 @@ export default function AddNewClientPage() {
     city: "",
     zip: "",
     homeType: "Single Family",
-    yearBuilt: "2015",
+    yearBuilt: "",
     sqFootage: "",
     bedrooms: 3,
     bathrooms: 2,
@@ -343,6 +344,7 @@ export default function AddNewClientPage() {
                 value={form.yearBuilt}
                 onChange={(e) => set("yearBuilt", e.target.value)}
               >
+                <option value="">Not sure</option>
                 {yearOptions.map((y) => (
                   <option key={y} value={y}>
                     {y}
