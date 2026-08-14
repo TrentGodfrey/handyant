@@ -147,8 +147,13 @@ available_kb=$(df -Pk "$LOCAL_BACKUP_DIR" | awk 'NR == 2 {print $4}')
   fail "only ${available_kb}KB free; minimum is ${MIN_FREE_KB}KB"
 
 work_dir=$(mktemp -d "${LOCAL_BACKUP_DIR%/}/.${timestamp}.partial.XXXXXX")
+# The if-form matters: `[[ -d ... ]] && rm` leaves the trap with status 1 once
+# work_dir is cleared, and under `set -e` that turns every successful backup
+# into an exit-code-1 "failure" for systemd.
 cleanup() {
-  [[ -d "${work_dir:-}" ]] && rm -rf -- "$work_dir"
+  if [[ -d "${work_dir:-}" ]]; then
+    rm -rf -- "$work_dir"
+  fi
 }
 trap cleanup EXIT
 
